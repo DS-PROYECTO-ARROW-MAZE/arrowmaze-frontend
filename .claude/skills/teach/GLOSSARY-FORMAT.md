@@ -1,0 +1,1 @@
+See @.agents/skills/teach/GLOSSARY-FORMAT.md
