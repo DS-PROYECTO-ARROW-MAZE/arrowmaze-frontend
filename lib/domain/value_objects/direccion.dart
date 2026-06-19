@@ -34,6 +34,21 @@ class Direccion {
     derecha,
   ];
 
+  /// The cardinal whose [delta] equals the unit [paso].
+  ///
+  /// Used to recover the direction connecting two orthogonally adjacent
+  /// positions (e.g. consecutive segments of a `Trayectoria`). Throws
+  /// [ArgumentError] when [paso] is not a single-cell cardinal step, so a
+  /// malformed (diagonal or non-contiguous) path fails loudly.
+  static Direccion desdePaso(Vector3 paso) => cardinales.firstWhere(
+        (direccion) => direccion.delta == paso,
+        orElse: () => throw ArgumentError.value(
+          paso,
+          'paso',
+          'Not a unit cardinal step',
+        ),
+      );
+
   /// The reverse direction (used to re-wire a removed node's neighbours).
   Direccion get opuesta => Direccion(delta.negado);
 

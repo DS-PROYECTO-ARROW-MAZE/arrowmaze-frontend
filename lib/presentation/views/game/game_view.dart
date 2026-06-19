@@ -1,5 +1,3 @@
-import 'dart:math' as math;
-
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_dimens.dart';
@@ -13,9 +11,11 @@ import '../../viewmodels/juego_view_state.dart';
 /// The board screen — a thin View that only draws.
 ///
 /// It owns no game logic: it observes its [JuegoViewModel] (a `ChangeNotifier`)
-/// and forwards taps to `viewModel.tocar(...)`. All colour, spacing and radius
-/// come from the theme tokens (`GameTheme`, `AppSpacing`, `AppRadii`), never
-/// hard-coded here.
+/// and forwards taps to `viewModel.tocar(...)`. The board is rendered by a single
+/// [_TableroPainter] as **continuous, bending arrow paths** over a plain dark
+/// backdrop with subtle dots for empty space — there are no discrete background
+/// tiles. All colour, spacing and radius come from theme tokens (`GameTheme`,
+/// `AppSpacing`, `AppRadii`), never hard-coded here.
 class GameView extends StatefulWidget {
   /// Creates the board screen bound to [viewModel].
   const GameView({required this.viewModel, super.key});
@@ -51,7 +51,7 @@ class _GameViewState extends State<GameView> {
                   child: Padding(
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     child: AspectRatio(
-                      aspectRatio: 1,
+                      aspectRatio: estado.tablero.columnas / estado.tablero.filas,
                       child: _Tablero(
                         estado: estado,
                         game: game,
@@ -90,7 +90,7 @@ class _Hud extends StatelessWidget {
   }
 }
 
-/// The grid of cells, laid out row by row.
+/// The board: a tappable canvas that paints the whole grid in one pass.
 class _Tablero extends StatelessWidget {
   const _Tablero({
     required this.estado,
@@ -105,102 +105,152 @@ class _Tablero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tablero = estado.tablero;
-    return DecoratedBox(
-      decoration: BoxDecoration(
-        color: game.boardBackground,
-        borderRadius: AppRadii.cardRadius,
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.sm),
-        child: Column(
-          children: [
-            for (var fila = 0; fila < tablero.filas; fila++)
-              Expanded(
-                child: Row(
-                  children: [
-                    for (var columna = 0; columna < tablero.columnas; columna++)
-                      Expanded(
-                        child: _Celda(
-                          celda: tablero.celdas[fila * tablero.columnas + columna],
-                          game: game,
-                          onTap: onTap,
-                        ),
-                      ),
-                  ],
-                ),
-              ),
-          ],
-        ),
-      ),
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final anchoCelda = constraints.maxWidth / tablero.columnas;
+        final altoCelda = constraints.maxHeight / tablero.filas;
+        return GestureDetector(
+          behavior: HitTestBehavior.opaque,
+          onTapDown: (detalle) {
+            final columna = (detalle.localPosition.dx / anchoCelda).floor();
+            final fila = (detalle.localPosition.dy / altoCelda).floor();
+            if (fila < 0 ||
+                columna < 0 ||
+                fila >= tablero.filas ||
+                columna >= tablero.columnas) {
+              return;
+            }
+            onTap(Posicion.en(fila: fila, columna: columna));
+          },
+          child: CustomPaint(
+            size: Size.infinite,
+            painter: _TableroPainter(tablero: tablero, game: game),
+          ),
+        );
+      },
     );
   }
 }
 
-/// One tappable cell.
-class _Celda extends StatelessWidget {
-  const _Celda({
-    required this.celda,
-    required this.game,
-    required this.onTap,
-  });
+/// Paints empty dots, walls and continuous bending arrow paths with arrowheads.
+class _TableroPainter extends CustomPainter {
+  _TableroPainter({required this.tablero, required this.game});
 
-  final CeldaUI celda;
+  final TableroUI tablero;
   final GameTheme game;
-  final void Function(Posicion posicion) onTap;
 
   @override
-  Widget build(BuildContext context) {
-    final esFlecha = celda.tipo == TipoCeldaUI.flecha;
-    return GestureDetector(
-      onTap: esFlecha ? () => onTap(celda.posicion) : null,
-      child: Padding(
-        padding: const EdgeInsets.all(AppSpacing.xs),
-        child: AnimatedContainer(
-          duration: AppDurations.normal,
-          decoration: BoxDecoration(
-            color: _relleno(),
-            borderRadius: BorderRadius.circular(AppRadii.cell),
-            border: Border.all(color: game.boardGridLine),
-            boxShadow: esFlecha
-                ? [
-                    BoxShadow(
-                      color: game.cellArrowGlow.withValues(alpha: 0.6),
-                      blurRadius: 12,
-                    ),
-                  ]
-                : null,
-          ),
-          child: esFlecha ? _flecha() : null,
-        ),
-      ),
-    );
-  }
+  void paint(Canvas canvas, Size size) {
+    final anchoCelda = size.width / tablero.columnas;
+    final altoCelda = size.height / tablero.filas;
+    final lado = anchoCelda < altoCelda ? anchoCelda : altoCelda;
+    // Thin, elegant lines: ~22% of the cell leaves clear dark gaps between
+    // parallel paths instead of the chunky near-full-cell stroke.
+    final grosor = lado * 0.22;
 
-  Color _relleno() {
-    switch (celda.tipo) {
-      case TipoCeldaUI.flecha:
-        return game.cellArrow;
-      case TipoCeldaUI.pared:
-        return game.cellWall;
-      case TipoCeldaUI.vacia:
-        return game.cellEmpty;
+    // Plain dark backdrop — no per-cell tiles.
+    canvas.drawRect(
+      Offset.zero & size,
+      Paint()..color = game.boardBackground,
+    );
+
+    Offset centro(Posicion p) => Offset(
+          (p.columna + 0.5) * anchoCelda,
+          (p.fila + 0.5) * altoCelda,
+        );
+
+    for (final celda in tablero.celdas) {
+      final c = centro(celda.posicion);
+      switch (celda.tipo) {
+        case TipoCeldaUI.vacia:
+          canvas.drawCircle(c, lado * 0.06, Paint()..color = game.emptyDot);
+        case TipoCeldaUI.pared:
+          final rect = Rect.fromCenter(
+            center: c,
+            width: lado * 0.7,
+            height: lado * 0.7,
+          );
+          canvas.drawRRect(
+            RRect.fromRectAndRadius(rect, Radius.circular(lado * 0.18)),
+            Paint()..color = game.cellWall,
+          );
+        case TipoCeldaUI.flecha:
+          _pintarSegmento(canvas, celda, c, lado, grosor);
+      }
     }
   }
 
-  Widget _flecha() {
-    return Center(
-      child: Transform.rotate(
-        angle: _angulo(celda.direccion!),
-        child: const Icon(Icons.arrow_upward, color: Colors.black),
-      ),
-    );
+  /// Draws one path segment as a continuous stroke toward each connected
+  /// neighbour, plus the single arrowhead when this segment is the head.
+  void _pintarSegmento(
+    Canvas canvas,
+    CeldaUI celda,
+    Offset centro,
+    double lado,
+    double grosor,
+  ) {
+    final color = game.colorFlecha(celda.idFlecha!);
+
+    final glow = Paint()
+      ..color = color.withValues(alpha: 0.35)
+      ..strokeWidth = grosor * 1.5
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    final trazo = Paint()
+      ..color = color
+      ..strokeWidth = grosor
+      ..strokeCap = StrokeCap.round
+      ..style = PaintingStyle.stroke;
+
+    // A stub from the centre toward each connected neighbour reaches the shared
+    // cell edge, so adjacent segments meet into one continuous, bending line.
+    final conexiones = celda.conexiones.isEmpty
+        // A lone-cell path still needs a visible body nub.
+        ? <Direccion>{Direccion.abajo}
+        : celda.conexiones;
+    for (final direccion in conexiones) {
+      final extremo = centro +
+          Offset(direccion.delta.x.toDouble(), direccion.delta.y.toDouble()) *
+              (lado * 0.5);
+      canvas.drawLine(centro, extremo, glow);
+      canvas.drawLine(centro, extremo, trazo);
+    }
+    // Round the join at corners and endpoints.
+    canvas.drawCircle(centro, grosor / 2, Paint()..color = color);
+
+    if (celda.esCabeza && celda.direccion != null) {
+      _pintarPuntaFlecha(canvas, centro, celda.direccion!, lado, color);
+    }
   }
 
-  /// Maps a [Direccion] to a rotation of the upward arrow icon.
-  double _angulo(Direccion direccion) {
-    if (direccion == Direccion.abajo) return math.pi;
-    if (direccion == Direccion.izquierda) return -math.pi / 2;
-    if (direccion == Direccion.derecha) return math.pi / 2;
-    return 0;
+  /// Draws a filled triangular arrowhead at [centro] pointing in [direccion].
+  void _pintarPuntaFlecha(
+    Canvas canvas,
+    Offset centro,
+    Direccion direccion,
+    double lado,
+    Color color,
+  ) {
+    final dir = Offset(
+      direccion.delta.x.toDouble(),
+      direccion.delta.y.toDouble(),
+    );
+    final perp = Offset(-dir.dy, dir.dx);
+    final punta = centro + dir * (lado * 0.34);
+    final base = centro + dir * (lado * 0.04);
+    final izquierda = base + perp * (lado * 0.17);
+    final derecha = base - perp * (lado * 0.17);
+
+    final camino = Path()
+      ..moveTo(punta.dx, punta.dy)
+      ..lineTo(izquierda.dx, izquierda.dy)
+      ..lineTo(derecha.dx, derecha.dy)
+      ..close();
+    canvas.drawPath(camino, Paint()..color = color);
   }
+
+  @override
+  bool shouldRepaint(covariant _TableroPainter old) =>
+      !identical(old.tablero, tablero) || old.game != game;
 }

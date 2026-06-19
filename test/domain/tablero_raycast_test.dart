@@ -1,4 +1,5 @@
-import 'package:arrowmaze/domain/entities/fabrica_celdas_estandar.dart';
+import 'package:arrowmaze/domain/entities/celda.dart';
+import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/tablero.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
@@ -7,28 +8,24 @@ import 'package:flutter_test/flutter_test.dart';
 
 /// Tests target the [Tablero] deep-module interface (`raycast`), never the
 /// internal node walk. AC3 (transparent `CeldaVacia`) and AC4 (arrow adjacent
-/// to the edge) from PRD §3 / §7.2.
+/// to the edge) from PRD §3 / §7.2. Arrows are single-cell `Trayectoria`s here.
 void main() {
-  /// Builds a [GrafoTablero] from a hand-written cell list (Factory Method).
-  GrafoTablero construirTablero(
-    int filas,
-    int columnas,
-    List<Map<String, dynamic>> celdas,
-  ) {
-    const fabrica = FabricaCeldasEstandar();
-    return GrafoTablero.desdeCeldas(
-      filas: filas,
-      columnas: columnas,
-      celdas: celdas.map(fabrica.crear).toList(),
-    );
-  }
+  /// A one-cell arrow path at [fila],[columna] pointing in [direccion].
+  Trayectoria flecha(int id, int fila, int columna, Direccion direccion) =>
+      Trayectoria(
+        id: id,
+        direccionCabeza: direccion,
+        segmentos: [Posicion.en(fila: fila, columna: columna)],
+      );
 
   group('Tablero.raycast', () {
     test('should_return_clear_to_edge_when_path_has_only_vacias', () {
       // Arrange — an arrow at (2,2) pointing up; the column above it is empty.
-      final tablero = construirTablero(3, 3, [
-        {'row': 2, 'col': 2, 'type': 'arrow', 'direction': 'UP'},
-      ]);
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        trayectorias: [flecha(1, 2, 2, Direccion.arriba)],
+      );
 
       // Act — fire the ray from the arrow's cell towards the top edge.
       final resultado = tablero.raycast(
@@ -43,9 +40,11 @@ void main() {
 
     test('should_report_arrow_adjacent_to_edge_as_clear', () {
       // Arrange — an arrow on the top row already touching the edge.
-      final tablero = construirTablero(3, 3, [
-        {'row': 0, 'col': 1, 'type': 'arrow', 'direction': 'UP'},
-      ]);
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        trayectorias: [flecha(1, 0, 1, Direccion.arriba)],
+      );
 
       // Act
       final resultado = tablero.raycast(
@@ -59,10 +58,12 @@ void main() {
 
     test('should_report_blocked_when_a_wall_stands_in_the_ray', () {
       // Arrange — a wall sits between the arrow and the right edge.
-      final tablero = construirTablero(3, 3, [
-        {'row': 1, 'col': 0, 'type': 'arrow', 'direction': 'RIGHT'},
-        {'row': 1, 'col': 2, 'type': 'wall'},
-      ]);
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        trayectorias: [flecha(1, 1, 0, Direccion.derecha)],
+        celdas: const [CeldaPared(Posicion.en(fila: 1, columna: 2))],
+      );
 
       // Act
       final resultado = tablero.raycast(
@@ -77,10 +78,14 @@ void main() {
 
     test('should_report_blocked_when_another_arrow_stands_in_the_ray', () {
       // Arrange — a second arrow sits in the first one's path.
-      final tablero = construirTablero(3, 3, [
-        {'row': 0, 'col': 0, 'type': 'arrow', 'direction': 'DOWN'},
-        {'row': 2, 'col': 0, 'type': 'arrow', 'direction': 'UP'},
-      ]);
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        trayectorias: [
+          flecha(1, 0, 0, Direccion.abajo),
+          flecha(2, 2, 0, Direccion.arriba),
+        ],
+      );
 
       // Act
       final resultado = tablero.raycast(

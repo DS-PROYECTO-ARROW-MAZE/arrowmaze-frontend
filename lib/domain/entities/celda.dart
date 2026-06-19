@@ -26,18 +26,29 @@ sealed class Celda {
   bool get bloqueaRayo;
 }
 
-/// A directional, removable cell: an arrow pointing in one [direccion].
+/// One **segment** of an arrow path (`Trayectoria`) occupying this cell.
 ///
-/// It blocks rays while present and is the only cell a move can consume — a
-/// valid move turns it into a [CeldaVacia]. It is never rotated (see `Flecha` in
-/// `CONTEXT.md`).
+/// An arrow is no longer a single cell: it is a continuous, possibly bending
+/// path, and each cell it covers holds a [CeldaFlecha] tagged with the owning
+/// path's [idFlecha]. [direccion] is the path's exit direction (the way its
+/// arrowhead points), shared by every segment of the same path. A segment blocks
+/// rays while present; a valid move removes the **whole** path at once, turning
+/// each of its segments into a [CeldaVacia]. Arrows are never rotated (see
+/// `Flecha` in `CONTEXT.md`).
 final class CeldaFlecha extends Celda {
-  /// Creates an arrow cell at [posicion] pointing in [direccion].
-  const CeldaFlecha({required Posicion posicion, required this.direccion})
-      : super(posicion);
+  /// Creates an arrow segment at [posicion] belonging to path [idFlecha], whose
+  /// head points in [direccion].
+  const CeldaFlecha({
+    required Posicion posicion,
+    required this.direccion,
+    required this.idFlecha,
+  }) : super(posicion);
 
-  /// The fixed direction this arrow shoots towards.
+  /// The exit direction of the path this segment belongs to.
   final Direccion direccion;
+
+  /// Identity of the owning [Trayectoria]; segments of the same path share it.
+  final int idFlecha;
 
   @override
   bool get bloqueaRayo => true;

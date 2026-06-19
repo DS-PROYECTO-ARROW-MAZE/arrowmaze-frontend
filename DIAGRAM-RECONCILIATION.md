@@ -254,3 +254,93 @@ pattern on both repos (P1 + P3 r4):
 | Adapter | `*Prisma` adapters, `CargadorNivelArchivo`, `AudioServiceImp` |
 | ISP | `Celda` / `Colisionable` / `Interactuable` segregation |
 | DIP | use cases depend on ports (`Tablero`, `CargadorNivel`, `ProveedorSesion`, `IConsultaRanking`) |
+
+---
+
+## 8. Continuous, bending-path paradigm shift (FRONTEND-01 refactor)
+
+**Context.** The move mechanic changed from *one arrow = one 1×1 cell* to *one arrow = a
+continuous, possibly bending multi-cell path* (`Trayectoria`) with a single arrowhead at its
+head, on a board that is **fully covered** at start (zero empty cells). A move resolves the
+**whole path** when the head's ray is clear to the edge. This section says exactly what to
+add/modify in the Lucid **ARROWMAZE** doc so the diagrams match the code. Apply each frontend
+change in every place the class appears: **P2 + P3 r5/r7/r8 + P4** (see §How the document is
+laid out). Backend (P1/P3 r4) is **unaffected** — the contract/DTO surface did not change.
+
+### 8.1 ADD — `Trayectoria` «Modelo» (the new core entity)
+
+Create **`Trayectoria` «Modelo»** in the frontend domain package, next to `Celda`:
+- Fields: `+ id: int`, `+ segmentos: List<Posicion>` *(ordered tail → head)*,
+  `+ direccionCabeza: Direccion`.
+- Methods: `+ cabeza(): Posicion`, `+ cola(): Posicion`, `+ esCabeza(p: Posicion): bool`,
+  `+ conexionesEn(p: Posicion): Set<Direccion>` *(straight vs corner geometry for the renderer)*,
+  `+ contiene(p: Posicion): bool`. Constructor validates contiguity (throws on non-adjacent cells).
+- Relationships:
+  - `Trayectoria --> Posicion` (has many, the segments) and `Trayectoria --> Direccion` (has, head dir).
+  - `Tablero ..> Trayectoria` (the port returns it — §8.3) and `MoverFlechaUseCase ..> Trayectoria`.
+  - `GrafoTablero --> Trayectoria` (association: holds the `idFlecha → Trayectoria` index).
+
+### 8.2 MODIFY — `CeldaFlecha` becomes a path **segment**
+
+- Add field **`+ idFlecha: int`** to `CeldaFlecha` (links the segment to its owning `Trayectoria`).
+- Keep `+ direccion: Direccion` (now documented as the *path's exit direction*, shared by every
+  segment of the path) and `bloqueaRayo(): bool = true`.
+- Update the note on `CeldaFlecha`: "one segment of a `Trayectoria`, not a standalone 1×1 arrow."
+- No change to `CeldaPared` / `CeldaVacia` / `Coleccionable`.
+
+### 8.3 MODIFY — `Tablero` «interface» (port) gains two members
+
+Extend the port from §4.6 (it is still the OCP seam, still realized by `GrafoTablero`):
+- Add `+ trayectoriaEn(pos: Posicion): Trayectoria?` *(the path covering a cell, or null)*.
+- **Rename/replace** the old single-cell removal `eliminarFlecha(pos: Posicion)` →
+  `+ eliminarTrayectoria(idFlecha: int): void` *(removes every segment of a path)*.
+- Keep `celdaEn(pos): Celda` and `raycast(origen, dir): ResultadoRaycast`.
+- `GrafoTablero` realizes all four; it now also holds `- _trayectorias: Map<int, Trayectoria>` and
+  still mutates incrementally (each removed segment unlinks its `Nodo`; no full rebuild).
+
+### 8.4 MODIFY — `FabricaCeldasEstandar` (Factory) gains a second product
+
+The factory now produces **two** shapes, so the "4 cell products" crib (row 247 / §7) should read
+"fixed cells + arrow paths":
+- Keep `+ crear(json): Celda` but restrict it to fixed cells (`wall`, `empty`); `arrow` is no
+  longer a single-cell product.
+- Add `+ crearTrayectoria(json): Trayectoria` *(builds a whole path from `{id, head, cells[]}`)*.
+- Relationship: `FabricaCeldasEstandar ..> Trayectoria` (creates) in addition to `..> Celda`.
+
+### 8.5 MODIFY — MVVM render model (`CeldaUI`) carries path geometry
+
+On the frontend MVVM detail (P2 / P4), extend **`CeldaUI` «ViewState»** so the `CustomPainter`
+can draw continuous bending paths instead of tiles:
+- Add `+ idFlecha: int?` *(colour selection)*, `+ conexiones: Set<Direccion>` *(straight/corner)*,
+  `+ esCabeza: bool` *(where the single arrowhead is drawn)*; keep `+ direccion: Direccion?`.
+- `TableroUI` is unchanged in shape (still `filas/columnas/celdas`).
+- Add a `«ViewState»`/painter note: the board view is a `CustomPainter`, **not** a grid of
+  per-cell widgets/tiles — empties render as dots, paths as one continuous stroke + arrowhead.
+- `GameTheme` gains `+ arrowPalette: List<Color>` and `+ emptyDot: Color` tokens (theme, not domain).
+
+### 8.6 Entity-relationship deltas (summary)
+
+- **NEW** `Trayectoria 1 —— * Posicion` (segments, ordered) and `Trayectoria * —— 1 Direccion`.
+- **NEW** `Trayectoria 1 —— * CeldaFlecha` *(conceptual: one path owns many segment cells, linked by
+  `idFlecha`; model it as a note or a dependency, since the cells live in the `GrafoTablero` graph)*.
+- **CHANGED** `GrafoTablero 1 —— * Trayectoria` (the path index) replaces any "arrow = single cell"
+  reading.
+
+### 8.7 State machine / sequence — **no structural change**
+
+`EstadoSesion` (GoF State: `EstadoJugando/Pausado/Victoria/Derrota`) is **unchanged** — the legality
+of a tap and session lifecycle are identical. Only the *move sequence* inside `EstadoJugando` differs;
+update any move **sequence diagram** to the new flow:
+`View.onTap(pos) → ViewModel.tocar(pos) → MoverFlechaUseCase.ejecutar(pos)
+→ Tablero.trayectoriaEn(pos) → Tablero.raycast(traj.cabeza, traj.direccionCabeza)
+→ Tablero.eliminarTrayectoria(traj.id) → ResultadoMovimiento{FlechaEliminada, MovimientoRealizado}`.
+`Victoria` still fires when the board is empty; `Solvencia` (greedy, order-independent) is intact
+because removing a whole path only clears cells.
+
+### 8.8 Caveats
+
+- The §6.1 "flechas rotables" caveat is **reinforced**, not resolved: paths are still never rotated
+  (they bend by authoring, not by player action). Keep the existing one-sentence justification.
+- Backend diagrams, DTO contracts and Pact tests are untouched: the path model is a client-side
+  domain/representation change. If level **definitions** are later served with path data, revisit
+  `DefinicionNivelDto` / `CargadorNivel` then (out of scope for FRONTEND-01).

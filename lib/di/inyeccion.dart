@@ -18,10 +18,12 @@ abstract final class Inyeccion {
     const fuente = FuenteTableroMemoria();
     const fabrica = FabricaCeldasEstandar();
 
-    final Tablero tablero = GrafoTablero.desdeCeldas(
+    final Tablero tablero = GrafoTablero.desde(
       filas: fuente.filas,
       columnas: fuente.columnas,
-      celdas: fuente.cargarCeldas().map(fabrica.crear).toList(),
+      trayectorias:
+          fuente.cargarTrayectorias().map(fabrica.crearTrayectoria).toList(),
+      celdas: fuente.cargarParedes().map(fabrica.crear).toList(),
     );
 
     return JuegoViewModel(

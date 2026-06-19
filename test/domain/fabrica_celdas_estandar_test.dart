@@ -1,14 +1,17 @@
 import 'package:arrowmaze/domain/entities/celda.dart';
 import 'package:arrowmaze/domain/entities/fabrica_celdas_estandar.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
+import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// The Factory Method must return the correct [Celda] for each `type`, so
-/// callers never branch on the type themselves (OCP).
+/// The Factory Method must return the correct product for each shape of level
+/// data — fixed cells via [FabricaCeldasEstandar.crear], whole arrow paths via
+/// [FabricaCeldasEstandar.crearTrayectoria] — so callers never branch on the
+/// type themselves (OCP).
 void main() {
   const fabrica = FabricaCeldasEstandar();
 
-  test('should_create_an_arrow_for_each_direction', () {
+  test('should_build_a_trayectoria_with_head_direction_for_each_token', () {
     // Arrange
     const casos = {
       'UP': Direccion.arriba,
@@ -19,13 +22,19 @@ void main() {
 
     casos.forEach((token, esperada) {
       // Act
-      final celda = fabrica.crear(
-        {'row': 0, 'col': 0, 'type': 'arrow', 'direction': token},
-      );
+      final trayectoria = fabrica.crearTrayectoria({
+        'id': 1,
+        'head': token,
+        'cells': [
+          {'row': 0, 'col': 0},
+          {'row': 0, 'col': 1},
+        ],
+      });
 
       // Assert
-      expect(celda, isA<CeldaFlecha>());
-      expect((celda as CeldaFlecha).direccion, esperada);
+      expect(trayectoria.direccionCabeza, esperada);
+      expect(trayectoria.cabeza, const Posicion.en(fila: 0, columna: 1));
+      expect(trayectoria.cola, const Posicion.en(fila: 0, columna: 0));
     });
   });
 
@@ -47,7 +56,7 @@ void main() {
     expect(celda.bloqueaRayo, isFalse);
   });
 
-  test('should_throw_when_type_is_unknown', () {
+  test('should_throw_when_fixed_cell_type_is_unknown', () {
     // Arrange / Act / Assert
     expect(
       () => fabrica.crear({'row': 0, 'col': 0, 'type': 'portal'}),
@@ -55,12 +64,16 @@ void main() {
     );
   });
 
-  test('should_throw_when_arrow_direction_is_invalid', () {
+  test('should_throw_when_path_head_direction_is_invalid', () {
     // Arrange / Act / Assert
     expect(
-      () => fabrica.crear(
-        {'row': 0, 'col': 0, 'type': 'arrow', 'direction': 'NORTH'},
-      ),
+      () => fabrica.crearTrayectoria({
+        'id': 1,
+        'head': 'NORTH',
+        'cells': [
+          {'row': 0, 'col': 0},
+        ],
+      }),
       throwsArgumentError,
     );
   });

@@ -19,6 +19,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
   const GameTheme({
     required this.boardBackground,
     required this.boardGridLine,
+    required this.emptyDot,
+    required this.arrowPalette,
     required this.cellArrow,
     required this.cellArrowGlow,
     required this.cellWall,
@@ -36,6 +38,13 @@ class GameTheme extends ThemeExtension<GameTheme> {
 
   /// Thin lines separating cells.
   final Color boardGridLine;
+
+  /// The subtle dot marking an empty grid space (no background tile).
+  final Color emptyDot;
+
+  /// The cycle of neon colours assigned to distinct arrow paths, so adjacent
+  /// continuous paths read as separate arrows. Indexed by `idFlecha % length`.
+  final List<Color> arrowPalette;
 
   /// Fill/tint of an interactive `Flecha` cell.
   final Color cellArrow;
@@ -67,10 +76,22 @@ class GameTheme extends ThemeExtension<GameTheme> {
   /// An unfilled star slot.
   final Color starInactive;
 
+  /// A colour for the path with [idFlecha], cycling through [arrowPalette].
+  Color colorFlecha(int idFlecha) =>
+      arrowPalette[idFlecha % arrowPalette.length];
+
   /// The default game palette for the dark theme.
   static const GameTheme dark = GameTheme(
     boardBackground: AppColors.background,
     boardGridLine: AppColors.surfaceVariant,
+    emptyDot: AppColors.surfaceVariant,
+    arrowPalette: <Color>[
+      AppColors.accentNeon,
+      AppColors.primaryNeon,
+      AppColors.purpleNeon,
+      AppColors.warningNeon,
+      AppColors.errorNeon,
+    ],
     cellArrow: AppColors.accentNeon,
     cellArrowGlow: AppColors.accentNeon,
     cellWall: AppColors.surfaceVariant,
@@ -87,6 +108,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
   GameTheme copyWith({
     Color? boardBackground,
     Color? boardGridLine,
+    Color? emptyDot,
+    List<Color>? arrowPalette,
     Color? cellArrow,
     Color? cellArrowGlow,
     Color? cellWall,
@@ -101,6 +124,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
     return GameTheme(
       boardBackground: boardBackground ?? this.boardBackground,
       boardGridLine: boardGridLine ?? this.boardGridLine,
+      emptyDot: emptyDot ?? this.emptyDot,
+      arrowPalette: arrowPalette ?? this.arrowPalette,
       cellArrow: cellArrow ?? this.cellArrow,
       cellArrowGlow: cellArrowGlow ?? this.cellArrowGlow,
       cellWall: cellWall ?? this.cellWall,
@@ -120,6 +145,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
     return GameTheme(
       boardBackground: Color.lerp(boardBackground, other.boardBackground, t)!,
       boardGridLine: Color.lerp(boardGridLine, other.boardGridLine, t)!,
+      emptyDot: Color.lerp(emptyDot, other.emptyDot, t)!,
+      arrowPalette: t < 0.5 ? arrowPalette : other.arrowPalette,
       cellArrow: Color.lerp(cellArrow, other.cellArrow, t)!,
       cellArrowGlow: Color.lerp(cellArrowGlow, other.cellArrowGlow, t)!,
       cellWall: Color.lerp(cellWall, other.cellWall, t)!,
