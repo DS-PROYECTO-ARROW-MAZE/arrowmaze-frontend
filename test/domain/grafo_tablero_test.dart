@@ -1,45 +1,66 @@
 import 'package:arrowmaze/domain/entities/celda.dart';
-import 'package:arrowmaze/domain/entities/fabrica_celdas_estandar.dart';
+import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// AC6 — removal is *incremental*: the removed arrow unlinks its `Nodo` and its
-/// neighbours are re-wired to each other; the rest of the graph is untouched
-/// (same `Nodo` instances), so there is no full rebuild.
+/// AC6 — removing a whole arrow path is *incremental*: each removed segment
+/// unlinks its `Nodo` and its neighbours are re-wired to each other; untouched
+/// nodes keep their identity (no full rebuild). A multi-cell path leaves a
+/// fully transparent corridor behind.
 void main() {
-  GrafoTablero construirTablero(
-    int filas,
-    int columnas,
-    List<Map<String, dynamic>> celdas,
-  ) {
-    const fabrica = FabricaCeldasEstandar();
-    return GrafoTablero.desdeCeldas(
-      filas: filas,
-      columnas: columnas,
-      celdas: celdas.map(fabrica.crear).toList(),
+  test('should_clear_every_segment_when_trayectoria_removed', () {
+    // Arrange — an L-shaped 2-cell path in a 3x3 board.
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 3,
+      trayectorias: [
+        Trayectoria(
+          id: 7,
+          direccionCabeza: Direccion.arriba,
+          segmentos: const [
+            Posicion.en(fila: 2, columna: 0),
+            Posicion.en(fila: 1, columna: 0),
+          ],
+        ),
+      ],
     );
-  }
 
-  test('should_unlink_node_without_full_rebuild_when_arrow_removed', () {
+    // Act
+    tablero.eliminarTrayectoria(7);
+
+    // Assert — both segments are now transparent empty space.
+    expect(tablero.celdaEn(const Posicion.en(fila: 2, columna: 0)),
+        isA<CeldaVacia>());
+    expect(tablero.celdaEn(const Posicion.en(fila: 1, columna: 0)),
+        isA<CeldaVacia>());
+    expect(tablero.trayectoriaEn(const Posicion.en(fila: 1, columna: 0)),
+        isNull);
+  });
+
+  test('should_unlink_nodes_without_full_rebuild_when_arrow_removed', () {
     // Arrange — a 3x1 column: empty / arrow / empty. The arrow is the middle.
-    final tablero = construirTablero(3, 1, [
-      {'row': 1, 'col': 0, 'type': 'arrow', 'direction': 'UP'},
-    ]);
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 1,
+      trayectorias: [
+        Trayectoria(
+          id: 1,
+          direccionCabeza: Direccion.arriba,
+          segmentos: const [Posicion.en(fila: 1, columna: 0)],
+        ),
+      ],
+    );
     const posArriba = Posicion.en(fila: 0, columna: 0);
-    const posFlecha = Posicion.en(fila: 1, columna: 0);
     const posAbajo = Posicion.en(fila: 2, columna: 0);
 
     // Capture neighbour identities BEFORE removal.
     final nodoArriba = tablero.nodoEn(posArriba);
     final nodoAbajo = tablero.nodoEn(posAbajo);
 
-    // Act — remove the arrow (turns its cell empty + unlinks its node).
-    tablero.eliminarFlecha(posFlecha);
-
-    // Assert — the cell is now transparent empty space.
-    expect(tablero.celdaEn(posFlecha), isA<CeldaVacia>());
+    // Act — remove the whole (one-cell) path.
+    tablero.eliminarTrayectoria(1);
 
     // Assert — untouched nodes keep their exact identity (no rebuild).
     expect(identical(tablero.nodoEn(posArriba), nodoArriba), isTrue);

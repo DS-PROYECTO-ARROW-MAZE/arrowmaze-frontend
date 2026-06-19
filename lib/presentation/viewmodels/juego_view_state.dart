@@ -4,25 +4,33 @@ import '../../domain/value_objects/posicion.dart';
 /// The visual kind of a board cell, decoupled from the domain `Celda` types so
 /// the View never imports the domain hierarchy.
 enum TipoCeldaUI {
-  /// An interactive arrow.
+  /// A cell covered by a segment of an arrow path.
   flecha,
 
   /// A blocking wall.
   pared,
 
-  /// Transparent empty space.
+  /// Transparent empty space (drawn as a subtle dot).
   vacia,
 }
 
 /// An immutable UI snapshot of one cell.
 ///
 /// This is a render model (not the GoF State and not a domain entity): a flat,
-/// theme-free description the `GameView` paints with `GameTheme` tokens.
+/// theme-free description the `GameView` paints with `GameTheme` tokens. For a
+/// [TipoCeldaUI.flecha] cell it also carries the geometry the painter needs to
+/// draw a *continuous, bending* path: [conexiones] are the directions toward the
+/// connected path neighbours (so the painter knows whether this segment is a
+/// straight or a corner), [esCabeza] marks where the single arrowhead is drawn,
+/// and [idFlecha] selects the path's colour.
 class CeldaUI {
   /// Creates a cell snapshot.
   const CeldaUI({
     required this.posicion,
     required this.tipo,
+    this.idFlecha,
+    this.conexiones = const <Direccion>{},
+    this.esCabeza = false,
     this.direccion,
   });
 
@@ -32,7 +40,17 @@ class CeldaUI {
   /// What to draw.
   final TipoCeldaUI tipo;
 
-  /// For [TipoCeldaUI.flecha], which way the arrow points; otherwise `null`.
+  /// For a path segment, the id of the owning path (used to pick its colour).
+  final int? idFlecha;
+
+  /// For a path segment, the directions toward its connected neighbours: one for
+  /// an endpoint, two for a middle segment (a corner when perpendicular).
+  final Set<Direccion> conexiones;
+
+  /// Whether this segment is the head, where the arrowhead is drawn.
+  final bool esCabeza;
+
+  /// For the head segment, which way the arrowhead points; otherwise `null`.
   final Direccion? direccion;
 }
 

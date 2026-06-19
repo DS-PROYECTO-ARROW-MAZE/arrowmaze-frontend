@@ -1,5 +1,6 @@
 import 'detector_colisiones.dart';
 import 'entities/celda.dart';
+import 'entities/trayectoria.dart';
 import 'nodo.dart';
 import 'tablero.dart';
 import 'value_objects/direccion.dart';
@@ -7,28 +8,33 @@ import 'value_objects/posicion.dart';
 
 /// A [Tablero] backed by a graph of [Nodo]s, mutated incrementally.
 ///
-/// Every position is a node linked to its in-bounds neighbours. [raycast]
-/// delegates the walk to a [DetectorColisiones], and [eliminarFlecha] removes an
-/// arrow by re-wiring its neighbours directly to each other and clearing its
-/// links — touching only the local neighbourhood, never rebuilding the graph,
-/// and preserving the identity of every untouched node.
+/// Every position is a node linked to its in-bounds neighbours. Arrows are
+/// [Trayectoria]s: each path tags its segment cells with a shared `idFlecha`, and
+/// the board keeps the paths by id so a tap on any segment resolves the whole
+/// arrow. [raycast] delegates the walk to a [DetectorColisiones];
+/// [eliminarTrayectoria] removes every segment of a path by re-wiring each node's
+/// neighbours directly to each other and clearing its links — touching only the
+/// local neighbourhood, never rebuilding the graph, and preserving the identity
+/// of every untouched node.
 class GrafoTablero implements Tablero {
   GrafoTablero._(
     this._filas,
     this._columnas,
     this._nodos,
+    this._trayectorias,
     this._detector,
   );
 
   /// Builds a board of [filas] × [columnas], empty everywhere except where a
-  /// cell in [celdas] overrides a position.
+  /// fixed [celdas] (walls) or a [trayectorias] segment overrides a position.
   ///
   /// [detector] is injectable for testing; it defaults to the standard collision
   /// walk.
-  factory GrafoTablero.desdeCeldas({
+  factory GrafoTablero.desde({
     required int filas,
     required int columnas,
-    required List<Celda> celdas,
+    List<Trayectoria> trayectorias = const <Trayectoria>[],
+    List<Celda> celdas = const <Celda>[],
     DetectorColisiones detector = const DetectorColisiones(),
   }) {
     final nodos = <Posicion, Nodo>{};
@@ -41,9 +47,23 @@ class GrafoTablero implements Tablero {
       }
     }
 
-    // Overlay the explicit cells (arrows, walls, …).
+    // Overlay fixed cells (walls).
     for (final celda in celdas) {
       nodos[celda.posicion]!.celda = celda;
+    }
+
+    // Overlay each arrow path: every segment becomes a CeldaFlecha tagged with
+    // the path id and the path's exit direction.
+    final indice = <int, Trayectoria>{};
+    for (final trayectoria in trayectorias) {
+      indice[trayectoria.id] = trayectoria;
+      for (final posicion in trayectoria.segmentos) {
+        nodos[posicion]!.celda = CeldaFlecha(
+          posicion: posicion,
+          direccion: trayectoria.direccionCabeza,
+          idFlecha: trayectoria.id,
+        );
+      }
     }
 
     // Link each node to its existing neighbours in all directions.
@@ -56,12 +76,13 @@ class GrafoTablero implements Tablero {
       }
     }
 
-    return GrafoTablero._(filas, columnas, nodos, detector);
+    return GrafoTablero._(filas, columnas, nodos, indice, detector);
   }
 
   final int _filas;
   final int _columnas;
   final Map<Posicion, Nodo> _nodos;
+  final Map<int, Trayectoria> _trayectorias;
   final DetectorColisiones _detector;
 
   @override
@@ -78,15 +99,28 @@ class GrafoTablero implements Tablero {
   Celda celdaEn(Posicion posicion) => nodoEn(posicion).celda;
 
   @override
+  Trayectoria? trayectoriaEn(Posicion posicion) {
+    final celda = celdaEn(posicion);
+    return celda is CeldaFlecha ? _trayectorias[celda.idFlecha] : null;
+  }
+
+  @override
   ResultadoRaycast raycast(Posicion origen, Direccion direccion) =>
       _detector.detectar(nodoEn(origen), direccion);
 
   @override
-  void eliminarFlecha(Posicion posicion) {
-    final nodo = nodoEn(posicion);
+  void eliminarTrayectoria(int idFlecha) {
+    final trayectoria = _trayectorias.remove(idFlecha);
+    if (trayectoria == null) return;
+    for (final posicion in trayectoria.segmentos) {
+      _desvincularNodo(posicion);
+    }
+  }
 
-    // Re-wire each neighbour to the node on the opposite side, so the ray walk
-    // steps straight over the gap left by the removed arrow.
+  /// Turns the node at [posicion] into transparent empty space and re-wires its
+  /// neighbours to each other so a ray walk steps straight over the gap.
+  void _desvincularNodo(Posicion posicion) {
+    final nodo = nodoEn(posicion);
     for (final direccion in nodo.vecinos.keys.toList()) {
       final vecino = nodo.vecinos[direccion]!;
       final opuesto = nodo.vecinos[direccion.opuesta];

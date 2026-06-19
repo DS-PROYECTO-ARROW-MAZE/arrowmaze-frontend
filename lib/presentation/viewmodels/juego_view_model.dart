@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
 import '../../domain/tablero.dart';
+import '../../domain/value_objects/direccion.dart';
 import '../../domain/value_objects/posicion.dart';
 import 'juego_view_state.dart';
 
@@ -55,7 +56,7 @@ class JuegoViewModel extends ChangeNotifier {
     for (var fila = 0; fila < _tablero.filas; fila++) {
       for (var columna = 0; columna < _tablero.columnas; columna++) {
         final posicion = Posicion.en(fila: fila, columna: columna);
-        celdas.add(_aCeldaUI(_tablero.celdaEn(posicion)));
+        celdas.add(_aCeldaUI(posicion, _tablero.celdaEn(posicion)));
       }
     }
     return TableroUI(
@@ -65,18 +66,28 @@ class JuegoViewModel extends ChangeNotifier {
     );
   }
 
-  /// Maps a domain [Celda] to its theme-free UI snapshot.
-  CeldaUI _aCeldaUI(Celda celda) {
+  /// Maps a domain [Celda] to its theme-free UI snapshot, enriching arrow
+  /// segments with the path geometry the painter needs (connections, head).
+  CeldaUI _aCeldaUI(Posicion posicion, Celda celda) {
     return switch (celda) {
-      CeldaFlecha(:final posicion, :final direccion) => CeldaUI(
-          posicion: posicion,
-          tipo: TipoCeldaUI.flecha,
-          direccion: direccion,
-        ),
-      CeldaPared(:final posicion) =>
-        CeldaUI(posicion: posicion, tipo: TipoCeldaUI.pared),
-      CeldaVacia(:final posicion) =>
-        CeldaUI(posicion: posicion, tipo: TipoCeldaUI.vacia),
+      CeldaFlecha(:final idFlecha) => _segmentoUI(posicion, idFlecha),
+      CeldaPared() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.pared),
+      CeldaVacia() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.vacia),
     };
+  }
+
+  /// Builds the render model for an arrow segment at [posicion], reading its
+  /// path's bend geometry through the [Tablero] port.
+  CeldaUI _segmentoUI(Posicion posicion, int idFlecha) {
+    final trayectoria = _tablero.trayectoriaEn(posicion);
+    final esCabeza = trayectoria?.esCabeza(posicion) ?? false;
+    return CeldaUI(
+      posicion: posicion,
+      tipo: TipoCeldaUI.flecha,
+      idFlecha: idFlecha,
+      conexiones: trayectoria?.conexionesEn(posicion) ?? const <Direccion>{},
+      esCabeza: esCabeza,
+      direccion: esCabeza ? trayectoria?.direccionCabeza : null,
+    );
   }
 }

@@ -7,18 +7,25 @@ glossary only — no implementation details.
 ## Language
 
 **Movimiento (Move)**:
-A single player action: tapping an arrow makes it shoot in its `Direccion` toward
-the board edge. If every cell along that ray to the edge is clear, the arrow exits
-and its cell becomes empty (a *valid* move). If the ray hits any wall or arrow, the
-arrow retreats unchanged and the move is *invalid* (rejected). One tap produces
+A single player action: tapping any segment of an arrow `Trayectoria` makes the
+whole path try to exit in its head's `Direccion`. If every cell along the head's
+ray to the board edge is clear, the **entire path** exits and all of its cells
+become empty (a *valid* move). If the head's ray hits any wall or other arrow, the
+path retreats unchanged and the move is *invalid* (rejected). One tap produces
 exactly one `ResultadoMovimiento`. There is no traveling token and no "stop in the
-middle" — exit is all-or-nothing.
-_Avoid_: rotación (arrows are never rotated), token, turno
+middle" — exit is all-or-nothing, and a path leaves as a whole, never cell-by-cell.
+_Avoid_: rotación (arrows are never rotated), token, turno, deslizar una sola celda
 
-**Flecha (Arrow)**:
-A directional cell content pointing in one `Direccion`. It is removed only when it
-successfully exits the board; otherwise it stays.
-_Avoid_: rotable, dirección activable
+**Flecha / Trayectoria (Arrow / Path)**:
+An arrow is a **continuous, possibly bending path** of one or more orthogonally
+adjacent cells (`Trayectoria`), with exactly one arrowhead at its head pointing in
+one `Direccion` (the path's exit direction). The path may turn 90° at corners; it
+is never rotated. Each cell it covers is a `CeldaFlecha` segment tagged with the
+path's `idFlecha`; the whole path is removed together when it exits. A board starts
+**fully covered** — every cell belongs to some path, so there are zero empty cells
+until paths are resolved.
+_Avoid_: rotable, dirección activable, flecha de una sola celda (a 1×1 arrow is just
+the degenerate one-segment path), bloque cuadrado
 
 **Movimiento inválido (Invalid move)**:
 A tap whose ray is blocked by a wall or another arrow. The board is unchanged and the
@@ -43,9 +50,9 @@ _Avoid_: game over, derrota por bloqueo
 
 **Tablero (Board)**:
 The play space, depended on by use cases and the solver only through a `Tablero` port
-(`celdaEn`, `raycast(origen, Direccion)`). The concrete implementation (`GrafoTablero`,
-mutated incrementally — a removed arrow unlinks its node, never a full rebuild) is an
-implementation detail. The port is the OCP seam that lets a future 3D board be a new
+(`celdaEn`, `trayectoriaEn`, `raycast(origen, Direccion)`, `eliminarTrayectoria`). The
+concrete implementation (`GrafoTablero`, mutated incrementally — removing a path
+unlinks each of its nodes, never a full rebuild) is an implementation detail. The port is the OCP seam that lets a future 3D board be a new
 implementation with no change to callers.
 _Avoid_: grid (reserve for the visual layout), matriz
 
@@ -55,8 +62,10 @@ future 3D board 6, without changing the `Tablero` contract.
 
 **Celda (Cell)**:
 A board position. Exactly four kinds exist (produced by `FabricaCeldasEstandar`):
-`CeldaFlecha`, `CeldaPared`, `CeldaVacia`, `Coleccionable`. There is no exit cell —
-victory is reaching a board edge, not a target tile.
+`CeldaFlecha`, `CeldaPared`, `CeldaVacia`, `Coleccionable`. A `CeldaFlecha` is one
+**segment** of an arrow `Trayectoria` (tagged with its `idFlecha`), not a
+standalone 1×1 arrow. There is no exit cell — victory is reaching a board edge, not
+a target tile.
 _Avoid_: CeldaSalida / ExitCell (removed — vestige of the maze-escape interpretation).
 Cell variants are Factory products, not decorators — there are no cell decorators
 (`CeldaColeccionableDecorator`, `CeldaBloqueadaDecorator` and `ComponenteTablero` /

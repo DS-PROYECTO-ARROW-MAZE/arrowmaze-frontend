@@ -43,7 +43,7 @@ abstract final class AppRadii {
 /// Animation durations.
 ///
 /// Gameplay logic must resolve and render within a single frame (≤ 16 ms,
-/// PRD §1.4); these tokens are for *presentation* transitions only — the
+/// PRD §1.5); these tokens are for *presentation* transitions only — the
 /// arrow-exit flourish, screen changes, and feedback flashes.
 abstract final class AppDurations {
   /// 120 ms — tap feedback, button press, invalid-move shake.

@@ -1,4 +1,5 @@
 import 'entities/celda.dart';
+import 'entities/trayectoria.dart';
 import 'value_objects/direccion.dart';
 import 'value_objects/posicion.dart';
 
@@ -26,11 +27,12 @@ class ResultadoRaycast {
 
 /// The board *port* — the only thing use cases and the solver depend on.
 ///
-/// It is a deliberately narrow, deep interface: query a cell ([celdaEn]), test a
-/// ray ([raycast]) and remove an arrow ([eliminarFlecha]). The concrete board —
-/// a `GrafoTablero` mutated incrementally — is an implementation detail behind
-/// this contract, which is the OCP seam that lets a future 3D board be a new
-/// implementation with no change to callers (see `Tablero` in `CONTEXT.md`).
+/// It is a deliberately narrow, deep interface: query a cell ([celdaEn]) or the
+/// path covering it ([trayectoriaEn]), test a ray ([raycast]) and remove a whole
+/// arrow path ([eliminarTrayectoria]). The concrete board — a `GrafoTablero`
+/// mutated incrementally — is an implementation detail behind this contract,
+/// which is the OCP seam that lets a future 3D board be a new implementation with
+/// no change to callers (see `Tablero` in `CONTEXT.md`).
 abstract interface class Tablero {
   /// Number of rows.
   int get filas;
@@ -41,14 +43,20 @@ abstract interface class Tablero {
   /// The cell currently at [posicion].
   Celda celdaEn(Posicion posicion);
 
+  /// The arrow path covering [posicion], or `null` when the cell is empty or a
+  /// wall. Any segment of a path returns the same `Trayectoria`, so a tap on any
+  /// part of an arrow resolves the whole arrow.
+  Trayectoria? trayectoriaEn(Posicion posicion);
+
   /// Fires a ray from [origen] along [direccion] and reports whether it reaches
   /// the edge. The origin cell itself is excluded — the ray starts at the next
   /// cell along the direction.
   ResultadoRaycast raycast(Posicion origen, Direccion direccion);
 
-  /// Removes the arrow at [posicion], leaving transparent empty space.
+  /// Removes the whole arrow path [idFlecha], leaving transparent empty space in
+  /// every cell it covered.
   ///
-  /// The change is incremental: only the affected node and its immediate
-  /// neighbours are touched — never a full rebuild.
-  void eliminarFlecha(Posicion posicion);
+  /// The change is incremental: only the affected nodes and their immediate
+  /// neighbours are re-wired — never a full rebuild.
+  void eliminarTrayectoria(int idFlecha);
 }
