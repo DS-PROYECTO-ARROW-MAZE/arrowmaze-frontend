@@ -130,7 +130,11 @@ refactor(board): apply Factory Method to cell creation
 - Generar tests unitarios junto a cada caso de uso o entidad
 - Verificar que las nuevas clases de celda implementen ICell
 - Separar el algoritmo (caso de uso) del dato (entidad)
-- Documentar cada uso significativo en AI_USAGE.md
+
+NO actualices AI_USAGE.md automáticamente. La documentación de uso de IA la
+hace la persona usuaria de forma manual con el skill `ai-usage-doc`, cuando
+ella decide que el issue está completado. No crees ni modifiques AI_USAGE.md a
+menos que se te pida explícitamente.
 
 ## Lo que NUNCA debes hacer
 
