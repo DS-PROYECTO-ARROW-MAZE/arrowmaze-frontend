@@ -19,6 +19,10 @@ class MyApp extends StatelessWidget {
       title: 'ArrowMaze',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
+      // Default entry point: generate a fresh random puzzle on every launch via
+      // the reverse-carving generator (fully dense, bending, interlocking and
+      // solvable by construction). The async file-loader path remains available
+      // through `Inyeccion.construirJuegoViewModelDesdeArchivo()` for future use.
       home: GameView(viewModel: Inyeccion.construirJuegoViewModel()),
     );
   }

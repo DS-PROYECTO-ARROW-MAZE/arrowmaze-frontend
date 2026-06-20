@@ -343,4 +343,94 @@ because removing a whole path only clears cells.
   (they bend by authoring, not by player action). Keep the existing one-sentence justification.
 - Backend diagrams, DTO contracts and Pact tests are untouched: the path model is a client-side
   domain/representation change. If level **definitions** are later served with path data, revisit
-  `DefinicionNivelDto` / `CargadorNivel` then (out of scope for FRONTEND-01).
+  `DefinicionNivelDto` / `CargadorNivel` then (out of scope for FRONTEND-01). **→ This is now
+  active; see §9.4.**
+
+---
+
+## 9. Dynamic levels wired to startup (FRONTEND-02 integration)
+
+**Context.** The hard-coded demo board (`FuenteTableroMemoria`, the ticket-01 tracer-bullet
+fixture) is **no longer the startup board**. On launch the app now loads a real, file-backed
+level through the existing `CargadorNivel` → `GeneradorNivelBase` pipeline, and the random
+strategy was upgraded from a placeholder into a proper puzzle generator. This is a
+**composition-root + sequence** change: no new domain classes, so most diagram edits are
+relationship retypes and notes. Apply the frontend items in every place the class appears
+(**P2 + P3 r5/r7/r8 + P4**); the backend contract items in §9.4 are **P1 + P3 r4**.
+
+### 9.1 MODIFY — composition root (`Inyeccion`) and the startup sequence
+
+The DI root gained an async, file-backed entry point and now shares one wiring helper between
+the file and random paths. On the **composition / DI view**:
+
+- `MyApp` / `main` no longer build a board synchronously. Add `App ..> Inyeccion` via a loading
+  shell (`FutureBuilder`): `App ..> JuegoViewModel` is now produced by a `Future`.
+- **ADD** `Inyeccion ..> GeneracionPorArchivoNivel` (the default startup path) and
+  `Inyeccion ..> SesionJuego` (the timed session is opened in the root, not defaulted inside the
+  use case).
+- **RETYPE** `Inyeccion --> FuenteTableroMemoria`: it is **no longer the startup source**.
+  Mark the box/relationship **«fallback only»** — it is reached only if the random generator's
+  solvability gate ever returns null. (Do **not** delete it; it is still a valid, tested fixture.)
+- Keep `Inyeccion ..> GeneracionAleatoriaNivel` (the offline "new random board" entry point).
+
+Update the **startup sequence diagram** to:
+
+```
+main → MyApp → FutureBuilder
+  → Inyeccion.construirJuegoViewModelDesdeArchivo(idNivel)
+    → GeneracionPorArchivoNivel.generarAsync(config, idNivel)
+      → CargadorNivel.cargar(idNivel)            (realized by CargadorNivelArchivo, bundled asset)
+      → GeneradorNivelBase.generar()             (poblar → validarSolvencia gate → entregar)
+    → SesionJuego(tablero, limiteTiempo)
+    → MoverFlechaUseCase(tablero, sesion)
+    → PublicadorEventosJuego.suscribir(AudioServiceImp)   (Observer chain, §4.3)
+  → JuegoViewModel → GameView
+```
+
+A failed load (missing asset / unsolvable) surfaces as an error state in the shell, not a crash.
+
+### 9.2 MODIFY — note on `GeneracionAleatoriaNivel.poblar()` (no shape change)
+
+The §4.2 box is unchanged structurally (still `extends GeneradorNivelBase`, overrides only
+`poblar()`, gate non-skippable). **Replace the behavioural note** on the box: `poblar()` carves
+the board **backwards into two-line "bands"**, each an arrow that snakes and bends 90°, oriented
+so every head exits toward an edge through the cells nearer bands vacate when solved. This
+guarantees **100% density, continuous bending paths, interlocking extraction order and
+solvability by construction**. Delete any older note implying "1×1 border arrows".
+
+### 9.3 ADD — bundled level asset (`assets/levels/level_01.json`)
+
+Under `CargadorNivelArchivo`, note the concrete bundled asset `assets/levels/level_01.json` — a
+5×5, fully-dense, interlocking, hand-authored puzzle. It is the **canonical live example of the
+§8 path schema**: arrow cells carry a shared path **`id`** (grouping them into one `Trayectoria`,
+listed tail→head) and a head **`direction`**. This is the JSON shape `FabricaCeldasEstandar.
+crearTrayectoria(json)` consumes (§8.4).
+
+### 9.4 CONTRACT — the level-definition schema must carry path data **and** scoring (promotes §8.8)
+
+Making the file loader the default startup turns the §8.8 caveat into an **active cross-repo
+reconciliation item**. Two gaps, both on the `DefinicionNivelDto` / `CargadorNivel` surface
+(frontend **P2/P4**; backend **P1 + P3 r4**):
+
+1. **Path-shaped cells.** The backend level model (issue-01 `celda.ts`: `Flecha|CeldaPared|
+   CeldaVacia|Coleccionable`, single-cell) and the served response DTO (issue-04, Pact-shaped)
+   must represent **multi-cell paths** to match what the frontend consumes: a cell list grouped
+   by a shared path **`id`** with a head **`direction`** (or an explicit `paths: [{id, head,
+   cells[]}]` array). The shared **golden boards** and the **Solver** must operate on the path
+   model on both sides (ADR-0001 cross-repo agreement). Diagram delta: `DefinicionNivelDto`
+   (both repos) gains a `Trayectoria`-shaped representation; `FabricaCeldasEstandar ..>
+   Trayectoria` already covers the build (§8.4).
+
+2. **Scoring travels with the level.** The served DTO carries `baseNivel`, `Kmov`, `Ktiempo`,
+   `umbralesEstrellas`, `limiteTiempo?`, `dificultad` (issues 04/05). The frontend
+   `DefinicionNivelDto` + `CargadorNivelArchivo` currently **drop** these — scoring/timing is
+   injected at the composition root (`Inyeccion.definicionNivelInicial`), and `level_01.json`
+   omits them. To reconcile when the HTTP path lands: extend the frontend `DefinicionNivelDto`
+   and the loader to parse the scoring block, and feed it into `DefinicionNivel` / `SesionJuego`
+   instead of the DI default. Diagram delta: add the scoring fields to `DefinicionNivelDto`
+   (frontend), and add `CargadorNivelHttp ..> (backend) GET /levels/:id` realizing `CargadorNivel`
+   (§3.2 already reserves this adapter).
+
+Until the backend serve path exists, the bundled asset + DI-supplied scoring are the
+**intended** offline default — not debt. The debt is only the **schema agreement** above, owed
+when `CargadorNivelHttp` is wired.
