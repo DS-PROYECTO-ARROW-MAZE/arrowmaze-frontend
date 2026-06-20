@@ -1,10 +1,11 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
+import '../../application/ports/reloj.dart';
+import '../../application/use_cases/calcular_puntuacion_use_case.dart';
 import '../../application/use_cases/evento_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
+import '../../domain/puntuacion/definicion_nivel.dart';
 import '../../domain/sesion/estado_sesion.dart';
 import '../../domain/sesion/sesion_juego.dart';
 import '../../domain/tablero.dart';
@@ -24,17 +25,27 @@ import 'juego_view_state.dart';
 /// [SesionJuego]'s GoF State (DM-F5). This view model then **maps** that domain
 /// session state onto UI snapshots — a [VictoriaViewState], the paused/defeat
 /// flags and the HUD clock — keeping the domain `EstadoSesion` out of the View
-/// entirely. On a timed level it drives a one-second [Timer] that advances the
+/// entirely. On a timed level it drives a one-second [Reloj] tick that advances the
 /// session clock and surfaces the defeat transition.
+///
+/// On victory the [CalcularPuntuacionUseCase] computes the score and star rating
+/// from the level's [DefinicionNivel] tuning data (ticket 06).
 class JuegoViewModel extends ChangeNotifier {
-  /// Injects the board to render and the use case that mutates it; the session
-  /// gating every tap is taken from the use case so both share one instance.
+  /// Injects the board to render, the use case that mutates it, the scoring
+  /// definition and use case; the session gating every tap is taken from the
+  /// use case so both share one instance.
   JuegoViewModel({
     required Tablero tablero,
     required MoverFlechaUseCase moverFlecha,
+    required DefinicionNivel definicionNivel,
+    required Reloj reloj,
+    CalcularPuntuacionUseCase? calcularPuntuacion,
   })  : _tablero = tablero,
         _moverFlecha = moverFlecha,
-        _sesion = moverFlecha.sesion {
+        _sesion = moverFlecha.sesion,
+        _reloj = reloj,
+        _definicionNivel = definicionNivel,
+        _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase() {
     _estado = JuegoViewState(
       tablero: _instantanea(),
       movimientos: 0,
@@ -46,8 +57,10 @@ class JuegoViewModel extends ChangeNotifier {
   final Tablero _tablero;
   final MoverFlechaUseCase _moverFlecha;
   final SesionJuego _sesion;
+  final DefinicionNivel _definicionNivel;
+  final CalcularPuntuacionUseCase _calcularPuntuacion;
 
-  Timer? _reloj;
+  final Reloj _reloj;
 
   int _coleccionables = 0;
 
@@ -72,17 +85,30 @@ class JuegoViewModel extends ChangeNotifier {
     _coleccionables += resultado.eventos
         .where((e) => e.tipo == TipoEvento.coleccionableRecogido)
         .length;
-    if (_sesion.estaTerminada) _reloj?.cancel();
+    if (_sesion.estaTerminada) _reloj.detener();
+
+    VictoriaViewState? victoriaState;
+    if (_sesion.estado is EstadoVictoria) {
+      final segundosRestantes =
+          _sesion.tiempoRestante?.inSeconds ?? 0;
+      final puntuacion = _calcularPuntuacion.calcular(
+        definicion: _definicionNivel,
+        movimientos: resultado.movimientos,
+        segundosRestantes: segundosRestantes,
+      );
+      victoriaState = VictoriaViewState(
+        movimientos: resultado.movimientos,
+        puntaje: puntuacion.puntaje,
+        estrellas: puntuacion.estrellas,
+      );
+    }
+
     _estado = _estado.copyWith(
-      // Rebuild the snapshot only when the board actually changed; an invalid
-      // move must leave the very same TableroUI instance in place.
       tablero: invalido ? null : _instantanea(),
       movimientos: resultado.movimientos,
       coleccionables: _coleccionables,
       movimientoInvalido: invalido,
-      victoria: _sesion.estado is EstadoVictoria
-          ? VictoriaViewState(movimientos: resultado.movimientos)
-          : null,
+      victoria: victoriaState,
       derrota: _sesion.estado is EstadoDerrota,
       tiempoRestante: _sesion.tiempoRestante,
     );
@@ -92,7 +118,7 @@ class JuegoViewModel extends ChangeNotifier {
   /// Pauses the session: taps are rejected and the clock freezes until [reanudar].
   void pausar() {
     _sesion.pausar();
-    _reloj?.cancel();
+    _reloj.detener();
     _estado = _estado.copyWith(pausado: _sesion.estado is EstadoPausado);
     notifyListeners();
   }
@@ -109,15 +135,15 @@ class JuegoViewModel extends ChangeNotifier {
   /// an untimed level or once the session is finished.
   void _iniciarReloj() {
     if (!_sesion.esCronometrado || _sesion.estaTerminada) return;
-    _reloj?.cancel();
-    _reloj = Timer.periodic(const Duration(seconds: 1), (_) => _tic());
+    _reloj.detener();
+    _reloj.iniciar(const Duration(seconds: 1), _tic);
   }
 
   /// One clock tick: advances the session by a second and publishes the new
   /// remaining time, surfacing the defeat transition when it lands.
   void _tic() {
     _sesion.avanzarTiempo(const Duration(seconds: 1));
-    if (_sesion.estaTerminada) _reloj?.cancel();
+    if (_sesion.estaTerminada) _reloj.detener();
     _estado = _estado.copyWith(
       derrota: _sesion.estado is EstadoDerrota,
       tiempoRestante: _sesion.tiempoRestante,
@@ -127,7 +153,7 @@ class JuegoViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
-    _reloj?.cancel();
+    _reloj.detener();
     super.dispose();
   }
 

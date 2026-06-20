@@ -86,14 +86,25 @@ class TableroUI {
 /// The session's GoF State (`EstadoVictoria`) lives in the domain and drives the
 /// rules; this immutable snapshot is what the victory overlay renders, and it
 /// never leaks the domain type into the View (nor the reverse). It carries the
-/// final HUD figures the overlay shows; richer scoring (`Puntaje`/`Estrellas`)
-/// arrives with ticket 06.
+/// final HUD figures plus the scoring result (`puntaje` and `estrellas`) from
+/// [CalcularPuntuacionUseCase] (ticket 06).
 class VictoriaViewState {
-  /// Creates the victory snapshot with the final [movimientos] count.
-  const VictoriaViewState({required this.movimientos});
+  /// Creates the victory snapshot with the final [movimientos] count and the
+  /// computed [puntaje] and [estrellas].
+  const VictoriaViewState({
+    required this.movimientos,
+    this.puntaje = 0,
+    this.estrellas = 0,
+  });
 
   /// The move count the level was cleared in.
   final int movimientos;
+
+  /// The computed score (floored at 0, from the scoring strategy).
+  final int puntaje;
+
+  /// The star rating: 0, 1, 2, or 3, determined by level thresholds.
+  final int estrellas;
 }
 
 /// The immutable state the `JuegoViewModel` exposes to its View.

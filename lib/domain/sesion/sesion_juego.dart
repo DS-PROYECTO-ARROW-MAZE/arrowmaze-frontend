@@ -1,5 +1,6 @@
 import '../tablero.dart';
 import '../value_objects/posicion.dart';
+import 'contexto_sesion.dart';
 import 'estado_sesion.dart';
 import 'resultado_toque.dart';
 
@@ -17,7 +18,7 @@ import 'resultado_toque.dart';
 /// untimed level ([esCronometrado] is `false`) can therefore *never* reach
 /// [EstadoDerrota] (PRD §3 B2). Victory, pause and tap-legality are owned by the
 /// states themselves.
-class SesionJuego {
+class SesionJuego implements ContextoSesion {
   /// Opens a session on [tablero]. Pass a [limiteTiempo] to make the level timed;
   /// omit it for an untimed level that can never be lost. Starts in
   /// [EstadoJugando] unless an [estadoInicial] is supplied (for testing).

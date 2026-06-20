@@ -1,17 +1,34 @@
+import 'package:arrowmaze/application/ports/reloj.dart';
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
 import 'package:arrowmaze/domain/entities/celda.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
+import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_model.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _RelojNulo implements Reloj {
+  @override
+  void iniciar(Duration intervalo, void Function() tic) {}
+  @override
+  void detener() {}
+}
+
 /// Ticket 02 (DM-F8) — the ViewModel surfaces an "invalid tap" feedback flag in
 /// the [JuegoViewState] *without* mutating the board, so the View can shake/flash
 /// while every cell stays exactly where it was.
 void main() {
+  const definicion = DefinicionNivel(
+    id: 0,
+    baseNivel: 1000,
+    kmov: 10,
+    ktiempo: 2,
+    umbralesEstrellas: [300, 600, 900],
+    limiteTiempo: null,
+  );
   // 3x3: arrow at (1,0) aims right but a wall at (1,2) blocks its ray.
   GrafoTablero construirTablero() => GrafoTablero.desde(
         filas: 3,
@@ -32,6 +49,8 @@ void main() {
     final viewModel = JuegoViewModel(
       tablero: tablero,
       moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
     );
     final tableroInicial = viewModel.estado.tablero;
     var notificaciones = 0;
@@ -77,6 +96,8 @@ void main() {
     final viewModel = JuegoViewModel(
       tablero: tablero,
       moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
     );
     viewModel.tocar(const Posicion.en(fila: 1, columna: 0));
     expect(viewModel.estado.movimientoInvalido, isTrue);

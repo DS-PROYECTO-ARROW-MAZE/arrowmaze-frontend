@@ -31,6 +31,7 @@ class GameTheme extends ThemeExtension<GameTheme> {
     required this.invalidMoveFlash,
     required this.starActive,
     required this.starInactive,
+    required this.scoreColor,
   });
 
   /// Backdrop behind the grid.
@@ -76,6 +77,9 @@ class GameTheme extends ThemeExtension<GameTheme> {
   /// An unfilled star slot.
   final Color starInactive;
 
+  /// The colour for the score number on the victory overlay.
+  final Color scoreColor;
+
   /// A colour for the path with [idFlecha], cycling through [arrowPalette].
   Color colorFlecha(int idFlecha) =>
       arrowPalette[idFlecha % arrowPalette.length];
@@ -102,6 +106,7 @@ class GameTheme extends ThemeExtension<GameTheme> {
     invalidMoveFlash: AppColors.errorNeon,
     starActive: AppColors.warningNeon,
     starInactive: AppColors.surfaceVariant,
+    scoreColor: AppColors.primaryNeon,
   );
 
   @override
@@ -120,6 +125,7 @@ class GameTheme extends ThemeExtension<GameTheme> {
     Color? invalidMoveFlash,
     Color? starActive,
     Color? starInactive,
+    Color? scoreColor,
   }) {
     return GameTheme(
       boardBackground: boardBackground ?? this.boardBackground,
@@ -136,6 +142,7 @@ class GameTheme extends ThemeExtension<GameTheme> {
       invalidMoveFlash: invalidMoveFlash ?? this.invalidMoveFlash,
       starActive: starActive ?? this.starActive,
       starInactive: starInactive ?? this.starInactive,
+      scoreColor: scoreColor ?? this.scoreColor,
     );
   }
 
@@ -157,6 +164,7 @@ class GameTheme extends ThemeExtension<GameTheme> {
       invalidMoveFlash: Color.lerp(invalidMoveFlash, other.invalidMoveFlash, t)!,
       starActive: Color.lerp(starActive, other.starActive, t)!,
       starInactive: Color.lerp(starInactive, other.starInactive, t)!,
+      scoreColor: Color.lerp(scoreColor, other.scoreColor, t)!,
     );
   }
 }
