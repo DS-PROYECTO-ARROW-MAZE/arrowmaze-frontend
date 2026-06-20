@@ -1,7 +1,7 @@
 # AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002, T-003, T-004 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002, T-003, T-004, T-005 appended)
 
 ## 1. Tools Used
 
@@ -166,13 +166,67 @@
   AC-to-test mapping in the issue again gave unambiguous red-phase targets, so no
   rework was needed.
 
+### T-005 — Ticket 03 · Collectible Pass-through (bonus time)
+
+- **Task / problem addressed:** Implement Story A4 from
+  `.issues/03-collectible-passthrough.md`: a 4th `Celda` kind, `Coleccionable`,
+  that is **transparent** to a ray (never blocks a move) and, when a *valid*
+  move's ray crosses it, is collected by pass-through — emitting a
+  `ColeccionableRecogido` event and adding seconds to the level timer. Victory
+  must stay independent of collectibles (the board can empty regardless).
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket
+  `…\.issues\03-collectible-passthrough.md` is obligatory to aplly the rules in
+  these skills `…\clean-architecture\SKILL.md` `…\tdd-strict\SKILL.md` the visual
+  design is up to you based on `…\lib\core\theme`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `domain/entities/celda.dart` (new `Coleccionable` sealed kind + a polymorphic
+  `esColeccionable` getter alongside `bloqueaRayo`);
+  `domain/entities/fabrica_celdas_estandar.dart` (`collectible` Factory product);
+  `domain/tablero.dart` (`ResultadoRaycast.coleccionables` + a `recogerColeccionable`
+  port method); `domain/detector_colisiones.dart` (the ray walk gathers crossed
+  collectibles via the cell property, no type branch); `domain/grafo_tablero.dart`
+  (`recogerColeccionable` — collect-once, empties the cell);
+  `domain/sesion/` (`EstadoJugando` collects on a valid exit and surfaces it in
+  `ResultadoToque.coleccionables`; `SesionJuego.otorgarBonus` extends the clock);
+  `application/use_cases/` (`TipoEvento.coleccionableRecogido`; `MoverFlechaUseCase`
+  emits one event per collectible and applies `bonusPorColeccionable` = 5 s each);
+  `presentation/` (`TipoCeldaUI.coleccionable` + `JuegoViewState.coleccionables`
+  HUD tally, `JuegoViewModel` mapping + accumulation, `GameView` glowing-diamond
+  painter using the `cellCollectible`/`collectibleGlow` theme tokens and a HUD
+  bonus counter). New tests: `test/domain/raycast_collectible_test.dart` (AC1
+  transparency + a wall-after-collectible guard), `test/application/mover_flecha_collectible_test.dart`
+  (AC2 event+bonus, AC3 victory-without-collecting), `test/presentation/juego_viewmodel_collectible_test.dart`
+  (DM-F8 HUD reflects bonus). Verified: `flutter test` 63/63 green (60 prior + 3
+  new, plus a pre-existing exhaustive-switch test updated for the new kind);
+  `flutter analyze` 0 errors / 0 warnings (same 3 pre-existing info-level
+  `prefer_initializing_formals` hints); zero `package:flutter` imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests
+  and code; no manual code edits were required. The in-memory demo board
+  (`FuenteTableroMemoria`) was intentionally left unchanged, since it is a
+  fully-covered grid with a tested "zero empty cells" invariant and has no free
+  cell for a collectible; the mechanic is reachable through file-backed levels
+  (`type: "collectible"`).
+- **Lessons learned / limitations identified:** Modelling "transparency" and
+  "collectibility" as polymorphic cell properties (`bloqueaRayo`,
+  `esColeccionable`) queried by the raycast walk kept the use case branching on
+  **data** (`toque.coleccionables`) rather than on `if (type == …)`, satisfying
+  the ticket's OCP refactor note — adding a future cell kind touches only the
+  entity. One self-inflicted slip: the AI's first draft of the application test
+  contained a broken helper (an undefined `_pathEn` and a bogus `Trayectoriaable`
+  type), caught immediately on review/compile and fixed before the green run. An
+  edge case was consciously accepted rather than special-cased: a winning move
+  that also crosses a collectible emits the event but skips the bonus because the
+  session is already terminal (the clock has stopped anyway).
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  04, and 05 were AI-generated then human-reviewed; the theme tokens under
+  03, 04, and 05 were AI-generated then human-reviewed; the theme tokens under
   `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every ticket
   followed the same pattern (full AI authoring + human review), so the share holds
   at ~90%. Rough judgment over the files added across the slices.
@@ -209,6 +263,13 @@
   - **How it was detected:** Manual Clean Architecture review.
   - **How it was corrected:** Not corrected — documented as a future improvement
     (OCP violation, low priority).
+- **Case:** First draft of `mover_flecha_collectible_test.dart` had a broken test
+  helper — a misspelled return type (`Trayectoriaable`) and a call to an undefined
+  `_pathEn` (ticket 03).
+  - **How it was detected:** Self-review immediately after writing, confirmed by
+    the compile error on the red-phase run.
+  - **How it was corrected:** Replaced it with a properly typed `Trayectoria pathEn(...)`
+    factory before proceeding to green.
 
 ### Team reflection
 
