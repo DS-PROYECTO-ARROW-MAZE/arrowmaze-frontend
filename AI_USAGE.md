@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-006 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-008 appended)
 
 ## 1. Tools Used
 
@@ -322,17 +322,85 @@ eloj:
   test file (4 copies) following the project's self-contained test file convention —
   this is a small duplication vs. maintainability trade-off.
 
+### T-008 — Ticket 08 · Identity, Auth & Session (register/login)
+
+- **Task / problem addressed:** Implement client-side identity & session (register
+  and login) with token storage via an injected `ProveedorSesion` port — never
+  static/global accessor. Scope defined by `.issues/08-identity-auth-session.md`.
+  Acceptance criteria: (AC1) successful register stores token via the injected
+  session port; (AC2) duplicate-email register surfaces a mapped domain
+  error (`RegistroEmailDuplicado`) with no raw exceptions; (AC3) session is read
+  through the injected port, not a static/global accessor; (AC4) `cerrarSesion()`
+  clears the stored token.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session spanned multiple rounds:
+  starting with "Implement ticket 08 following TDD strict and Clean Architecture"
+  and then iterating on each test failure / naming conflict / missing port,
+  progressively building up the full stack. Key prompts included: implementing
+  ports first, then use cases, then ViewModel/View, then infrastructure, and
+  finally DI wiring. The user also instructed to run `flutter test` and
+  `flutter analyze` after each cycle and fix any failures.
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/application/ports/proveedor_sesion.dart` (abstract interface port —
+  `obtenerToken`, `guardarToken`, `cerrarSesion`);
+  `lib/application/ports/fuente_autenticacion.dart` (abstract interface port —
+  `registrar`, `iniciarSesion` + `AutenticacionException`);
+  `lib/application/use_cases/resultado_registro.dart` (sealed: `RegistroExitoso`,
+  `RegistroEmailDuplicado`, `RegistroError`);
+  `lib/application/use_cases/resultado_inicio_sesion.dart` (sealed:
+  `InicioSesionExitoso`, `InicioSesionCredencialesInvalidas`, `InicioSesionError`);
+  `lib/application/use_cases/registrar_usuario_use_case.dart` (injects
+  `FuenteAutenticacion` + `ProveedorSesion`, maps `EMAIL_DUPLICATE` →
+  `RegistroEmailDuplicado`);
+  `lib/application/use_cases/iniciar_sesion_use_case.dart` (maps
+  `INVALID_CREDENTIALS` → `InicioSesionCredencialesInvalidas`);
+  `lib/infrastructure/sesion/proveedor_sesion_impl.dart` (in-memory token storage);
+  `lib/infrastructure/datasources/fuente_autenticacion_http.dart` (dart:io
+  HttpClient-based HTTP implementation);
+  `lib/infrastructure/dtos/auth_request_dto.dart` + `auth_response_dto.dart`;
+  `lib/core/errors/auth_errors.dart` (shared error code constants);
+  `lib/core/config/api_config.dart` (API base URL and endpoint paths);
+  `lib/presentation/viewmodels/auth_view_model.dart` (ChangeNotifier with
+  login/register/idle/authenticated states);
+  `lib/presentation/viewmodels/auth_view_state.dart` (immutable state + copyWith);
+  `lib/presentation/views/auth/auth_view.dart` (login/register form UI using
+  AppColors, AppTypography, AppSpacing theme tokens);
+  `lib/di/inyeccion.dart` (proveedorSesion singleton, fuenteAutenticacion
+  singleton, use case builders, `construirAuthViewModel()`). New tests:
+  `test/application/registrar_usuario_use_case_test.dart` (AC1 + AC2),
+  `test/infrastructure/proveedor_sesion_impl_test.dart` (AC4),
+  `test/application/session_es_inyectado_test.dart` (AC3). Verified:
+  `flutter test` 143/143 green (137 prior + 6 new); `flutter analyze` 0 errors,
+  0 warnings from new code (9 pre-existing info-level lints only); zero
+  `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** (a) A Dart naming conflict was detected:
+  the ViewModel field `_iniciarSesion` (instance of `IniciarSesionUseCase`)
+  shadowed the private method `_iniciarSesion()`; fixed by renaming the field to
+  `_loginUseCase` and the other to `_registroUseCase`. (b) The `AuthViewModel.setField`
+  parameter `FuenteAutenticacion` was removed — the ViewModel only needs
+  `ProveedorSesion` + pre-built use cases, not the raw data source port.
+- **Lessons learned / limitations identified:** The sealed-class pattern for
+  result types (`ResultadoRegistro`, `ResultadoInicioSesion`) maps well to Dart's
+  `sealed class` and forces exhaustive handling at every call site — no unhandled
+  error states. Dart's field/method name collision (same identifier for a field
+  and a private method) is easy to create when both follow the same naming
+  convention; a naming convention like `_<Verb>UseCase` for injected use cases
+  (vs. `_<verb>()` for methods) prevents it. Keeping `ProveedorSesion` as an
+  injected abstract interface (never static/global) satisfies DIP and makes
+  all callers (use cases, ViewModel) testable via simple inline fakes without
+  mocktail.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, and 07 were AI-generated then human-reviewed; the theme tokens under
-  `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every ticket
-  followed the same pattern (full AI authoring + human review), so the share holds
-  at ~90%. Rough judgment over the files added across the slices (73 passing tests,
-  all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
+  03, 04, 05, 07, and 08 were AI-generated then human-reviewed; the theme tokens
+  under `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every
+  ticket followed the same pattern (full AI authoring + human review), so the share
+  holds at ~90%. Rough judgment over the files added across the slices (143 passing
+  tests, all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
   `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
@@ -381,10 +449,15 @@ eloj:
   - **How it was corrected:** Added `_RelojNulo()` to each construction across
     4 test files. One file was fixed in a suboptimal way (importing a shared
     helper) and had to be refactored to use an inline class.
+- **Case:** ViewModel field `_iniciarSesion` (of type `IniciarSesionUseCase`)
+  shadowed the private method `_iniciarSesion()` — Dart compiler error (ticket 08).
+  - **How it was detected:** `flutter test` compile error.
+  - **How it was corrected:** Renamed fields to `_registroUseCase` / `_loginUseCase`
+    to avoid collision with the private methods `_registrar()` / `_iniciarSesion()`.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all six tickets. The predefined
+- **Impact on productivity:** Very high across all seven tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain

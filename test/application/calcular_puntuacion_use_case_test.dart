@@ -1,6 +1,5 @@
 import 'package:arrowmaze/application/use_cases/calcular_puntuacion_use_case.dart';
 import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
-import 'package:arrowmaze/domain/puntuacion/resultado_puntaje.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 /// Ticket 06 — CalcularPuntuacionUseCase: strategy selection + star thresholds

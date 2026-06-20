@@ -3,7 +3,11 @@ import '../application/generadores/generacion_aleatoria_nivel.dart';
 import '../application/generadores/generacion_por_archivo_nivel.dart';
 import '../application/generadores/generador_nivel_base.dart';
 import '../application/ports/cargador_nivel.dart';
+import '../application/ports/fuente_autenticacion.dart';
+import '../application/ports/proveedor_sesion.dart';
+import '../application/use_cases/iniciar_sesion_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
+import '../application/use_cases/registrar_usuario_use_case.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
 import '../domain/puntuacion/definicion_nivel.dart';
@@ -11,8 +15,11 @@ import '../domain/sesion/sesion_juego.dart';
 import '../domain/tablero.dart';
 import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
+import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
+import '../infrastructure/sesion/proveedor_sesion_impl.dart';
+import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
 
@@ -135,6 +142,41 @@ abstract final class Inyeccion {
   static SeleccionNivelViewModel construirSeleccionNivelViewModel() {
     return SeleccionNivelViewModel(
       generadorArchivo: generadorPorArchivo,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Identity & Session (ticket 08)
+  // ---------------------------------------------------------------------------
+
+  /// The single injected [ProveedorSesion] instance — wired once at the
+  /// composition root, never a static/global accessor (ADR-0002).
+  static ProveedorSesion get proveedorSesion => _proveedorSesion;
+  static final ProveedorSesionImpl _proveedorSesion = ProveedorSesionImpl();
+
+  /// The single injected [FuenteAutenticacion] instance backed by HTTP.
+  static FuenteAutenticacion get fuenteAutenticacion => _fuenteAutenticacion;
+  static final FuenteAutenticacionHttp _fuenteAutenticacion =
+      FuenteAutenticacionHttp();
+
+  static RegistrarUsuarioUseCase get registrarUsuarioUseCase =>
+      RegistrarUsuarioUseCase(
+        fuenteAutenticacion: fuenteAutenticacion,
+        proveedorSesion: proveedorSesion,
+      );
+
+  static IniciarSesionUseCase get iniciarSesionUseCase =>
+      IniciarSesionUseCase(
+        fuenteAutenticacion: fuenteAutenticacion,
+        proveedorSesion: proveedorSesion,
+      );
+
+  /// Builds the [AuthViewModel] with all dependencies injected.
+  static AuthViewModel construirAuthViewModel() {
+    return AuthViewModel(
+      proveedorSesion: proveedorSesion,
+      registrarUsuario: registrarUsuarioUseCase,
+      iniciarSesion: iniciarSesionUseCase,
     );
   }
 }
