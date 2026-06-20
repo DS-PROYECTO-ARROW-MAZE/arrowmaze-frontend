@@ -87,6 +87,7 @@ class JuegoViewState {
   const JuegoViewState({
     required this.tablero,
     required this.movimientos,
+    this.movimientoInvalido = false,
   });
 
   /// The board snapshot to render.
@@ -95,14 +96,21 @@ class JuegoViewState {
   /// The move counter shown in the HUD.
   final int movimientos;
 
+  /// Whether the last tap was a **penalized invalid** move: the board is left
+  /// unchanged but the View should play the shake/flash feedback. The flag rides
+  /// on each new state instance, so a repeated invalid tap re-triggers it.
+  final bool movimientoInvalido;
+
   /// Returns a copy with the given fields replaced.
   JuegoViewState copyWith({
     TableroUI? tablero,
     int? movimientos,
+    bool? movimientoInvalido,
   }) {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
       movimientos: movimientos ?? this.movimientos,
+      movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
     );
   }
 }
