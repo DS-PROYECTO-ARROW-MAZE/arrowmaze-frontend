@@ -16,6 +16,10 @@ enum TipoEvento {
   /// A tap on an arrow whose path is blocked: the move is **penalized** (it
   /// counts against `movimientos`) but the board is left unchanged.
   movimientoInvalido,
+
+  /// The valid move that exited the last arrow emptied the board: the session
+  /// has reached `EstadoVictoria` (PRD §3 B1).
+  victoria,
 }
 
 /// An immutable value object describing one [TipoEvento] at a [posicion].

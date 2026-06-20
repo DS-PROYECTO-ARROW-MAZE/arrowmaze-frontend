@@ -77,6 +77,22 @@ class TableroUI {
       celdas.firstWhere((c) => c.posicion == posicion);
 }
 
+/// The UI snapshot shown when the player wins — a **presentation** view state,
+/// deliberately **not** the domain `EstadoVictoria` (DM-F8 naming guardrail).
+///
+/// The session's GoF State (`EstadoVictoria`) lives in the domain and drives the
+/// rules; this immutable snapshot is what the victory overlay renders, and it
+/// never leaks the domain type into the View (nor the reverse). It carries the
+/// final HUD figures the overlay shows; richer scoring (`Puntaje`/`Estrellas`)
+/// arrives with ticket 06.
+class VictoriaViewState {
+  /// Creates the victory snapshot with the final [movimientos] count.
+  const VictoriaViewState({required this.movimientos});
+
+  /// The move count the level was cleared in.
+  final int movimientos;
+}
+
 /// The immutable state the `JuegoViewModel` exposes to its View.
 ///
 /// New states are produced with [copyWith] so the View can rely on instance
@@ -88,6 +104,10 @@ class JuegoViewState {
     required this.tablero,
     required this.movimientos,
     this.movimientoInvalido = false,
+    this.pausado = false,
+    this.derrota = false,
+    this.victoria,
+    this.tiempoRestante,
   });
 
   /// The board snapshot to render.
@@ -101,16 +121,39 @@ class JuegoViewState {
   /// on each new state instance, so a repeated invalid tap re-triggers it.
   final bool movimientoInvalido;
 
+  /// Whether the session is paused: the View dims the board and shows the resume
+  /// overlay while taps are rejected (the domain `EstadoPausado`).
+  final bool pausado;
+
+  /// Whether the level was lost on the clock: the View shows the defeat overlay
+  /// (the domain `EstadoDerrota`).
+  final bool derrota;
+
+  /// The victory snapshot to render, or `null` while the level is still in play.
+  /// Distinct from the domain `EstadoVictoria`.
+  final VictoriaViewState? victoria;
+
+  /// Time left on the HUD clock for a timed level, or `null` when untimed.
+  final Duration? tiempoRestante;
+
   /// Returns a copy with the given fields replaced.
   JuegoViewState copyWith({
     TableroUI? tablero,
     int? movimientos,
     bool? movimientoInvalido,
+    bool? pausado,
+    bool? derrota,
+    VictoriaViewState? victoria,
+    Duration? tiempoRestante,
   }) {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
       movimientos: movimientos ?? this.movimientos,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
+      pausado: pausado ?? this.pausado,
+      derrota: derrota ?? this.derrota,
+      victoria: victoria ?? this.victoria,
+      tiempoRestante: tiempoRestante ?? this.tiempoRestante,
     );
   }
 }

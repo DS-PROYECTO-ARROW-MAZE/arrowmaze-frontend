@@ -40,6 +40,12 @@ abstract interface class Tablero {
   /// Number of columns.
   int get columnas;
 
+  /// Whether the board holds no arrow paths left — every arrow has exited.
+  ///
+  /// This is the victory condition (`Victoria` in `CONTEXT.md`): a board is empty
+  /// once its last `Trayectoria` is removed. Walls and empty space do not count.
+  bool get estaVacio;
+
   /// The cell currently at [posicion].
   Celda celdaEn(Posicion posicion);
 

@@ -39,6 +39,8 @@ void main() {
     when(() => tablero.raycast(any(), any()))
         .thenReturn(const ResultadoRaycast.despejado());
     when(() => tablero.eliminarTrayectoria(any())).thenReturn(null);
+    // The session checks for victory after each exit; this board is never empty.
+    when(() => tablero.estaVacio).thenReturn(false);
   });
 
   test('should_remove_whole_path_and_increment_movimientos_when_ray_clear', () {
