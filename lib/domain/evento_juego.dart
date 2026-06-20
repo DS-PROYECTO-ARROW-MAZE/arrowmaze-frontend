@@ -1,9 +1,11 @@
-import '../../domain/value_objects/posicion.dart';
+import 'value_objects/posicion.dart';
 
 /// The kind of thing that happened during a move.
 ///
-/// Events are a *record* of what occurred — never a command telling a layer what
-/// to do (see `EventoJuego` in `CONTEXT.md`).
+/// Events are a *record* of what occurred — never a command telling a layer
+/// what to do. The application use case emits a `List<EventoJuego>` after each
+/// tap; the `PublicadorEventosJuego` (ticket 07) dispatches them to audio,
+/// score, and HUD observers without the use case knowing who is listening.
 enum TipoEvento {
   /// A tap resolved into a valid move (an arrow exited the board).
   movimientoRealizado,
@@ -26,9 +28,9 @@ enum TipoEvento {
 
 /// An immutable value object describing one [TipoEvento] at a [posicion].
 ///
-/// A move returns a `List<EventoJuego>`; downstream the Observer subject will
-/// dispatch these to audio/score/HUD reactors (ticket 07) without the use case
-/// knowing those reactors.
+/// A move returns a `List<EventoJuego>`; downstream the `PublicadorEventosJuego`
+/// dispatches these to audio/score/HUD reactors (ticket 07) without the use
+/// case knowing those reactors exist.
 class EventoJuego {
   /// Creates an event of [tipo] located at [posicion].
   const EventoJuego(this.tipo, this.posicion);

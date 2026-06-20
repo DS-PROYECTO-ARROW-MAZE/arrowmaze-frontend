@@ -1,5 +1,5 @@
+import '../../domain/evento_juego.dart';
 import 'delta_tablero.dart';
-import 'evento_juego.dart';
 
 /// The immutable outcome of one tap, returned by `MoverFlechaUseCase.ejecutar`.
 ///
