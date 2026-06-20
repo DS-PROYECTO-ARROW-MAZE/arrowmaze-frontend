@@ -121,6 +121,52 @@ class GrafoTablero implements Tablero {
   }
 
   @override
+  void restaurarTrayectoria(Trayectoria trayectoria) {
+    _trayectorias[trayectoria.id] = trayectoria;
+    final segmentos = trayectoria.segmentos.toSet();
+    // Re-materialise every segment cell first, so a segment is never mistaken
+    // for a gap while its siblings are being re-linked.
+    for (final posicion in trayectoria.segmentos) {
+      _nodos[posicion]!.celda = CeldaFlecha(
+        posicion: posicion,
+        direccion: trayectoria.direccionCabeza,
+        idFlecha: trayectoria.id,
+      );
+    }
+    // Re-link each segment to the nearest still-present node in every direction —
+    // the inverse of removal's wire-across-the-gap (walls and live cells stop the
+    // walk; nodes still removed are skipped, matching the state at removal time).
+    for (final posicion in trayectoria.segmentos) {
+      final nodo = _nodos[posicion]!;
+      for (final direccion in Direccion.cardinales) {
+        final vecino = _vecinoPresenteMasCercano(posicion, direccion, segmentos);
+        if (vecino != null) {
+          nodo.vecinos[direccion] = vecino;
+          vecino.vecinos[direccion.opuesta] = nodo;
+        }
+      }
+    }
+  }
+
+  /// Walks from [desde] along [direccion] skipping nodes that are currently a
+  /// removed gap (unlinked and not part of the path being restored) and returns
+  /// the first node still present, or `null` at the board edge.
+  Nodo? _vecinoPresenteMasCercano(
+    Posicion desde,
+    Direccion direccion,
+    Set<Posicion> segmentos,
+  ) {
+    var posicion = desde.desplazar(direccion);
+    while (true) {
+      final nodo = _nodos[posicion];
+      if (nodo == null) return null; // off the board
+      final esBrecha = nodo.vecinos.isEmpty && !segmentos.contains(posicion);
+      if (!esBrecha) return nodo;
+      posicion = posicion.desplazar(direccion);
+    }
+  }
+
+  @override
   void recogerColeccionable(Posicion posicion) {
     final nodo = _nodos[posicion];
     // Only a collectible is consumed; the cell is already transparent (it never
@@ -129,8 +175,10 @@ class GrafoTablero implements Tablero {
     nodo.celda = CeldaVacia(posicion);
   }
 
-  /// Turns the node at [posicion] into transparent empty space and re-wires its
-  /// neighbours to each other so a ray walk steps straight over the gap.
+  /// Overlays an arrow [trayectoria] onto the already-linked graph during board
+  /// construction: each segment cell becomes a `CeldaFlecha`. No re-link is
+  /// needed because building never unlinks nodes (use [restaurarTrayectoria] to
+  /// bring back a path that *was* removed).
   void agregarTrayectoria(Trayectoria trayectoria) {
     _trayectorias[trayectoria.id] = trayectoria;
     for (final posicion in trayectoria.segmentos) {

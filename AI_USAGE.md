@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-010 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-011 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04), refactoring, coverage |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09), refactoring, coverage |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10), architectural analysis, documentation |
 
@@ -536,18 +536,92 @@ eloj:
   `obtenerTop` on every request, keeping the client-side read-port stateless and
   trivial.
 
+### T-011 — Ticket 09 · Undo (valid or invalid move)
+
+- **Task / problem addressed:** Implement Story B4 from `.issues/09-undo.md`: the
+  player can undo their last move — valid **or** invalid — with every counter
+  staying consistent. Acceptance criteria: (AC1) undo of a valid move reverses the
+  board delta (the arrow is restored at its `Posicion`); (AC2) undo of an invalid
+  move rolls back the no-delta +1; (AC3) `movimientos` decrements and all counters
+  stay consistent; (AC4) undoing past an empty history is a safe no-op. The
+  vertical slice touches all four layers: a `DeshacerMovimientoUseCase` consuming
+  `CommandHistory`, `PlayerMoveCommand.deshacer()` (GoF **Command** undo), an
+  incremental board re-link mirroring removal (DM-F1), undo legality gated to
+  non-terminal `EstadoSesion` (DM-F5), and an undo button View → VM → use case
+  (DM-F8).
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket
+  `…\.issues\09-undo.md` is obligatory to apply the rules in these skills
+  `…\clean-architecture\SKILL.md` `…\tdd-strict\SKILL.md` the visual design is up
+  to you based on `…\lib\core\theme`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  **domain** — `Tablero.restaurarTrayectoria` port method + `GrafoTablero`
+  implementation that re-materialises every segment cell and re-links each node to
+  the nearest still-present neighbour in each direction (the exact inverse of
+  `eliminarTrayectoria`'s wire-across-the-gap, incremental, identity-preserving),
+  with a `_vecinoPresenteMasCercano` walk that skips still-removed gaps;
+  `EstadoSesion.permiteDeshacer` (default `!estaTerminada` on the sealed base, so
+  `EstadoJugando`/`EstadoPausado` allow undo and `EstadoVictoria`/`EstadoDerrota`
+  forbid it) + `SesionJuego.puedeDeshacer`. **application** —
+  `ContadorMovimientos` (the single shared mutable move counter both the forward
+  and undo use cases mutate); `CommandHistory.pop()` + `estaVacio`;
+  `PlayerMoveCommand.deshacer(Tablero)` (restores its delta's path, board no-op for
+  a no-delta invalid command); `DeshacerMovimientoUseCase` (shares the session,
+  history and counter with `MoverFlechaUseCase`, returns the same
+  `ResultadoMovimiento` shape so undo and the forward move can't drift);
+  `MoverFlechaUseCase` refactored to use the shared `ContadorMovimientos` instead
+  of a private `int`. **presentation** — `JuegoViewModel.deshacer()` + a
+  `puedeDeshacer` getter (defaults the undo use case onto the move use case's own
+  session/history/counter); `GameView` undo `IconButton` in the AppBar (disabled
+  when nothing to undo, hidden once the level is decided), beside the pause control,
+  using existing theme tokens. Also corrected a misleading copy-pasted dartdoc on
+  the pre-existing `GrafoTablero.agregarTrayectoria` (it described removal). New
+  tests: `test/application/deshacer_movimiento_use_case_test.dart` (AC1 restore +
+  decrement, AC2 rollback no-delta +1, AC4 empty-history no-op);
+  `test/domain/tablero_relink_test.dart` (incremental re-link mirror, ray re-block
+  after restore, and a cross-gap two-arrow reverse-order undo);
+  `test/presentation/juego_viewmodel_undo_test.dart` (View→VM→use-case flow rebuilds
+  the board snapshot and rolls the counter back; empty-history no-op). Verified:
+  `flutter test` 165/165 green (157 prior + 8 new — 3 application, 3 domain, 2
+  presentation); `flutter analyze` 0 errors / 0 warnings (20 pre-existing
+  info-level lints only, `prefer_initializing_formals` and similar style hints);
+  zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and
+  code; no manual code edits were required. `flutter test`/`flutter analyze` served
+  as the guardrails. One test was added proactively during the refactor phase (the
+  cross-gap two-arrow case) to lock in the re-link correctness beyond the ticket's
+  single-arrow mirror test.
+- **Lessons learned / limitations identified:** (1) Designing the undo result as
+  the same `ResultadoMovimiento` shape the forward move returns — and routing both
+  through one shared `ContadorMovimientos` — made "counters can't drift" a
+  structural guarantee rather than a runtime check (the ticket's refactor goal).
+  (2) The incremental board re-link had a subtle trap: a naive position-based
+  re-link (link each restored node to its in-bounds neighbours) is **wrong** for
+  adjacent arrows, because removal wires neighbours *across* the gap, so a restored
+  node's true neighbour can be two-plus cells away. The correct mirror walks each
+  direction skipping still-removed nodes; combined with reverse-order undo (popping
+  the most-recent command first) this reconstructs cross-gap links exactly with no
+  journal needed. This was reasoned out during design and pinned down with a
+  dedicated cross-gap test. (3) Gating legality on the State subclass
+  (`permiteDeshacer` defaulted on the sealed base) kept the rule out of the use
+  case and the ViewModel, consistent with how `relojActivo`/`estaTerminada` are
+  modelled. (4) Defaulting the undo use case inside the ViewModel from the move use
+  case's already-injected session/history/counter (mirroring the existing
+  `CalcularPuntuacionUseCase` default) meant all 157 prior tests passed unmodified
+  and DI needed no change.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 07, 08, 10, and 11 were AI-generated then human-reviewed; the theme
-  tokens under `lib/core/theme` were pre-existing (not AI-authored in these tasks).
-  Every ticket followed the same pattern (full AI authoring + human review), so the
-  share holds at ~90%. Rough judgment over the files added across the slices (157
-  passing tests, all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
-  `lib/presentation/`, `lib/di/`).
+  03, 04, 05, 07, 08, 09, 10, and 11 were AI-generated then human-reviewed; the
+  theme tokens under `lib/core/theme` were pre-existing (not AI-authored in these
+  tasks). Every ticket followed the same pattern (full AI authoring + human review),
+  so the share holds at ~90%. Rough judgment over the files added across the slices
+  (165 passing tests, all source in `lib/domain/`, `lib/application/`,
+  `lib/infrastructure/`, `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -625,10 +699,22 @@ eloj:
   - **How it was detected:** `flutter test` — 2 architecture tests failed.
   - **How it was corrected:** Filtered comment lines before the regex scan, then
     reworded the doc comment to remove the literal `publicar` backtick reference.
+- **Case:** The instinctive design for restoring a removed arrow on undo — a
+  position-based re-link that wires each restored node back to its in-bounds
+  neighbours — is incorrect for adjacent arrows, because removal wires neighbours
+  *across* the gap, so a restored node's true neighbour can be several cells away
+  (ticket 09).
+  - **How it was detected:** Design-time reasoning while implementing
+    `restaurarTrayectoria`, then locked in with a dedicated cross-gap two-arrow
+    `tablero_relink_test.dart` case that would have failed the naive approach.
+  - **How it was corrected:** Implemented the re-link as the true mirror of
+    removal — a directional walk that skips still-removed nodes — which, paired
+    with reverse-order undo, reconstructs cross-gap links exactly without any
+    removal journal.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all nine tickets. The predefined
+- **Impact on productivity:** Very high across all ten tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -638,10 +724,13 @@ eloj:
   read-only) was similarly fast — the read port pattern was already established from
   T-009 and the Pact consumer test followed the same shape-verification template.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (157/157 tests, 0 errors, 0 warnings from
+  kept output consistent and well-tested (165/165 tests, 0 errors, 0 warnings from
   new code). The few AI mistakes were caught by `flutter test` and manual review —
   no defect reached production code. Architecture violations (ViewModel importing
-  infra DTO) were caught and fixed during the same session.
+  infra DTO) were caught and fixed during the same session. On ticket 09 the
+  trickiest correctness concern (the incremental board re-link for adjacent arrows)
+  was surfaced by design-time reasoning and pinned with a dedicated test before it
+  could become a latent gameplay bug.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
   established domain abstractions (like the `IColaSincronizacion` port interface)

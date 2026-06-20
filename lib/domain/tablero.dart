@@ -75,6 +75,18 @@ abstract interface class Tablero {
   /// neighbours are re-wired — never a full rebuild.
   void eliminarTrayectoria(int idFlecha);
 
+  /// Restores a whole arrow path previously taken off the board by
+  /// [eliminarTrayectoria] — the **exact mirror** used to undo a valid move
+  /// (ticket 09).
+  ///
+  /// Every segment cell becomes a `CeldaFlecha` again and each segment node is
+  /// re-linked to the nearest still-present node in every direction, the inverse
+  /// of removal's "wire the neighbours across the gap". The edit is incremental
+  /// (only the restored nodes and their immediate links change) and preserves the
+  /// identity of every untouched node. Undo must replay in reverse removal order
+  /// for the re-link to land exactly where it was.
+  void restaurarTrayectoria(Trayectoria trayectoria);
+
   /// Consumes the collectible at [posicion], turning it into transparent empty
   /// space so it is collected only once.
   ///

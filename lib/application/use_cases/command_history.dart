@@ -1,3 +1,4 @@
+import '../../domain/tablero.dart';
 import '../../domain/value_objects/posicion.dart';
 import 'delta_tablero.dart';
 
@@ -21,6 +22,19 @@ class PlayerMoveCommand {
 
   /// Whether this command changed the board (a real delta exists).
   bool get tieneDelta => delta != null;
+
+  /// Reverses this command's effect on [tablero] (GoF **Command** undo).
+  ///
+  /// A real-delta command restores the whole arrow path it removed (the mirror
+  /// re-link on the board); a no-delta invalid command changed nothing on the
+  /// board, so its undo is a board no-op — the counter rollback lives in the use
+  /// case, not here.
+  void deshacer(Tablero tablero) {
+    final cambio = delta;
+    if (cambio != null) {
+      tablero.restaurarTrayectoria(cambio.trayectoria);
+    }
+  }
 }
 
 /// The ordered history of [PlayerMoveCommand]s applied to the board.
@@ -37,6 +51,14 @@ class CommandHistory {
 
   /// How many commands have been recorded.
   int get longitud => _comandos.length;
+
+  /// Whether no command has been recorded yet — an undo here is a safe no-op.
+  bool get estaVacio => _comandos.isEmpty;
+
+  /// Removes and returns the most recently pushed command (the one an undo
+  /// reverses). Throws [StateError] when the history is empty, so callers must
+  /// guard with [estaVacio] first.
+  PlayerMoveCommand pop() => _comandos.removeLast();
 
   /// The most recently pushed command. Throws [StateError] when empty.
   PlayerMoveCommand get ultimo => _comandos.last;

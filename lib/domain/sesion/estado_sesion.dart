@@ -29,6 +29,11 @@ sealed class EstadoSesion {
   /// Whether the level clock advances in this state. Only [EstadoJugando] lets
   /// time pass; pausing or finishing freezes it.
   bool get relojActivo;
+
+  /// Whether undoing the last move is legal in this state (ticket 09, B4): only
+  /// the non-terminal states ([EstadoJugando], [EstadoPausado]) allow it; once
+  /// the level is won or lost the history is frozen.
+  bool get permiteDeshacer => !estaTerminada;
 }
 
 /// Active play: taps resolve real moves and the clock runs.

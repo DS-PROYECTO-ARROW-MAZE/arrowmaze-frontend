@@ -45,6 +45,10 @@ class SesionJuego implements ContextoSesion {
   /// Whether the session reached a terminal outcome (victory or defeat).
   bool get estaTerminada => _estado.estaTerminada;
 
+  /// Whether undoing the last move is legal right now — true only in a
+  /// non-terminal state (ticket 09, DM-F5).
+  bool get permiteDeshacer => _estado.permiteDeshacer;
+
   /// Whether this level is timed (has a [limiteTiempo]).
   bool get esCronometrado => _limiteTiempo != null;
 

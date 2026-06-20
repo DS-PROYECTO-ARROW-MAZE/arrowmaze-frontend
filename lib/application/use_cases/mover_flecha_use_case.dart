@@ -4,6 +4,7 @@ import '../../domain/sesion/sesion_juego.dart';
 import '../../domain/tablero.dart';
 import '../../domain/value_objects/posicion.dart';
 import 'command_history.dart';
+import 'contador_movimientos.dart';
 import 'delta_tablero.dart';
 import 'resultado_movimiento.dart';
 
@@ -46,9 +47,11 @@ class MoverFlechaUseCase {
     CommandHistory? historial,
     SesionJuego? sesion,
     PublicadorEventosJuego? publicador,
+    ContadorMovimientos? contador,
   })  : _sesion = sesion ?? SesionJuego(tablero: tablero),
         _historial = historial ?? CommandHistory(),
-        _publicador = publicador ?? PublicadorEventosJuego();
+        _publicador = publicador ?? PublicadorEventosJuego(),
+        _contador = contador ?? ContadorMovimientos();
 
   /// Bonus time granted for each collectible a valid move's ray crosses.
   static const Duration bonusPorColeccionable = Duration(seconds: 5);
@@ -56,11 +59,15 @@ class MoverFlechaUseCase {
   final SesionJuego _sesion;
   final CommandHistory _historial;
   final PublicadorEventosJuego _publicador;
-
-  int _movimientos = 0;
+  final ContadorMovimientos _contador;
 
   /// The taps registered as moves so far (valid + penalized invalid).
-  int get movimientos => _movimientos;
+  int get movimientos => _contador.valor;
+
+  /// The shared move counter, exposed so the undo use case
+  /// ([DeshacerMovimientoUseCase]) rolls back the very same count this use case
+  /// advances — the single source of truth that keeps the two from drifting.
+  ContadorMovimientos get contador => _contador;
 
   /// The history of commands applied, exposed for inspection and future undo.
   CommandHistory get historial => _historial;
@@ -84,12 +91,12 @@ class MoverFlechaUseCase {
     // A tap the session did not register (no arrow, or rejected while
     // paused/finished) never touches the counter or the history.
     if (!toque.registrado) {
-      return ResultadoMovimiento.ignorado(_movimientos);
+      return ResultadoMovimiento.ignorado(_contador.valor);
     }
 
     // Any registered tap counts as a move — even a blocked, board-unchanged one
     // (the anti-cheat invariant).
-    _movimientos++;
+    _contador.incrementar();
 
     if (!toque.valido) {
       // Invalid (penalized): no board mutation, arrow not consumed, no delta.
@@ -99,7 +106,7 @@ class MoverFlechaUseCase {
       ];
       _publicarTodos(eventos);
       return ResultadoMovimiento(
-        movimientos: _movimientos,
+        movimientos: _contador.valor,
         registrado: true,
         eventos: eventos,
       );
@@ -129,7 +136,7 @@ class MoverFlechaUseCase {
 
     _publicarTodos(eventos);
     return ResultadoMovimiento(
-      movimientos: _movimientos,
+      movimientos: _contador.valor,
       registrado: true,
       delta: delta,
       eventos: eventos,

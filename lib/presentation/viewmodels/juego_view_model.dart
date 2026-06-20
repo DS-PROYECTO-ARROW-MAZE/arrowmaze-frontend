@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart';
 
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
+import '../../application/use_cases/deshacer_movimiento_use_case.dart';
 import '../../domain/evento_juego.dart';
 import '../../domain/observador_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
@@ -47,9 +48,18 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     required this._definicionNivel,
     required this._reloj,
     CalcularPuntuacionUseCase? calcularPuntuacion,
+    DeshacerMovimientoUseCase? deshacerMovimiento,
   })  : _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
-        _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase() {
+        _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase(),
+        // Defaults to an undo wired onto the move use case's own session,
+        // history and counter, so both share one source of truth.
+        _deshacerMovimiento = deshacerMovimiento ??
+            DeshacerMovimientoUseCase(
+              sesion: moverFlecha.sesion,
+              historial: moverFlecha.historial,
+              contador: moverFlecha.contador,
+            ) {
     _estado = JuegoViewState(
       tablero: _instantanea(),
       movimientos: 0,
@@ -60,6 +70,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
 
   final Tablero _tablero;
   final MoverFlechaUseCase _moverFlecha;
+  final DeshacerMovimientoUseCase _deshacerMovimiento;
   final SesionJuego _sesion;
   final DefinicionNivel _definicionNivel;
   final CalcularPuntuacionUseCase _calcularPuntuacion;
@@ -143,6 +154,31 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners(); // MVVM data-binding: push new state to the View.
+  }
+
+  /// Whether an undo is available right now — there is a move to reverse and the
+  /// session is still in play. The View binds the undo button's enabled state to
+  /// this.
+  bool get puedeDeshacer => _deshacerMovimiento.puedeDeshacer;
+
+  /// Undoes the last move (valid or invalid), rolling the board and the move
+  /// counter back together (ticket 09, B4).
+  ///
+  /// A valid-move undo restores the arrow, so the board snapshot is rebuilt; an
+  /// invalid-move undo only rolls back the counter and leaves the snapshot as is.
+  /// Either way the invalid-tap flag is cleared so undoing never triggers the
+  /// shake/flash. An undo with nothing to reverse (or in a finished session) is a
+  /// silent no-op.
+  void deshacer() {
+    final resultado = _deshacerMovimiento.ejecutar();
+    if (!resultado.registrado) return;
+
+    _estado = _estado.copyWith(
+      tablero: resultado.valido ? _instantanea() : null,
+      movimientos: resultado.movimientos,
+      movimientoInvalido: false,
+    );
+    notifyListeners(); // MVVM data-binding: push the reversed state to the View.
   }
 
   /// Pauses the session: taps are rejected and the clock freezes until [reanudar].

@@ -69,16 +69,29 @@ class _GameViewState extends State<GameView>
             listenable: widget.viewModel,
             builder: (context, _) {
               final estado = widget.viewModel.estado;
-              // The pause control is hidden once the level is decided.
+              // The play controls are hidden once the level is decided.
               if (estado.victoria != null || estado.derrota) {
                 return const SizedBox.shrink();
               }
-              return IconButton(
-                icon: Icon(estado.pausado ? Icons.play_arrow : Icons.pause),
-                tooltip: estado.pausado ? 'Resume' : 'Pause',
-                onPressed: estado.pausado
-                    ? widget.viewModel.reanudar
-                    : widget.viewModel.pausar,
+              return Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Undo the last move; disabled when there is nothing to undo.
+                  IconButton(
+                    icon: const Icon(Icons.undo),
+                    tooltip: 'Undo',
+                    onPressed: widget.viewModel.puedeDeshacer
+                        ? widget.viewModel.deshacer
+                        : null,
+                  ),
+                  IconButton(
+                    icon: Icon(estado.pausado ? Icons.play_arrow : Icons.pause),
+                    tooltip: estado.pausado ? 'Resume' : 'Pause',
+                    onPressed: estado.pausado
+                        ? widget.viewModel.reanudar
+                        : widget.viewModel.pausar,
+                  ),
+                ],
               );
             },
           ),
