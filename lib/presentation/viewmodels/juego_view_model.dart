@@ -2,7 +2,8 @@ import 'package:flutter/foundation.dart';
 
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
-import '../../application/use_cases/evento_juego.dart';
+import '../../domain/evento_juego.dart';
+import '../../domain/observador_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
 import '../../domain/puntuacion/definicion_nivel.dart';
@@ -36,21 +37,18 @@ import 'juego_view_state.dart';
 ///
 /// On victory the [CalcularPuntuacionUseCase] computes the score and star rating
 /// from the level's [DefinicionNivel] tuning data (ticket 06).
-class JuegoViewModel extends ChangeNotifier {
+class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// Injects the board to render, the use case that mutates it, the scoring
   /// definition and use case; the session gating every tap is taken from the
   /// use case so both share one instance.
   JuegoViewModel({
-    required Tablero tablero,
+    required this._tablero,
     required MoverFlechaUseCase moverFlecha,
-    required DefinicionNivel definicionNivel,
-    required Reloj reloj,
+    required this._definicionNivel,
+    required this._reloj,
     CalcularPuntuacionUseCase? calcularPuntuacion,
-  })  : _tablero = tablero,
-        _moverFlecha = moverFlecha,
+  })  : _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
-        _reloj = reloj,
-        _definicionNivel = definicionNivel,
         _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase() {
     _estado = JuegoViewState(
       tablero: _instantanea(),
@@ -163,13 +161,6 @@ class JuegoViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  @override
-  void dispose() {
-    _moverFlecha.publicador.desuscribir(this);
-    _reloj?.cancel();
-    super.dispose();
-  }
-
   /// Starts the one-second tick that advances a timed level's clock; a no-op on
   /// an untimed level or once the session is finished.
   void _iniciarReloj() {
@@ -192,6 +183,7 @@ class JuegoViewModel extends ChangeNotifier {
 
   @override
   void dispose() {
+    _moverFlecha.publicador.desuscribir(this);
     _reloj.detener();
     super.dispose();
   }
