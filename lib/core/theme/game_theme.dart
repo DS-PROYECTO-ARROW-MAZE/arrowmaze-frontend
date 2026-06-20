@@ -32,6 +32,10 @@ class GameTheme extends ThemeExtension<GameTheme> {
     required this.starActive,
     required this.starInactive,
     required this.scoreColor,
+    required this.syncQueued,
+    required this.syncActive,
+    required this.syncDone,
+    required this.syncError,
   });
 
   /// Backdrop behind the grid.
@@ -80,6 +84,18 @@ class GameTheme extends ThemeExtension<GameTheme> {
   /// The colour for the score number on the victory overlay.
   final Color scoreColor;
 
+  /// Badge / icon colour when runs are queued offline (waiting to sync).
+  final Color syncQueued;
+
+  /// Badge / icon colour while a batch sync is in progress.
+  final Color syncActive;
+
+  /// Badge / icon colour after a successful sync.
+  final Color syncDone;
+
+  /// Badge / icon colour when the sync failed (retry available).
+  final Color syncError;
+
   /// A colour for the path with [idFlecha], cycling through [arrowPalette].
   Color colorFlecha(int idFlecha) =>
       arrowPalette[idFlecha % arrowPalette.length];
@@ -107,6 +123,10 @@ class GameTheme extends ThemeExtension<GameTheme> {
     starActive: AppColors.warningNeon,
     starInactive: AppColors.surfaceVariant,
     scoreColor: AppColors.primaryNeon,
+    syncQueued: AppColors.warningNeon,
+    syncActive: AppColors.accentNeon,
+    syncDone: AppColors.primaryNeon,
+    syncError: AppColors.errorNeon,
   );
 
   @override
@@ -126,6 +146,10 @@ class GameTheme extends ThemeExtension<GameTheme> {
     Color? starActive,
     Color? starInactive,
     Color? scoreColor,
+    Color? syncQueued,
+    Color? syncActive,
+    Color? syncDone,
+    Color? syncError,
   }) {
     return GameTheme(
       boardBackground: boardBackground ?? this.boardBackground,
@@ -143,6 +167,10 @@ class GameTheme extends ThemeExtension<GameTheme> {
       starActive: starActive ?? this.starActive,
       starInactive: starInactive ?? this.starInactive,
       scoreColor: scoreColor ?? this.scoreColor,
+      syncQueued: syncQueued ?? this.syncQueued,
+      syncActive: syncActive ?? this.syncActive,
+      syncDone: syncDone ?? this.syncDone,
+      syncError: syncError ?? this.syncError,
     );
   }
 
@@ -165,6 +193,10 @@ class GameTheme extends ThemeExtension<GameTheme> {
       starActive: Color.lerp(starActive, other.starActive, t)!,
       starInactive: Color.lerp(starInactive, other.starInactive, t)!,
       scoreColor: Color.lerp(scoreColor, other.scoreColor, t)!,
+      syncQueued: Color.lerp(syncQueued, other.syncQueued, t)!,
+      syncActive: Color.lerp(syncActive, other.syncActive, t)!,
+      syncDone: Color.lerp(syncDone, other.syncDone, t)!,
+      syncError: Color.lerp(syncError, other.syncError, t)!,
     );
   }
 }

@@ -4,12 +4,15 @@ import '../application/generadores/generacion_por_archivo_nivel.dart';
 import '../application/generadores/generador_nivel_base.dart';
 import '../application/ports/cargador_nivel.dart';
 import '../application/ports/fuente_autenticacion.dart';
+import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
+import '../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
+import '../domain/progreso/i_cola_sincronizacion.dart';
 import '../domain/puntuacion/definicion_nivel.dart';
 import '../domain/sesion/sesion_juego.dart';
 import '../domain/tablero.dart';
@@ -17,11 +20,14 @@ import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
+import '../infrastructure/progreso/cola_sincronizacion_local.dart';
+import '../infrastructure/progreso/progreso_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../infrastructure/sesion/proveedor_sesion_impl.dart';
 import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
+import '../presentation/viewmodels/sync_view_model.dart';
 
 /// Composition root: wires domain, application, infrastructure, and presentation
 /// into the object graph that the app consumes.
@@ -177,6 +183,30 @@ abstract final class Inyeccion {
       proveedorSesion: proveedorSesion,
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Offline Progress Sync (ticket 10)
+  // ---------------------------------------------------------------------------
+
+  static IColaSincronizacion get colaSincronizacion => _colaSincronizacion;
+  static final ColaSincronizacionLocal _colaSincronizacion =
+      ColaSincronizacionLocal();
+
+  static IRepositorioProgreso get repositorioProgreso => _repositorioProgreso;
+  static final ProgresoDataSourceHttp _repositorioProgreso =
+      ProgresoDataSourceHttp(proveedorSesion: proveedorSesion);
+
+  static SincronizarProgresoUseCase get sincronizarProgresoUseCase =>
+      SincronizarProgresoUseCase(
+        cola: colaSincronizacion,
+        repositorio: repositorioProgreso,
+      );
+
+  static SyncViewModel construirSyncViewModel() {
+    return SyncViewModel(
+      sincronizarProgreso: sincronizarProgresoUseCase,
     );
   }
 }

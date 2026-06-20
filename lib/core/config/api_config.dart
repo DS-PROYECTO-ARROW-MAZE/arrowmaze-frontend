@@ -11,4 +11,7 @@ abstract final class ApiConfig {
 
   /// Login endpoint.
   static const String loginPath = '/auth/login';
+
+  /// Progress batch-sync endpoint (DM-B3, E2).
+  static const String syncPath = '/progress/sync';
 }

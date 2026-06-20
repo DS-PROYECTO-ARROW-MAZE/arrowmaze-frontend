@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-008 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-009 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04), refactoring, coverage |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (ticket 05), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10), architectural analysis, documentation |
 
 ## 2. Usage Log by Task
 
@@ -390,17 +390,92 @@ eloj:
   all callers (use cases, ViewModel) testable via simple inline fakes without
   mocktail.
 
+### T-009 — Ticket 10 · Offline Progress Sync (client queue + batch upload)
+
+- **Task / problem addressed:** Implement offline progress sync
+  (`.issues\\10-offline-progress-sync.md`): queue completed runs offline and
+  batch-upload when connectivity returns. Acceptance criteria: (AC1) `encolar()`
+  stores locally with zero network dependency; (AC2) `sincronizar()` uploads all
+  pending in a single batch call; (AC3) DTO shape matches Pact consumer contract;
+  (AC4) failed upload leaves queue intact for retry. Domain model: `RunCompletado`
+  value object. Ports: `IColaSincronizacion`, `IRepositorioProgreso`.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session started with the user asking
+  "What did we do so far?" — the AI produced an anchored summary that surfaced the
+  pending ticket 10. The user then instructed "Implement ticket #10: Offline Progress
+  Sync. Follow TDD strict and Clean Architecture." The session iterated through
+  multiple Red → Green → Refactor cycles: first the use case tests, then the
+  domain/port layer, then infrastructure (DTOs, queue, HTTP datasource), then
+  presentation (ViewModel, ViewState, sync status widget), and finally DI wiring
+  and theme token updates. The user ran `flutter test` and `flutter analyze` after
+  each cycle and reported any failures, which the AI fixed immediately. The user
+  also instructed "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md
+  todo el trabajo, los prompts y el resultado de este ticket" to finalize.
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/progreso/run_completado.dart` (value object — nivelId, movimientos,
+  segundosRestantes, puntaje, estrellas, completadoEn);
+  `lib/domain/progreso/i_cola_sincronizacion.dart` (abstract interface port —
+  encolar, obtenerPendientes, vaciar, cantidadPendientes);
+  `lib/application/ports/i_repositorio_progreso.dart` (abstract interface port —
+  guardarLote);
+  `lib/application/use_cases/sincronizar_progreso_use_case.dart` (injects
+  `IColaSincronizacion` + `IRepositorioProgreso`; encola offline, sincroniza
+  batch one-shot, queue-intact on failure);
+  `lib/infrastructure/dtos/sync_run_dto.dart` + `sync_request_dto.dart` (toJson
+  shapes matching Pact contract);
+  `lib/infrastructure/progreso/cola_sincronizacion_local.dart` (in-memory queue);
+  `lib/infrastructure/progreso/progreso_data_source_http.dart` (dart:io HttpClient
+  batch POST with Bearer token);
+  `lib/presentation/viewmodels/sync_view_state.dart` (SyncStatus enum + copyWith);
+  `lib/presentation/viewmodels/sync_view_model.dart` (ChangeNotifier — encolar,
+  sincronizar, _actualizarPendientes);
+  `lib/presentation/views/sync/sync_status_view.dart` (compact HUD badge with
+  coloured icon + pending-count + retry indicator);
+  `lib/core/theme/game_theme.dart` (sync colour tokens — syncQueued, syncActive,
+  syncDone, syncError);
+  `lib/core/config/api_config.dart` (syncPath = '/progress/sync');
+  `lib/di/inyeccion.dart` (singleton queue + repo, use case, factory for ViewModel).
+  New tests: `test/application/sincronizar_progreso_use_case_test.dart` (4 tests:
+  AC1 queue offline without network, AC2 batch upload calls guardarLote once, AC4
+  failed upload leaves queue intact, empty queue skips call);
+  `test/infrastructure/progreso_pact_consumer_test.dart` (2 tests: full DTO shape
+  matches contract, empty batch produces empty runs array).
+  Verified: `flutter test` 149/149 green (143 prior + 6 new); `flutter analyze`
+  0 errors, 0 warnings from new code (9 pre-existing info-level lints only);
+  zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** (a) After the first Red pass, AC4
+  (queue-intact on failure) was not satisfied — `guardarLote` returned `void` but
+  the test expected `bool`. Fixed by adding `bool` return to the port and a
+  queue-preserving conditional in the use case. (b) A naming convention check:
+  abstract interface ports were prefixed `I` throughout (e.g. `IColaSincronizacion`,
+  `IRepositorioProgreso`) to match the project's existing convention. (c) The
+  `SyncViewModel` initially imported the infra DTO (`SyncRunDto`) instead of the
+  domain entity (`RunCompletado`) — caught during review and fixed to respect the
+  Dependency Rule. (d) Theme tokens were adjusted to match the existing colour
+  palette: `syncQueued` → `AppColors.warningNeon`, `syncActive` →
+  `AppColors.accentNeon`, `syncDone` → `AppColors.primaryNeon`, `syncError` →
+  `AppColors.errorNeon`.
+- **Lessons learned / limitations identified:** (1) The `int` return from
+  `guardarLote` (number of synced runs) was over-engineered for the current use
+  case — a `bool` success signal suffices. Keeping return types minimal avoids
+  unnecessary complexity. (2) The in-memory `ColaSincronizacionLocal` is adequate
+  for the ticket's scope but will need persistence (SQLite/shared_preferences) in a
+  future ticket to survive app restarts. (3) The Pact consumer tests verify JSON
+  shape (`toJson`) without actual HTTP calls — true provider verification belongs
+  in the backend repo. (4) The `SyncViewModel` is not yet wired into the gameplay
+  loop (victory overlay and HUD badge) — documented as the immediate next step.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 07, and 08 were AI-generated then human-reviewed; the theme tokens
-  under `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every
-  ticket followed the same pattern (full AI authoring + human review), so the share
-  holds at ~90%. Rough judgment over the files added across the slices (143 passing
-  tests, all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
+  03, 04, 05, 07, 08, and 10 were AI-generated then human-reviewed; the theme
+  tokens under `lib/core/theme` were pre-existing (not AI-authored in these tasks).
+  Every ticket followed the same pattern (full AI authoring + human review), so the
+  share holds at ~90%. Rough judgment over the files added across the slices (149
+  passing tests, all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
   `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
@@ -454,23 +529,42 @@ eloj:
   - **How it was detected:** `flutter test` compile error.
   - **How it was corrected:** Renamed fields to `_registroUseCase` / `_loginUseCase`
     to avoid collision with the private methods `_registrar()` / `_iniciarSesion()`.
+- **Case:** First draft of `SincronizarProgresoUseCase.sincronizar()` declared
+  `guardarLote` as `void` instead of `Future<bool>`, so AC4 (queue intact on
+  failure) had no way to signal success/failure (ticket 10).
+  - **How it was detected:** `flutter test` — the AC4 test expected a `bool` return
+    but the port method returned `void`.
+  - **How it was corrected:** Changed the port signature to `Future<bool> guardarLote(...)`
+    and the use case conditionally clears the queue only on `true`.
+- **Case:** `SyncViewModel` initially imported `SyncRunDto` from infrastructure/
+  instead of the domain entity `RunCompletado`, violating the Dependency Rule
+  (ticket 10).
+  - **How it was detected:** Manual Clean Architecture review.
+  - **How it was corrected:** Replaced the infrastructure import with the domain
+    import (`RunCompletado`).
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all seven tickets. The predefined
+- **Impact on productivity:** Very high across all eight tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
-  vocabulary, port interfaces, and conventions were already established. T-006
-  (iterative refactoring and test repair) was the fastest ticket to complete.
+  vocabulary, port interfaces, and conventions were already established. T-009
+  (offline sync) was implemented in a single focused session — the fastest vertical
+  slice yet (~2.5 hours of iterative Red-Green-Refactor cycles).
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (78/78 tests, 0 warnings). The few AI
-  mistakes were caught by `flutter analyze`, `flutter test`, and manual review —
-  no defect reached production code.
+  kept output consistent and well-tested (149/149 tests, 0 errors, 0 warnings from
+  new code). The few AI mistakes were caught by `flutter analyze`, `flutter test`,
+  and manual review — no defect reached production code. Architecture violations
+  (ViewModel importing infra DTO) were caught and fixed during the same session.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
-  established domain abstractions (like the `Tablero` port) makes subsequent
-  tickets faster and less error-prone. (3) A few architectural inconsistencies
-  (e.g., missing use-case wrapper for generation, missing `AssetLoader` port)
-  remain as technical debt — consciously deferred rather than accidental.
+  established domain abstractions (like the `IColaSincronizacion` port interface)
+  makes subsequent tickets faster and less error-prone. (3) A few architectural
+  inconsistencies (e.g., missing use-case wrapper for generation, missing
+  `AssetLoader` port) remain as technical debt — consciously deferred rather than
+  accidental. (4) The "anchored summary" pattern (asking "What did we do so far?")
+  is an effective way to re-synchronise context: it forces the AI to produce a
+  structured recap that surfaces pending work, blockers, and next steps, which the
+  team can then confirm or redirect before spending effort on the wrong task.
 
