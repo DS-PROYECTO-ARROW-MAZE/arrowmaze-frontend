@@ -1,14 +1,14 @@
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
-import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/tablero.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:mocktail/mocktail.dart';
 
-/// Guards for this slice's *honest surface*: a tap that is not a valid exit is a
-/// no-op here (no board change, no counter bump). Penalised invalid moves and
-/// history are ticket 02 — deliberately absent.
+/// Guards for the only *true* no-op: a tap that lands on no arrow at all
+/// (an empty or wall cell) is ignored — no board change, no counter bump, no
+/// command recorded. A tap on an arrow with a blocked ray is **not** a no-op
+/// anymore; it is a penalized invalid move (see `mover_flecha_invalida_test`).
 class _TableroFalso extends Mock implements Tablero {}
 
 void main() {
@@ -39,28 +39,7 @@ void main() {
     expect(resultado.movimientos, 0);
     expect(useCase.movimientos, 0);
     expect(resultado.eventos, isEmpty);
-    verifyNever(() => tablero.eliminarTrayectoria(any()));
-  });
-
-  test('should_noop_when_head_ray_is_blocked', () {
-    // Arrange — a path whose head ray is stopped before the edge.
-    const posicion = Posicion.en(fila: 2, columna: 2);
-    final trayectoria = Trayectoria(
-      id: 3,
-      direccionCabeza: Direccion.arriba,
-      segmentos: const [posicion],
-    );
-    when(() => tablero.trayectoriaEn(posicion)).thenReturn(trayectoria);
-    when(() => tablero.raycast(any(), any())).thenReturn(
-      const ResultadoRaycast.bloqueado(Posicion.en(fila: 0, columna: 2)),
-    );
-
-    // Act
-    final resultado = useCase.ejecutar(posicion);
-
-    // Assert — blocked ray does not consume the path in this slice.
-    expect(resultado.valido, isFalse);
-    expect(resultado.movimientos, 0);
+    expect(resultado.registrado, isFalse);
     verifyNever(() => tablero.eliminarTrayectoria(any()));
   });
 }

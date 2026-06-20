@@ -7,11 +7,15 @@ import '../../domain/value_objects/posicion.dart';
 /// occurred — never a command telling a layer what to do (see `EventoJuego` in
 /// `CONTEXT.md`).
 enum TipoEvento {
-  /// A tap resolved into a move (valid or, later, penalised-invalid).
+  /// A tap resolved into a valid move (an arrow exited the board).
   movimientoRealizado,
 
   /// An arrow successfully left the board and its cell became empty.
   flechaEliminada,
+
+  /// A tap on an arrow whose path is blocked: the move is **penalized** (it
+  /// counts against `movimientos`) but the board is left unchanged.
+  movimientoInvalido,
 }
 
 /// An immutable value object describing one [TipoEvento] at a [posicion].

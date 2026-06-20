@@ -37,15 +37,22 @@ class JuegoViewModel extends ChangeNotifier {
 
   /// Handles a tap on the cell at [posicion].
   ///
-  /// Runs the move use case, rebuilds the board snapshot, and publishes a new
-  /// [JuegoViewState] via [copyWith] only when something actually changed.
+  /// Runs the move use case and publishes a new [JuegoViewState] via [copyWith]
+  /// for any tap that counts as a move. A **valid** move rebuilds the board
+  /// snapshot; a **penalized invalid** move keeps the existing snapshot untouched
+  /// and only raises [JuegoViewState.movimientoInvalido] so the View can play its
+  /// shake/flash. A tap that resolves to no arrow is ignored (no notification).
   void tocar(Posicion posicion) {
     final resultado = _moverFlecha.ejecutar(posicion);
-    if (!resultado.valido) return;
+    if (!resultado.registrado) return;
 
+    final invalido = !resultado.valido;
     _estado = _estado.copyWith(
-      tablero: _instantanea(),
+      // Rebuild the snapshot only when the board actually changed; an invalid
+      // move must leave the very same TableroUI instance in place.
+      tablero: invalido ? null : _instantanea(),
       movimientos: resultado.movimientos,
+      movimientoInvalido: invalido,
     );
     notifyListeners();
   }

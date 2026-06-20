@@ -1,27 +1,47 @@
+import 'delta_tablero.dart';
 import 'evento_juego.dart';
 
 /// The immutable outcome of one tap, returned by `MoverFlechaUseCase.ejecutar`.
 ///
-/// It carries whether the tap was a [valido] move, the running [movimientos]
-/// count after it, and the [eventos] it produced. One tap yields exactly one
-/// `ResultadoMovimiento` (see `Movimiento` in `CONTEXT.md`).
+/// There is a single result shape for every outcome so callers branch on *data*
+/// (the [delta]) rather than on a type or a boolean flag:
+///
+/// - **ignored** tap (no arrow under it): [registrado] is `false`, no [delta].
+/// - **valid** move (arrow exits): [registrado] is `true` with a real [delta].
+/// - **invalid** penalized move (path blocked): [registrado] is `true` but
+///   [delta] is `null` — the move counts, yet the board is unchanged.
+///
+/// One tap yields exactly one `ResultadoMovimiento` (see `Movimiento` in
+/// `CONTEXT.md`).
 class ResultadoMovimiento {
   /// Creates a move result.
   const ResultadoMovimiento({
-    required this.valido,
     required this.movimientos,
     required this.eventos,
+    this.delta,
+    this.registrado = false,
   });
 
-  /// Whether the tap resolved into a board change (an arrow exiting).
-  ///
-  /// In this slice only the valid-exit branch is implemented; invalid-move
-  /// penalties arrive with ticket 02.
-  final bool valido;
+  /// A tap that resolved to no arrow at all — ignored, nothing recorded.
+  const ResultadoMovimiento.ignorado(this.movimientos)
+      : eventos = const <EventoJuego>[],
+        delta = null,
+        registrado = false;
 
-  /// Total taps registered on the level so far.
+  /// Total taps registered as moves on the level so far (valid + penalized).
   final int movimientos;
 
   /// The events this move produced, in order.
   final List<EventoJuego> eventos;
+
+  /// The board change this move applied, or `null` when nothing changed (an
+  /// invalid penalized move, or an ignored tap).
+  final DeltaTablero? delta;
+
+  /// Whether the tap counted as a move — `true` for both valid and penalized
+  /// invalid moves, `false` for an ignored tap.
+  final bool registrado;
+
+  /// Whether the tap changed the board (a real [delta] was applied).
+  bool get valido => delta != null;
 }

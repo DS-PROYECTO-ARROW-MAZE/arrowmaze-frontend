@@ -1,3 +1,5 @@
+import 'dart:math' as math;
+
 import 'package:flutter/material.dart';
 
 import '../../../core/theme/app_dimens.dart';
@@ -27,9 +29,30 @@ class GameView extends StatefulWidget {
   State<GameView> createState() => _GameViewState();
 }
 
-class _GameViewState extends State<GameView> {
+class _GameViewState extends State<GameView>
+    with SingleTickerProviderStateMixin {
+  /// Drives the invalid-tap shake/flash; one short pulse per penalized move.
+  late final AnimationController _feedback;
+
+  @override
+  void initState() {
+    super.initState();
+    _feedback = AnimationController(vsync: this, duration: AppDurations.fast);
+    widget.viewModel.addListener(_alCambiarEstado);
+  }
+
+  /// Fires the feedback pulse whenever the published state reports a penalized
+  /// invalid tap. The board itself is never mutated here — only the affordance.
+  void _alCambiarEstado() {
+    if (widget.viewModel.estado.movimientoInvalido) {
+      _feedback.forward(from: 0);
+    }
+  }
+
   @override
   void dispose() {
+    widget.viewModel.removeListener(_alCambiarEstado);
+    _feedback.dispose();
     widget.viewModel.dispose();
     super.dispose();
   }
@@ -52,10 +75,14 @@ class _GameViewState extends State<GameView> {
                     padding: const EdgeInsets.all(AppSpacing.lg),
                     child: AspectRatio(
                       aspectRatio: estado.tablero.columnas / estado.tablero.filas,
-                      child: _Tablero(
-                        estado: estado,
+                      child: _FeedbackInvalido(
+                        animacion: _feedback,
                         game: game,
-                        onTap: widget.viewModel.tocar,
+                        child: _Tablero(
+                          estado: estado,
+                          game: game,
+                          onTap: widget.viewModel.tocar,
+                        ),
                       ),
                     ),
                   ),
@@ -65,6 +92,57 @@ class _GameViewState extends State<GameView> {
           );
         },
       ),
+    );
+  }
+}
+
+/// Wraps the board with the invalid-tap affordance: a brief horizontal shake and
+/// a fading red flash, both keyed to [GameTheme.invalidMoveFlash]. Purely
+/// presentational — it never mutates the board, so cells stay byte-identical
+/// while the feedback plays.
+class _FeedbackInvalido extends StatelessWidget {
+  const _FeedbackInvalido({
+    required this.animacion,
+    required this.game,
+    required this.child,
+  });
+
+  final Animation<double> animacion;
+  final GameTheme game;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animacion,
+      builder: (context, hijo) {
+        final t = animacion.value;
+        // A damped sine: a couple of quick swings that settle back to centre.
+        final desplazamiento = math.sin(t * math.pi * 4) * 10 * (1 - t);
+        return Transform.translate(
+          offset: Offset(desplazamiento, 0),
+          child: Stack(
+            fit: StackFit.passthrough,
+            children: [
+              hijo!,
+              if (t > 0)
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: DecoratedBox(
+                      decoration: BoxDecoration(
+                        color: game.invalidMoveFlash
+                            .withValues(alpha: 0.25 * (1 - t)),
+                        borderRadius:
+                            BorderRadius.circular(AppRadii.cell),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+      child: child,
     );
   }
 }
