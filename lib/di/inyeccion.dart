@@ -4,8 +4,10 @@ import '../application/generadores/generacion_por_archivo_nivel.dart';
 import '../application/generadores/generador_nivel_base.dart';
 import '../application/ports/cargador_nivel.dart';
 import '../application/ports/fuente_autenticacion.dart';
+import '../application/ports/i_consulta_ranking.dart';
 import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
+import '../application/use_cases/consultar_ranking_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
@@ -22,10 +24,12 @@ import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
+import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../infrastructure/sesion/proveedor_sesion_impl.dart';
 import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
+import '../presentation/viewmodels/ranking_view_model.dart';
 import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
 import '../presentation/viewmodels/sync_view_model.dart';
 
@@ -208,5 +212,20 @@ abstract final class Inyeccion {
     return SyncViewModel(
       sincronizarProgreso: sincronizarProgresoUseCase,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Leaderboard read-only (ticket 11, DM-B5, E3)
+  // ---------------------------------------------------------------------------
+
+  static IConsultaRanking get consultaRanking => _consultaRanking;
+  static final RankingDataSourceHttp _consultaRanking =
+      RankingDataSourceHttp(proveedorSesion: proveedorSesion);
+
+  static ConsultarRankingUseCase get consultarRankingUseCase =>
+      ConsultarRankingUseCase(consulta: consultaRanking);
+
+  static RankingViewModel construirRankingViewModel() {
+    return RankingViewModel(consulta: consultaRanking);
   }
 }

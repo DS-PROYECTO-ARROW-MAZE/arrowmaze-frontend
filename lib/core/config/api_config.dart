@@ -14,4 +14,7 @@ abstract final class ApiConfig {
 
   /// Progress batch-sync endpoint (DM-B3, E2).
   static const String syncPath = '/progress/sync';
+
+  /// Ranking read endpoint (DM-B5, E3).
+  static const String rankingPath = '/ranking';
 }

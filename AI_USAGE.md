@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-009 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-010 appended)
 
 ## 1. Tools Used
 
@@ -465,16 +465,87 @@ eloj:
   in the backend repo. (4) The `SyncViewModel` is not yet wired into the gameplay
   loop (victory overlay and HUD badge) — documented as the immediate next step.
 
+### T-010 — Ticket 11 · Leaderboard (read-only projection — client)
+
+- **Task / problem addressed:** Implement the read-only client projection for the
+  leaderboard (`.issues/11-leaderboard-read.md`, Stories E3). Top-N scores per
+  `(idNivel, limite)` are fetched from the backend. The client is strictly
+  **read-only** — no `publicar` write path exists. Acceptance criteria: (AC1)
+  `obtenerTop` returns top-N per level; (AC2) the ranking port has zero write
+  methods — no `publicar`; (AC3) the ranking DTO has a Pact consumer contract.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** "Implementa el ticket `.issues\11-leaderboard-read.md`.
+  Es OBLIGATORIO que apliques estrictamente las reglas de las skills 'tdd-strict'
+  y 'clean-architecture'. El diseño visual lo defines tú usando 'lib/core/theme'."
+  After completion the user instructed: "Usa la skill 'ai-usage-doc' para documentar
+  en el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/ranking/fila_ranking.dart` (pure entity — posicion, nombreJugador,
+  puntaje, estrellas);
+  `lib/domain/ranking/ranking_dto.dart` (read-only projection — List<FilaRanking>);
+  `lib/application/ports/i_consulta_ranking.dart` (abstract interface port —
+  `obtenerTop(int idNivel, int limite)`, no `publicar`);
+  `lib/application/use_cases/consultar_ranking_use_case.dart` (delegates to
+  `IConsultaRanking.obtenerTop`);
+  `lib/infrastructure/dtos/fila_ranking_dto.dart` + `ranking_response_dto.dart`
+  (toJson/fromJson shapes matching Pact contract — idNivel, limite, filas);
+  `lib/infrastructure/ranking/ranking_data_source_http.dart` (dart:io HttpClient
+  GET with Bearer token, parses RankingResponseDto → RankingDto);
+  `lib/presentation/viewmodels/ranking_view_state.dart` (RankingStatus enum +
+  RankingViewState immutable state + copyWith);
+  `lib/presentation/viewmodels/ranking_view_model.dart` (ChangeNotifier —
+  `cargarRanking(idNivel, limite)` with loading/loaded/error states);
+  `lib/presentation/views/ranking/ranking_view.dart` (thin widget — AppBar +
+  ranked list with position badges (gold/silver/bronze), player name, star row,
+  neon score, error/empty states; all colours from AppColors/GameTheme tokens);
+  `lib/core/config/api_config.dart` (rankingPath = '/ranking');
+  `lib/di/inyeccion.dart` (consultaRanking singleton, consultarRankingUseCase,
+  construirRankingViewModel).
+  New tests (4 files, 8 tests):
+  `test/application/consulta_ranking_test.dart` (2 tests: top-N for level returns
+  ordered rows, empty ranking when no scores);
+  `test/presentation/ranking_viewmodel_test.dart` (2 tests: exposes rows in
+  ViewState on load, sets error status on port failure);
+  `test/architecture/ranking_is_read_only_test.dart` (2 tests: source-level check
+  that `publicar` is absent, interface has exactly `obtenerTop`);
+  `test/infrastructure/ranking_pact_consumer_test.dart` (2 tests: DTO shape
+  matches contract, empty ranking produces empty filas array).
+  Verified: `flutter test` 157/157 green (149 prior + 8 new); `flutter analyze`
+  0 errors, 0 warnings from new code (9 pre-existing info-level lints only);
+  zero `package:flutter` imports under `domain/`+`application/`; no `publicar`
+  method anywhere in ranking source.
+- **Modifications made by the team:** (a) After the first test run, several test
+  files failed due to missing imports (`ConsultarRankingUseCase`, `FilaRankingDto`)
+  and a deleted `ranking_view_state.dart` — all fixed by correcting the import
+  paths and re-creating the missing file. (b) The architecture test's regex for
+  `publicar` matched the word inside a doc comment (`there is no \`publicar\``),
+  causing a false positive — fixed by filtering comment lines before the method
+  scan, then reworded the doc comment to avoid the literal. (c) The method-count
+  regex `Future<\w+>\s+\w+\s*\(` correctly matched `Future<RankingDto> obtenerTop(`
+  once the false-positive was cleared.
+- **Lessons learned / limitations identified:** (1) A source-level architecture
+  test (`should_have_no_publicar_method`) is effective but brittle: doc comments
+  that quote the forbidden word (`publicar`) cause false positives unless the regex
+  excludes comment lines. (2) The Pact consumer test for the ranking response DTO
+  (infra layer) follows the same shape-verification pattern as the existing sync
+  DTO test — consistent CI signal for contract drift. (3) The ranking port
+  (`IConsultaRanking`) is intentionally thinner than the sync write port
+  (`IRepositorioProgreso`): one `obtenerTop` method vs. one `guardarLote` method,
+  both abstract interfaces with zero write semantics. (4) Caching (60s TTL via
+  `InterceptorCacheRanking`) is the backend's concern — the client simply calls
+  `obtenerTop` on every request, keeping the client-side read-port stateless and
+  trivial.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 07, 08, and 10 were AI-generated then human-reviewed; the theme
+  03, 04, 05, 07, 08, 10, and 11 were AI-generated then human-reviewed; the theme
   tokens under `lib/core/theme` were pre-existing (not AI-authored in these tasks).
   Every ticket followed the same pattern (full AI authoring + human review), so the
-  share holds at ~90%. Rough judgment over the files added across the slices (149
+  share holds at ~90%. Rough judgment over the files added across the slices (157
   passing tests, all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
   `lib/presentation/`, `lib/di/`).
 
@@ -542,21 +613,35 @@ eloj:
   - **How it was detected:** Manual Clean Architecture review.
   - **How it was corrected:** Replaced the infrastructure import with the domain
     import (`RunCompletado`).
+- **Case:** Missing imports in test files (`ConsultarRankingUseCase`,
+  `FilaRankingDto`) and a deleted `ranking_view_state.dart` caused 3 of 4 test
+  files to fail loading (ticket 11).
+  - **How it was detected:** `flutter test` — 3 compilation errors on first run.
+  - **How it was corrected:** Added missing imports to test files and re-created
+    the view state file.
+- **Case:** Architecture test's `publicar` regex matched the word inside a doc
+  comment (`there is no \`publicar\``), causing a false-positive failure
+  (ticket 11).
+  - **How it was detected:** `flutter test` — 2 architecture tests failed.
+  - **How it was corrected:** Filtered comment lines before the regex scan, then
+    reworded the doc comment to remove the literal `publicar` backtick reference.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all eight tickets. The predefined
+- **Impact on productivity:** Very high across all nine tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
   vocabulary, port interfaces, and conventions were already established. T-009
   (offline sync) was implemented in a single focused session — the fastest vertical
-  slice yet (~2.5 hours of iterative Red-Green-Refactor cycles).
+  slice yet (~2.5 hours of iterative Red-Green-Refactor cycles). T-010 (leaderboard
+  read-only) was similarly fast — the read port pattern was already established from
+  T-009 and the Pact consumer test followed the same shape-verification template.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (149/149 tests, 0 errors, 0 warnings from
-  new code). The few AI mistakes were caught by `flutter analyze`, `flutter test`,
-  and manual review — no defect reached production code. Architecture violations
-  (ViewModel importing infra DTO) were caught and fixed during the same session.
+  kept output consistent and well-tested (157/157 tests, 0 errors, 0 warnings from
+  new code). The few AI mistakes were caught by `flutter test` and manual review —
+  no defect reached production code. Architecture violations (ViewModel importing
+  infra DTO) were caught and fixed during the same session.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
   established domain abstractions (like the `IColaSincronizacion` port interface)
