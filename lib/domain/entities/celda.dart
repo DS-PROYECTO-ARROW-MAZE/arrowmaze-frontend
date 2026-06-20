@@ -3,15 +3,17 @@ import '../value_objects/posicion.dart';
 
 /// A single board position and its content.
 ///
-/// Exactly the three move-mechanic kinds exist in this slice ([CeldaFlecha],
-/// [CeldaPared], [CeldaVacia]); `Coleccionable` arrives with ticket 03. `Celda`
-/// is a `sealed` type, so the compiler enforces exhaustive handling and the
-/// hierarchy stays closed — the four kinds are Factory products
-/// (`FabricaCeldasEstandar`), never decorators (see `CONTEXT.md`).
+/// Exactly the four move-mechanic kinds exist ([CeldaFlecha], [CeldaPared],
+/// [CeldaVacia], [Coleccionable]). `Celda` is a `sealed` type, so the compiler
+/// enforces exhaustive handling and the hierarchy stays closed — the four kinds
+/// are Factory products (`FabricaCeldasEstandar`), never decorators (see
+/// `CONTEXT.md`).
 ///
-/// The only behaviour every cell shares is whether it stops a ray
-/// ([bloqueaRayo]); LSP holds because any `Celda` answers that question without
-/// the caller knowing its concrete kind.
+/// Two questions every cell answers polymorphically, so a caller never branches
+/// on the concrete kind (LSP/OCP): whether it stops a ray ([bloqueaRayo]) and
+/// whether a ray that flies over it collects it ([esColeccionable]). Adding a new
+/// cell kind means overriding these — never editing the `raycast` walk or a use
+/// case.
 sealed class Celda {
   /// Binds a cell to its board [posicion].
   const Celda(this.posicion);
@@ -22,8 +24,14 @@ sealed class Celda {
   /// Whether a ray crossing this cell is stopped by it.
   ///
   /// `true` for solid content (an arrow or a wall), `false` for transparent
-  /// cells the ray flies over (empties — and, later, collectibles).
+  /// cells the ray flies over (empties and collectibles).
   bool get bloqueaRayo;
+
+  /// Whether a ray flying over this cell collects it (granting bonus time).
+  ///
+  /// `false` for every kind except [Coleccionable]; this is what lets the
+  /// collision walk gather collectibles without knowing their concrete type.
+  bool get esColeccionable => false;
 }
 
 /// One **segment** of an arrow path (`Trayectoria`) occupying this cell.
@@ -70,4 +78,23 @@ final class CeldaVacia extends Celda {
 
   @override
   bool get bloqueaRayo => false;
+}
+
+/// An optional bonus element, transparent to rays.
+///
+/// Like a [CeldaVacia] a ray flies straight over it ([bloqueaRayo] is `false`),
+/// so it never blocks a move and is never required for victory. The difference
+/// is that a *valid* move whose ray crosses it collects it
+/// ([esColeccionable] is `true`): the board removes it and the
+/// `MoverFlechaUseCase` adds seconds to the level timer (PRD §3 A4). It is a
+/// plain Factory product — never a decorator (see `CONTEXT.md`).
+final class Coleccionable extends Celda {
+  /// Creates a collectible at [posicion].
+  const Coleccionable(super.posicion);
+
+  @override
+  bool get bloqueaRayo => false;
+
+  @override
+  bool get esColeccionable => true;
 }

@@ -50,12 +50,17 @@ final class EstadoJugando extends EstadoSesion {
       return const ResultadoToque.invalido();
     }
 
-    // A clear ray exits the whole path; emptying the board is victory (B1).
+    // A clear ray exits the whole path and collects any bonus cells it crossed
+    // (pass-through). Collectibles never block, never count toward emptiness, so
+    // emptying the board — and thus victory (B1) — stays independent of them.
     tablero.eliminarTrayectoria(trayectoria.id);
+    for (final coleccionable in rayo.coleccionables) {
+      tablero.recogerColeccionable(coleccionable);
+    }
     if (tablero.estaVacio) {
       sesion.cambiarEstado(EstadoVictoria());
     }
-    return ResultadoToque.valido(trayectoria);
+    return ResultadoToque.valido(trayectoria, coleccionables: rayo.coleccionables);
   }
 
   @override

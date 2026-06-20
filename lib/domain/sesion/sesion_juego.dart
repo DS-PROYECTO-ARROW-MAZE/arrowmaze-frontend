@@ -80,6 +80,17 @@ class SesionJuego {
     }
   }
 
+  /// Adds [bonus] seconds back to the level clock (collectible pass-through,
+  /// PRD §3 A4).
+  ///
+  /// A no-op on an untimed level (no clock to extend) or once the session is
+  /// finished. Unlike [avanzarTiempo] this *grows* the remaining time and can
+  /// never trigger a state transition.
+  void otorgarBonus(Duration bonus) {
+    if (!esCronometrado || _estado.estaTerminada) return;
+    _tiempoRestante = _tiempoRestante! + bonus;
+  }
+
   /// Swaps the active state — the single State-transition seam used by the state
   /// classes and the clock.
   void cambiarEstado(EstadoSesion estado) => _estado = estado;

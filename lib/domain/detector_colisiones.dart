@@ -1,6 +1,7 @@
 import 'nodo.dart';
 import 'tablero.dart';
 import 'value_objects/direccion.dart';
+import 'value_objects/posicion.dart';
 
 /// Walks the node graph along one direction and reports the first obstacle.
 ///
@@ -18,15 +19,21 @@ class DetectorColisiones {
   /// The origin node is excluded; the walk starts at its neighbour and follows
   /// links until it hits a blocking cell ([ResultadoRaycast.bloqueado]) or runs
   /// off the edge ([ResultadoRaycast.despejado]). Removed nodes are already
-  /// unlinked, so the walk transparently steps over emptied cells.
+  /// unlinked, so the walk transparently steps over emptied cells. Every
+  /// transparent collectible met on the way is gathered (asked of the cell via
+  /// `esColeccionable`, never by type) and reported only when the ray is clear.
   ResultadoRaycast detectar(Nodo origen, Direccion direccion) {
+    final coleccionables = <Posicion>[];
     Nodo? actual = origen.vecinos[direccion];
     while (actual != null) {
       if (actual.celda.bloqueaRayo) {
         return ResultadoRaycast.bloqueado(actual.celda.posicion);
       }
+      if (actual.celda.esColeccionable) {
+        coleccionables.add(actual.celda.posicion);
+      }
       actual = actual.vecinos[direccion];
     }
-    return const ResultadoRaycast.despejado();
+    return ResultadoRaycast.despejado(coleccionables: coleccionables);
   }
 }

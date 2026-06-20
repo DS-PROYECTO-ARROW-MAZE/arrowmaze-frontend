@@ -12,6 +12,9 @@ enum TipoCeldaUI {
 
   /// Transparent empty space (drawn as a subtle dot).
   vacia,
+
+  /// A bonus collectible (transparent to rays, grants timer seconds).
+  coleccionable,
 }
 
 /// An immutable UI snapshot of one cell.
@@ -103,6 +106,7 @@ class JuegoViewState {
   const JuegoViewState({
     required this.tablero,
     required this.movimientos,
+    this.coleccionables = 0,
     this.movimientoInvalido = false,
     this.pausado = false,
     this.derrota = false,
@@ -115,6 +119,10 @@ class JuegoViewState {
 
   /// The move counter shown in the HUD.
   final int movimientos;
+
+  /// How many collectibles the player has picked up so far, shown in the HUD as
+  /// the bonus-time tally.
+  final int coleccionables;
 
   /// Whether the last tap was a **penalized invalid** move: the board is left
   /// unchanged but the View should play the shake/flash feedback. The flag rides
@@ -140,6 +148,7 @@ class JuegoViewState {
   JuegoViewState copyWith({
     TableroUI? tablero,
     int? movimientos,
+    int? coleccionables,
     bool? movimientoInvalido,
     bool? pausado,
     bool? derrota,
@@ -149,6 +158,7 @@ class JuegoViewState {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
       movimientos: movimientos ?? this.movimientos,
+      coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,

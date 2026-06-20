@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 
+import '../../application/use_cases/evento_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
 import '../../domain/sesion/estado_sesion.dart';
@@ -48,6 +49,8 @@ class JuegoViewModel extends ChangeNotifier {
 
   Timer? _reloj;
 
+  int _coleccionables = 0;
+
   late JuegoViewState _estado;
 
   /// The current immutable state the View renders.
@@ -66,12 +69,16 @@ class JuegoViewModel extends ChangeNotifier {
     if (!resultado.registrado) return;
 
     final invalido = !resultado.valido;
+    _coleccionables += resultado.eventos
+        .where((e) => e.tipo == TipoEvento.coleccionableRecogido)
+        .length;
     if (_sesion.estaTerminada) _reloj?.cancel();
     _estado = _estado.copyWith(
       // Rebuild the snapshot only when the board actually changed; an invalid
       // move must leave the very same TableroUI instance in place.
       tablero: invalido ? null : _instantanea(),
       movimientos: resultado.movimientos,
+      coleccionables: _coleccionables,
       movimientoInvalido: invalido,
       victoria: _sesion.estado is EstadoVictoria
           ? VictoriaViewState(movimientos: resultado.movimientos)
@@ -147,6 +154,8 @@ class JuegoViewModel extends ChangeNotifier {
       CeldaFlecha(:final idFlecha) => _segmentoUI(posicion, idFlecha),
       CeldaPared() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.pared),
       CeldaVacia() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.vacia),
+      Coleccionable() =>
+        CeldaUI(posicion: posicion, tipo: TipoCeldaUI.coleccionable),
     };
   }
 

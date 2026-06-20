@@ -120,6 +120,15 @@ class GrafoTablero implements Tablero {
     }
   }
 
+  @override
+  void recogerColeccionable(Posicion posicion) {
+    final nodo = _nodos[posicion];
+    // Only a collectible is consumed; the cell is already transparent (it never
+    // unlinks neighbours), so swapping it for empty space is enough.
+    if (nodo == null || !nodo.celda.esColeccionable) return;
+    nodo.celda = CeldaVacia(posicion);
+  }
+
   /// Turns the node at [posicion] into transparent empty space and re-wires its
   /// neighbours to each other so a ray walk steps straight over the gap.
   void agregarTrayectoria(Trayectoria trayectoria) {
