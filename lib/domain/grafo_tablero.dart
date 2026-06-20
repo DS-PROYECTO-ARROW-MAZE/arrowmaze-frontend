@@ -91,6 +91,9 @@ class GrafoTablero implements Tablero {
   @override
   int get columnas => _columnas;
 
+  @override
+  bool get estaVacio => _trayectorias.isEmpty;
+
   /// The node at [posicion]. Exposed so the graph's incremental re-wiring is
   /// observable by domain tests; not part of the [Tablero] port.
   Nodo nodoEn(Posicion posicion) => _nodos[posicion]!;
