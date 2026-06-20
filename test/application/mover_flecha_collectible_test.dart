@@ -1,4 +1,4 @@
-import 'package:arrowmaze/application/use_cases/evento_juego.dart';
+import 'package:arrowmaze/domain/evento_juego.dart';
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
