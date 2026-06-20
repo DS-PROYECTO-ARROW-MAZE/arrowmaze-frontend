@@ -1,7 +1,7 @@
 # AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002 appended)
 
 ## 1. Tools Used
 
@@ -48,15 +48,51 @@
   reconciled against `CONTEXT.md` (used `CeldaFlecha`, not the ticket's shorthand
   `Flecha`).
 
+### T-002 — Ticket 02 · Invalid Move (penalized) + CommandHistory
+
+- **Task / problem addressed:** Implement Story A2 from
+  `.issues/02-invalid-move-history.md`: tapping an arrow whose head ray is blocked
+  (by a `CeldaPared` **or** another `Flecha`) is a *penalized invalid move* —
+  `movimientos` still increments (anti-cheat), the board stays byte-identical, the
+  arrow is not consumed, and the move is recorded in history. Unify valid/invalid
+  outcomes into one `ResultadoMovimiento` and introduce the GoF **Command** pattern
+  (`PlayerMoveCommand` + `CommandHistory`) to set up undo (ticket 09).
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (paraphrased) "implement ticket
+  `.issues/02-invalid-move-history.md` applying the `tdd-strict` and
+  `clean-architecture` skills (red → green → refactor)."
+- **Result obtained:** Strict TDD producing: `application/use_cases/`
+  (`CommandHistory` + `PlayerMoveCommand`, `DeltaTablero`, reworked
+  `ResultadoMovimiento` with an optional `DeltaTablero`, invalid branch in
+  `MoverFlechaUseCase`, extended `EventoJuego`/`TipoEvento`); `presentation/`
+  (`JuegoViewState.movimientoInvalido` flag, `JuegoViewModel` wiring, a
+  theme-driven shake/flash in `GameView` that does **not** mutate the board); and
+  new tests `command_history_test.dart`, `mover_flecha_invalida_test.dart`,
+  `juego_viewmodel_invalido_test.dart` (plus trimming of
+  `mover_flecha_guardas_test.dart`). Verified: `flutter test` 38/38 green; the
+  invalid branch leaves a byte-identical board snapshot; both valid and invalid
+  moves push a command to `CommandHistory`; zero `package:flutter` imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and
+  code; no manual code edits were required. `flutter test`/`flutter analyze` served
+  as the guardrails.
+- **Lessons learned / limitations identified:** The refactor step (unifying
+  valid/invalid into a single `ResultadoMovimiento` with an optional delta so
+  callers branch on data, not type) confirmed that designing the result shape for
+  the *next* ticket (undo) up front keeps the Command/History wiring clean. The
+  detailed AC-to-test mapping in the issue gave the AI unambiguous red-phase targets,
+  so no rework was needed.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
-- **Basis for the estimate:** All `lib/` and `test/` files in ticket 01 were
-  AI-generated then human-reviewed; the theme tokens under `lib/core/theme` were
-  pre-existing (not AI-authored in this task). Rough judgment over the files
-  added in this slice.
+- **Basis for the estimate:** All `lib/` and `test/` files in tickets 01 and 02
+  were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+  were pre-existing (not AI-authored in these tasks). Ticket 02 followed the same
+  pattern (full AI authoring + human review), so the share holds at ~90%. Rough
+  judgment over the files added across both slices.
 
 ### Incorrect or suboptimal AI results
 
