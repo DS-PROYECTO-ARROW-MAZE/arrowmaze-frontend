@@ -1,6 +1,6 @@
 import '../value_objects/posicion.dart';
+import 'contexto_sesion.dart';
 import 'resultado_toque.dart';
-import 'sesion_juego.dart';
 
 /// The GoF **State** of a play session — the single place where the legality of
 /// a tap, a pause and the running of the clock is decided **by type** rather than
@@ -15,13 +15,13 @@ sealed class EstadoSesion {
   /// Routes a tap at [posicion] through this state, returning its domain
   /// [ResultadoToque]. Only [EstadoJugando] resolves a real move; the other
   /// states reject the tap as [TipoToque.ignorado].
-  ResultadoToque tocarCelda(SesionJuego sesion, Posicion posicion);
+  ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion);
 
   /// Suspends play. Only meaningful from [EstadoJugando]; a no-op elsewhere.
-  void pausar(SesionJuego sesion);
+  void pausar(ContextoSesion sesion);
 
   /// Resumes play. Only meaningful from [EstadoPausado]; a no-op elsewhere.
-  void reanudar(SesionJuego sesion);
+  void reanudar(ContextoSesion sesion);
 
   /// Whether the session has reached a terminal outcome (victory or defeat).
   bool get estaTerminada;
@@ -34,7 +34,7 @@ sealed class EstadoSesion {
 /// Active play: taps resolve real moves and the clock runs.
 final class EstadoJugando extends EstadoSesion {
   @override
-  ResultadoToque tocarCelda(SesionJuego sesion, Posicion posicion) {
+  ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion) {
     final tablero = sesion.tablero;
     final trayectoria = tablero.trayectoriaEn(posicion);
 
@@ -64,10 +64,10 @@ final class EstadoJugando extends EstadoSesion {
   }
 
   @override
-  void pausar(SesionJuego sesion) => sesion.cambiarEstado(EstadoPausado());
+  void pausar(ContextoSesion sesion) => sesion.cambiarEstado(EstadoPausado());
 
   @override
-  void reanudar(SesionJuego sesion) {/* already playing */}
+  void reanudar(ContextoSesion sesion) {/* already playing */}
 
   @override
   bool get estaTerminada => false;
@@ -79,14 +79,14 @@ final class EstadoJugando extends EstadoSesion {
 /// Paused play: taps are rejected and the clock is frozen (B3).
 final class EstadoPausado extends EstadoSesion {
   @override
-  ResultadoToque tocarCelda(SesionJuego sesion, Posicion posicion) =>
+  ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion) =>
       const ResultadoToque.ignorado();
 
   @override
-  void pausar(SesionJuego sesion) {/* already paused */}
+  void pausar(ContextoSesion sesion) {/* already paused */}
 
   @override
-  void reanudar(SesionJuego sesion) => sesion.cambiarEstado(EstadoJugando());
+  void reanudar(ContextoSesion sesion) => sesion.cambiarEstado(EstadoJugando());
 
   @override
   bool get estaTerminada => false;
@@ -98,14 +98,14 @@ final class EstadoPausado extends EstadoSesion {
 /// Terminal victory: the board was emptied (B1). Nothing more can happen.
 final class EstadoVictoria extends EstadoSesion {
   @override
-  ResultadoToque tocarCelda(SesionJuego sesion, Posicion posicion) =>
+  ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion) =>
       const ResultadoToque.ignorado();
 
   @override
-  void pausar(SesionJuego sesion) {/* terminal */}
+  void pausar(ContextoSesion sesion) {/* terminal */}
 
   @override
-  void reanudar(SesionJuego sesion) {/* terminal */}
+  void reanudar(ContextoSesion sesion) {/* terminal */}
 
   @override
   bool get estaTerminada => true;
@@ -118,14 +118,14 @@ final class EstadoVictoria extends EstadoSesion {
 /// can ever reach this state.
 final class EstadoDerrota extends EstadoSesion {
   @override
-  ResultadoToque tocarCelda(SesionJuego sesion, Posicion posicion) =>
+  ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion) =>
       const ResultadoToque.ignorado();
 
   @override
-  void pausar(SesionJuego sesion) {/* terminal */}
+  void pausar(ContextoSesion sesion) {/* terminal */}
 
   @override
-  void reanudar(SesionJuego sesion) {/* terminal */}
+  void reanudar(ContextoSesion sesion) {/* terminal */}
 
   @override
   bool get estaTerminada => true;

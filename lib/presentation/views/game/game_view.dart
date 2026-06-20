@@ -194,7 +194,7 @@ class _VictoriaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Overlay(
       children: [
-        Icon(Icons.emoji_events, color: game.starActive, size: 64),
+        _Estrellas(estrellas: victoria.estrellas, game: game),
         const SizedBox(height: AppSpacing.md),
         Text(
           'Victory!',
@@ -202,10 +202,44 @@ class _VictoriaOverlay extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.sm),
         Text(
+          '${victoria.puntaje}',
+          style: AppTypography.displayLarge.copyWith(
+            color: game.scoreColor,
+          ),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
           'Cleared in ${victoria.movimientos} moves',
           style: AppTypography.bodyMedium,
         ),
       ],
+    );
+  }
+}
+
+/// One to three filled stars (and the rest as hollow slots) that reflect the
+/// player's star rating. Uses [GameTheme.starActive]/[starInactive] tokens.
+class _Estrellas extends StatelessWidget {
+  const _Estrellas({required this.estrellas, required this.game});
+
+  final int estrellas;
+  final GameTheme game;
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(3, (i) {
+        final activa = i < estrellas;
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: AppSpacing.xs),
+          child: Icon(
+            Icons.star_rounded,
+            size: 48,
+            color: activa ? game.starActive : game.starInactive,
+          ),
+        );
+      }),
     );
   }
 }

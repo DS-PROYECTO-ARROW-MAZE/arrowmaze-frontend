@@ -1,14 +1,14 @@
-# AI Usage Documentation
+﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002, T-003, T-004, T-005 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-006 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (ticket 01), refactoring, coverage |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (ticket 05), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (ticket 05), architectural analysis, documentation, Clean Architecture refactoring (ticket 06) |
 
 ## 2. Usage Log by Task
 
@@ -220,6 +220,52 @@
   that also crosses a collectible emits the event but skips the bonus because the
   session is already terminal (the clock has stopped anyway).
 
+
+### T-007 — Ticket 06 · Clean Architecture fixes (circular dependency + leaked Timer)
+
+- **Task / problem addressed:** Fix two violations identified during code review:
+  (1) circular dependency between domain/sesion/sesion_juego.dart ↔
+  domain/sesion/estado_sesion.dart (GoF State pattern gave the concrete
+  context a concrete dependency on the state hierarchy, violating DIP);
+  (2) JuegoViewModel in presentation/ imported dart:async Timer.periodic
+  directly (infrastructure leaked into presentation, violating Clean Architecture rules).
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with the user asking
+  "What did we do so far?" — the AI produced an anchored summary that surfaced
+  the two issues from the conversation history. The user confirmed with "Do it"
+  and "Continua" multiple times. The final cycle was "Pon el summary como un
+  anchored read. Despues, actualiza los tests." The user also provided the
+  AGENTS.md file as a reference for architecture rules.
+- **Result obtained:** (1) domain/sesion/contexto_sesion.dart — new ContextoSesion
+  interface; EstadoSesion now receives ContextoSesion instead of SesionJuego;
+  SesionJuego implements ContextoSesion; the circular dependency is replaced by
+  an acceptable abstract–abstract cycle per GoF State. (2) pplication/ports/reloj.dart
+  — new Reloj interface with iniciar(intervalo, tic) and detener();
+  infrastructure/reloj/reloj_timer.dart — concrete RelojTimer using dart:async;
+  JuegoViewModel now injects Reloj instead of using Timer directly;
+  Inyeccion.construirJuegoViewModel() passes RelojTimer(). All 4 presentation
+  test files inject _RelojNulo() (no-op). Verified: lutter test 78/78 green;
+  lutter analyze no errors; zero package:flutter or dart:async imports under
+  domain/+pplication/.
+- **Modifications made by the team:** The team reviewed all changes. During the
+  iterative back-and-forth, several test failures occurred due to missing 
+eloj:
+  parameter in existing ViewModel constructions. The AI fixed each one as the
+  user reported the failure. One presentation test file
+  (juego_viewmodel_invalido_test.dart) had the _RelojNulo import added by
+  the AI but was later refactored to define the class inline like the other test
+  files — the user instructed "Pon el summary como un anchored read. Despues,
+  actualiza los tests." which led to this final cleanup.
+- **Lessons learned / limitations identified:** (1) Changing a constructor parameter
+  that affects many callers (DI + 4+ test files) is best done by first adding the
+  parameter as optional with a default before making it required, to keep the test
+  suite green during the refactor. (2) The ContextoSesion interface was kept in
+  the domain/sesion/ package rather than a domain/ports/ package — since the
+  GoF State pattern is a domain-internal concern, this respects the project's
+  package-by-layer convention. (3) The _RelojNulo helper was initially placed
+  in the shared juego_viewmodel_test.dart but then moved inline into each
+  test file (4 copies) following the project's self-contained test file convention —
+  this is a small duplication vs. maintainability trade-off.
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -270,16 +316,24 @@
     the compile error on the red-phase run.
   - **How it was corrected:** Replaced it with a properly typed `Trayectoria pathEn(...)`
     factory before proceeding to green.
+- **Case:** After the first pass of the timer extraction, 4 presentation tests
+  failed because `JuegoViewModel` required a `reloj` parameter that existing
+  constructions didn't supply (ticket 06).
+  - **How it was detected:** `flutter test` — 4 tests failed to compile.
+  - **How it was corrected:** Added `_RelojNulo()` to each construction across
+    4 test files. One file was fixed in a suboptimal way (importing a shared
+    helper) and had to be refactored to use an inline class.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across both tickets. The predefined Clean
-  Architecture / MVVM folder structure, the skills (`tdd-strict`,
+- **Impact on productivity:** Very high across all six tickets. The predefined
+  Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
-  to follow. Ticket 05 was notably faster than ticket 01 because the domain
-  vocabulary, port interfaces, and conventions were already established.
+  to follow. Each subsequent ticket was faster than the previous because domain
+  vocabulary, port interfaces, and conventions were already established. T-006
+  (iterative refactoring and test repair) was the fastest ticket to complete.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (45/45 tests, 0 warnings). The few AI
+  kept output consistent and well-tested (78/78 tests, 0 warnings). The few AI
   mistakes were caught by `flutter analyze`, `flutter test`, and manual review —
   no defect reached production code.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
@@ -288,3 +342,4 @@
   tickets faster and less error-prone. (3) A few architectural inconsistencies
   (e.g., missing use-case wrapper for generation, missing `AssetLoader` port)
   remain as technical debt — consciously deferred rather than accidental.
+

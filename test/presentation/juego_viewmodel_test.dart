@@ -1,17 +1,35 @@
+import 'package:arrowmaze/application/ports/reloj.dart';
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
+import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_model.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+class _RelojNulo implements Reloj {
+  @override
+  void iniciar(Duration intervalo, void Function() tic) {}
+  @override
+  void detener() {}
+}
+
 /// Verifies the MVVM binding: a tap on the VM runs the use case and publishes a
 /// *new immutable* [JuegoViewState] (via `copyWith`) with the whole path now
 /// empty, notifying listeners exactly once. Also checks the snapshot carries the
 /// path geometry (corner connections, head) the painter needs.
 void main() {
+  const definicion = DefinicionNivel(
+    id: 0,
+    baseNivel: 1000,
+    kmov: 10,
+    ktiempo: 2,
+    umbralesEstrellas: [300, 600, 900],
+    limiteTiempo: null,
+  );
+
   GrafoTablero construirTablero() {
     // 3x3 with an L-shaped path: (2,1)->(1,1)->(1,0), head (1,0) exits left.
     return GrafoTablero.desde(
@@ -37,6 +55,8 @@ void main() {
     final viewModel = JuegoViewModel(
       tablero: tablero,
       moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
     );
 
     // Assert — the bend at (1,1) is a corner; (1,0) is the head exiting left.
@@ -57,6 +77,8 @@ void main() {
     final viewModel = JuegoViewModel(
       tablero: tablero,
       moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
     );
     final JuegoViewState estadoInicial = viewModel.estado;
     var notificaciones = 0;
