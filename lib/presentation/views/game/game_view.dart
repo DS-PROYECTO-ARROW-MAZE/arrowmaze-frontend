@@ -94,7 +94,9 @@ class _GameViewState extends State<GameView>
                 children: [
                   _Hud(
                     movimientos: estado.movimientos,
+                    coleccionables: estado.coleccionables,
                     tiempoRestante: estado.tiempoRestante,
+                    game: game,
                   ),
                   Expanded(
                     child: Center(
@@ -281,11 +283,19 @@ class _FeedbackInvalido extends StatelessWidget {
   }
 }
 
-/// The moves counter strip, plus a countdown clock on timed levels.
+/// The moves counter strip, plus a countdown clock on timed levels and a tally
+/// of the collectibles picked up for bonus time.
 class _Hud extends StatelessWidget {
-  const _Hud({required this.movimientos, this.tiempoRestante});
+  const _Hud({
+    required this.movimientos,
+    required this.coleccionables,
+    required this.game,
+    this.tiempoRestante,
+  });
 
   final int movimientos;
+  final int coleccionables;
+  final GameTheme game;
   final Duration? tiempoRestante;
 
   /// Formats the remaining time as `m:ss` for the HUD clock.
@@ -309,6 +319,16 @@ class _Hud extends StatelessWidget {
             const Icon(Icons.timer_outlined, size: 18),
             const SizedBox(width: AppSpacing.xs),
             Text(_formatear(tiempoRestante!), style: AppTypography.hudNumber),
+          ],
+          // The bonus tally only appears once something has been collected.
+          if (coleccionables > 0) ...[
+            const SizedBox(width: AppSpacing.xl),
+            Icon(Icons.diamond_outlined, size: 18, color: game.cellCollectible),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              '$coleccionables',
+              style: AppTypography.hudNumber.copyWith(color: game.cellCollectible),
+            ),
           ],
         ],
       ),
@@ -400,10 +420,31 @@ class _TableroPainter extends CustomPainter {
             RRect.fromRectAndRadius(rect, Radius.circular(lado * 0.18)),
             Paint()..color = game.cellWall,
           );
+        case TipoCeldaUI.coleccionable:
+          _pintarColeccionable(canvas, c, lado);
         case TipoCeldaUI.flecha:
           _pintarSegmento(canvas, celda, c, lado, grosor);
       }
     }
+  }
+
+  /// Draws a collectible as a glowing diamond — transparent to rays, so it sits
+  /// lightly over the dark board the way an empty dot does, but bright and
+  /// bonus-coloured.
+  void _pintarColeccionable(Canvas canvas, Offset centro, double lado) {
+    final radio = lado * 0.2;
+    final rombo = Path()
+      ..moveTo(centro.dx, centro.dy - radio)
+      ..lineTo(centro.dx + radio, centro.dy)
+      ..lineTo(centro.dx, centro.dy + radio)
+      ..lineTo(centro.dx - radio, centro.dy)
+      ..close();
+
+    final glow = Paint()
+      ..color = game.collectibleGlow.withValues(alpha: 0.5)
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    canvas.drawPath(rombo, glow);
+    canvas.drawPath(rombo, Paint()..color = game.cellCollectible);
   }
 
   /// Draws one path segment as a continuous stroke toward each connected

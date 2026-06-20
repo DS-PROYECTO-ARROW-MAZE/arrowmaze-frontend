@@ -27,6 +27,7 @@ void main() {
           CeldaFlecha(:final idFlecha) => 'F$idFlecha',
           CeldaPared() => 'P',
           CeldaVacia() => '.',
+          Coleccionable() => 'C',
         };
         buffer.write('$marca|');
       }

@@ -21,8 +21,8 @@ class FabricaCeldasEstandar {
 
   /// Builds a single fixed [Celda] described by [json].
   ///
-  /// Handles `wall` and `empty`. Arrows are paths now and are built by
-  /// [crearTrayectoria]; an `arrow` here, or any unknown `type`, throws
+  /// Handles `wall`, `empty` and `collectible`. Arrows are paths now and are
+  /// built by [crearTrayectoria]; an `arrow` here, or any unknown `type`, throws
   /// [ArgumentError] so malformed level data fails loudly.
   Celda crear(Map<String, dynamic> json) {
     final posicion = Posicion.en(
@@ -36,6 +36,8 @@ class FabricaCeldasEstandar {
         return CeldaPared(posicion);
       case 'empty':
         return CeldaVacia(posicion);
+      case 'collectible':
+        return Coleccionable(posicion);
       default:
         throw ArgumentError.value(tipo, 'type', 'Unknown fixed cell type');
     }

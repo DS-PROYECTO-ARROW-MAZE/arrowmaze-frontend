@@ -40,6 +40,9 @@ class MoverFlechaUseCase {
   })  : _sesion = sesion ?? SesionJuego(tablero: tablero),
         _historial = historial ?? CommandHistory();
 
+  /// Bonus time granted for each collectible a valid move's ray crosses.
+  static const Duration bonusPorColeccionable = Duration(seconds: 5);
+
   final SesionJuego _sesion;
   final CommandHistory _historial;
 
@@ -90,6 +93,14 @@ class MoverFlechaUseCase {
       EventoJuego(TipoEvento.movimientoRealizado, posicion),
       EventoJuego(TipoEvento.flechaEliminada, trayectoria.cabeza),
     ];
+    // Pass-through bonus (A4): the session already consumed each collectible the
+    // ray crossed; record one event per collectible and extend the timer.
+    for (final coleccionable in toque.coleccionables) {
+      eventos.add(EventoJuego(TipoEvento.coleccionableRecogido, coleccionable));
+    }
+    if (toque.coleccionables.isNotEmpty) {
+      _sesion.otorgarBonus(bonusPorColeccionable * toque.coleccionables.length);
+    }
     // Emptying the board on this exit is the victory trigger (scoring, ticket 06).
     if (_sesion.estaTerminada) {
       eventos.add(EventoJuego(TipoEvento.victoria, posicion));

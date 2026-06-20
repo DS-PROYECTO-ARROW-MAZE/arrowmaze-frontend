@@ -7,22 +7,31 @@ import 'value_objects/posicion.dart';
 ///
 /// A move is valid only when the ray reaches a board edge with nothing in the
 /// way ([despejadoHastaBorde] is `true`); otherwise [obstaculo] names the first
-/// blocking cell that stopped it.
+/// blocking cell that stopped it. A clear ray also reports the [coleccionables]
+/// it flew over (transparent bonus cells) so a valid move can collect them; a
+/// blocked ray collects nothing, so its list is always empty.
 class ResultadoRaycast {
-  /// A ray that flew clear off the board edge.
-  const ResultadoRaycast.despejado()
-      : despejadoHastaBorde = true,
+  /// A ray that flew clear off the board edge, having crossed [coleccionables]
+  /// (the positions of any collectibles on its way, in path order).
+  const ResultadoRaycast.despejado({
+    this.coleccionables = const <Posicion>[],
+  })  : despejadoHastaBorde = true,
         obstaculo = null;
 
-  /// A ray stopped at [obstaculo] before reaching the edge.
+  /// A ray stopped at [obstaculo] before reaching the edge; nothing collected.
   const ResultadoRaycast.bloqueado(Posicion this.obstaculo)
-      : despejadoHastaBorde = false;
+      : despejadoHastaBorde = false,
+        coleccionables = const <Posicion>[];
 
   /// Whether the ray reached the edge unobstructed.
   final bool despejadoHastaBorde;
 
   /// The first blocking cell hit, or `null` when the ray was clear.
   final Posicion? obstaculo;
+
+  /// The collectibles the ray crossed on a clear path, in the order met. Empty
+  /// for a blocked ray (a non-exiting move collects nothing).
+  final List<Posicion> coleccionables;
 }
 
 /// The board *port* — the only thing use cases and the solver depend on.
@@ -65,4 +74,11 @@ abstract interface class Tablero {
   /// The change is incremental: only the affected nodes and their immediate
   /// neighbours are re-wired — never a full rebuild.
   void eliminarTrayectoria(int idFlecha);
+
+  /// Consumes the collectible at [posicion], turning it into transparent empty
+  /// space so it is collected only once.
+  ///
+  /// A no-op when the cell is not a collectible. Collectibles never block a ray
+  /// and never count toward [estaVacio], so this never affects victory.
+  void recogerColeccionable(Posicion posicion);
 }
