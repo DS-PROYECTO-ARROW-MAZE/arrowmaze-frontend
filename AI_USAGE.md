@@ -1,7 +1,7 @@
 # AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002, T-003 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-19 (T-002, T-003, T-004 appended)
 
 ## 1. Tools Used
 
@@ -124,13 +124,55 @@
   detailed AC-to-test mapping in the issue gave the AI unambiguous red-phase targets,
   so no rework was needed.
 
+### T-004 — Ticket 04 · Session State Machine (win / lose / pause)
+
+- **Task / problem addressed:** Implement Stories B1–B3 from
+  `.issues/04-session-state-machine.md`: the player wins when the board is empty,
+  loses on a timed level when the clock reaches 0 (untimed levels can *never*
+  lose), and can pause/resume without the timer advancing. Model the session
+  lifecycle with the GoF **State** pattern so tap/clock legality is encoded by
+  state type rather than scattered `if`s.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (paraphrased) "Implement ticket 04 applying the
+  `tdd-strict` and `clean-architecture` skills (red → green → refactor)."
+- **Result obtained:** Strict TDD producing: `domain/sesion/`
+  (`EstadoSesion` GoF State base + `EstadoJugando`/`EstadoPausado`/`EstadoVictoria`/
+  `EstadoDerrota`, `SesionJuego` context delegating `tocarCelda`/`pausar`/
+  `reanudar`/`cambiarEstado`/`estaTerminada`, `ResultadoToque`); `domain`
+  (`Tablero.estaVacio` victory query + `GrafoTablero` support); `application`
+  (`MoverFlechaUseCase` routes taps through the active session and emits a
+  `victoria` event when the last arrow empties the board, plus an extended
+  `EventoJuego`/`TipoEvento`); `presentation` (`JuegoViewModel` maps session
+  state onto UI snapshots, adds a separate `VictoriaViewState` distinct from the
+  domain `EstadoVictoria`, pause/resume, and a timed-level clock; `GameView`
+  victory/defeat/pause overlays wired with theme tokens). Tests: 5 in
+  `test/domain/estado_sesion_test.dart` (incl. the AC3 *untimed-never-loses*
+  property test) + 1 ViewModel guardrail in
+  `test/presentation/juego_viewmodel_session_test.dart` asserting
+  `VictoriaViewState` is not `EstadoVictoria`. Verified: `flutter test` 58/58
+  green; `flutter analyze` 0 errors / 0 warnings (3 info-level
+  `prefer_initializing_formals` hints, pre-existing style preference); zero
+  `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests
+  and code; no manual code edits were required. `flutter test`/`flutter analyze`
+  served as the guardrails.
+- **Lessons learned / limitations identified:** Encoding tap/clock legality by
+  state *type* (the GoF State subclasses) instead of conditional branches kept
+  `MoverFlechaUseCase` and the ViewModel free of mode-checking `if`s, and made the
+  "untimed level can never lose" guarantee expressible as a property test rather
+  than a defensive runtime check. Keeping the domain `EstadoVictoria` strictly
+  separate from the presentation `VictoriaViewState` (enforced by a naming
+  guardrail test) prevented state leakage across the layer boundary. The detailed
+  AC-to-test mapping in the issue again gave unambiguous red-phase targets, so no
+  rework was needed.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  and 05 were AI-generated then human-reviewed; the theme tokens under
+  04, and 05 were AI-generated then human-reviewed; the theme tokens under
   `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every ticket
   followed the same pattern (full AI authoring + human review), so the share holds
   at ~90%. Rough judgment over the files added across the slices.
