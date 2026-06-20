@@ -119,6 +119,25 @@ class GrafoTablero implements Tablero {
 
   /// Turns the node at [posicion] into transparent empty space and re-wires its
   /// neighbours to each other so a ray walk steps straight over the gap.
+  void agregarTrayectoria(Trayectoria trayectoria) {
+    _trayectorias[trayectoria.id] = trayectoria;
+    for (final posicion in trayectoria.segmentos) {
+      final nodo = _nodos[posicion];
+      if (nodo == null) continue;
+      nodo.celda = CeldaFlecha(
+        posicion: posicion,
+        direccion: trayectoria.direccionCabeza,
+        idFlecha: trayectoria.id,
+      );
+    }
+  }
+
+  void agregarCelda(Celda celda) {
+    final nodo = _nodos[celda.posicion];
+    if (nodo == null) return;
+    nodo.celda = celda;
+  }
+
   void _desvincularNodo(Posicion posicion) {
     final nodo = nodoEn(posicion);
     for (final direccion in nodo.vecinos.keys.toList()) {
