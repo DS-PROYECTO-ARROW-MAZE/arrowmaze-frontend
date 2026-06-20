@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-011 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-012 appended)
 
 ## 1. Tools Used
 
@@ -610,17 +610,104 @@ eloj:
   `CalcularPuntuacionUseCase` default) meant all 157 prior tests passed unmodified
   and DI needed no change.
 
+### T-012 — Ticket 12 · Use-case Decorator Stack + Architecture Guards
+
+- **Task / problem addressed:** Implement Story F1 + §7.8 from
+  `.issues/12-decorator-stack-and-arch-guards.md`: add metrics/logging/security
+  to any use case by **composition** (GoF **Decorator**) with no framework
+  leaking into the domain, plus automated CI guards that keep the architecture
+  and ubiquitous language honest. Acceptance criteria: (AC1) a decorated use case
+  returns the **same** result while the metrics/logging/security ports are
+  invoked; (AC2) **no logging/metrics library** is imported inside the
+  decorators; (AC3) `DecoradorSeguridad` reads the session via an injected
+  `ProveedorSesion`, never a static accessor; (AC4) **domain purity** — `domain/`
+  imports no Flutter/Nest/Prisma/logging/metrics symbols (ADR-0004); (AC5)
+  **language guard** — forbids the avoid-list identifiers (`CeldaSalida`,
+  `*Decorator` cells, `Composite`, `NivelFacil/Medio/Dificil`,
+  `PuntuacionPorTiempo`, plural `CargadorNiveles`).
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket
+  `…\.issues\12-decorator-stack-and-arch-guards.md` is obligatory to apply the
+  rules of these skills `…\clean-architecture\SKILL.md` `…\tdd-strict\SKILL.md`
+  the visual design is pu to you based on `…\lib\core\theme`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing —
+  **application (depends only on ports, zero framework imports):**
+  `lib/application/ports/i_caso_de_uso.dart` (`ICasoDeUso<E,S>` narrow generic
+  contract — `Future<S> ejecutar(E)`);
+  `lib/application/ports/i_registro.dart` (`IRegistro` logging port — `info`,
+  `error`);
+  `lib/application/ports/i_medidor_metricas.dart` (`IMedidorMetricas` metrics
+  port — `registrar(operacion, {duracion, exito})`);
+  `lib/application/decoradores/decorador_caso_de_uso.dart` (abstract
+  `DecoradorCasoDeUso<E,S>` — GoF Decorator base holding the wrapped
+  `ICasoDeUso`);
+  `lib/application/decoradores/decorador_metricas_caso_de_uso.dart` (times via a
+  pure `Stopwatch`, reports through the port for success **and** failure);
+  `lib/application/decoradores/decorador_registro_caso_de_uso.dart` (logs
+  enter/exit/error, rethrows);
+  `lib/application/decoradores/decorador_seguridad_caso_de_uso.dart` (reads token
+  through the injected `ProveedorSesion`, throws on absence);
+  `lib/application/decoradores/sesion_requerida_exception.dart` (pure-Dart guard
+  exception);
+  `lib/application/decoradores/caso_de_uso_accion.dart` (function adapter so an
+  existing use case is wrapped **without being edited**).
+  **infrastructure (the only place primitives live):**
+  `lib/infrastructure/observabilidad/registro_consola.dart` (`RegistroConsola`
+  — the sanctioned console sink);
+  `lib/infrastructure/observabilidad/medidor_metricas_simple.dart`
+  (`MedidorMetricasSimple` + `MuestraMetrica` in-memory meter).
+  **di:** `lib/di/inyeccion.dart` composes the full
+  **security → logging → metrics → use case** stack around the leaderboard read
+  (`consultarRankingDecorado`), lifting `ConsultarRankingUseCase` via
+  `CasoDeUsoAccion` and reading the session through the injected
+  `proveedorSesion` — the use case itself is untouched (AOP via SOLID).
+  New tests: `test/application/decorador_caso_de_uso_test.dart` (AC1 same-result,
+  AC1 all-ports-invoked, AC3 session via injected port, plus a block-when-no-token
+  case — mocktail spies); `test/architecture/dependency_direction_test.dart`
+  (AC2 no logging/metrics lib in decorators, AC4 domain framework-free —
+  source-level import scans); `test/architecture/ubiquitous_language_test.dart`
+  (AC5 avoid-list identifiers banned across `lib/`, full-line comments stripped so
+  the rule can still be documented in dartdoc). Verified: `flutter test`
+  172/172 green (165 prior + 7 new); `flutter analyze` 0 errors / 0 warnings on
+  new code (only pre-existing info-level `prefer_initializing_formals` hints,
+  which can't be satisfied here since named params can't be private initializing
+  formals); zero `package:flutter`/logging/metrics imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** Review only — no manual code edits to the
+  delivered design. During implementation the AI self-corrected three of its own
+  first-draft slips (see below) before the green run / lint pass. The architecture
+  guards were implemented as Dart tests under `test/architecture/` (run by
+  `flutter test`) rather than a new GitHub Actions workflow, because the repo has
+  **no `.github`/CI config** to extend — the ticket explicitly allowed
+  "Dart tests (or `dart analyze` custom lint) wired into CI", and an offer to add
+  a CI workflow was left open for the team.
+- **Lessons learned / limitations identified:** (1) Naming the decorators with the
+  Spanish `Decorador` prefix (not the English `Decorator` suffix) was deliberate:
+  the AC5 language guard bans `*Decorator` on *cells*, and `Decorador` is not a
+  substring of `Decorator`, so the new code stays green against its own guard. (2)
+  The metrics/logging concerns are added purely by composition at the DI root, so
+  no use case was edited to gain them — the "AOP via SOLID, no library" showcase
+  (ADR-0004) is structural, not conventional. (3) Source-level architecture tests
+  must strip comments before scanning: the existing dartdoc that *documents* the
+  avoid-list (`PuntuacionPorTiempo must not exist`, `CeldaSalida`) would otherwise
+  trip the very guard it describes — the language guard filters full-line `//`/`///`
+  comments, mirroring the ticket-11 `publicar` regex lesson. (4) `ICasoDeUso<E,S>`
+  was kept asynchronous so the security decorator can `await` the injected session
+  port uniformly; a record entrada (`({int idNivel, int limite})`) let the
+  leaderboard read be lifted into the generic contract without a bespoke param
+  object.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 07, 08, 09, 10, and 11 were AI-generated then human-reviewed; the
-  theme tokens under `lib/core/theme` were pre-existing (not AI-authored in these
-  tasks). Every ticket followed the same pattern (full AI authoring + human review),
-  so the share holds at ~90%. Rough judgment over the files added across the slices
-  (165 passing tests, all source in `lib/domain/`, `lib/application/`,
+  03, 04, 05, 06, 07, 08, 09, 10, 11, and 12 were AI-generated then human-reviewed;
+  the theme tokens under `lib/core/theme` were pre-existing (not AI-authored in
+  these tasks). Every ticket followed the same pattern (full AI authoring + human
+  review), so the share holds at ~90%. Rough judgment over the files added across
+  the slices (172 passing tests, all source in `lib/domain/`, `lib/application/`,
   `lib/infrastructure/`, `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
@@ -711,10 +798,29 @@ eloj:
     removal — a directional walk that skips still-removed nodes — which, paired
     with reverse-order undo, reconstructs cross-gap links exactly without any
     removal journal.
+- **Case:** The language-guard test helper was written with a literal space in
+  its identifier (`_codigoSin Comentarios`), an invalid Dart name (ticket 12).
+  - **How it was detected:** Self-review immediately after writing the file, before
+    the first test run.
+  - **How it was corrected:** Renamed the helper to `_codigoSinComentarios` (and
+    later, on the lint pass, to `codigoSinComentarios` to drop the leading
+    underscore on a local function).
+- **Case:** The three concrete decorators each imported `i_caso_de_uso.dart`
+  although they reference `ICasoDeUso` only transitively via their base class —
+  an unused-import warning (ticket 12).
+  - **How it was detected:** `flutter analyze` (3 `unused_import` warnings).
+  - **How it was corrected:** Removed the redundant import from each concrete
+    decorator; the abstract base already carries the dependency.
+- **Case:** The new test files declared local helper functions with leading
+  underscores (`_stack`, `_imports`, `_codigoSinComentarios`), tripping the
+  `no_leading_underscores_for_local_identifiers` lint (ticket 12).
+  - **How it was detected:** `flutter analyze` (3 info-level lints).
+  - **How it was corrected:** Renamed the locals to `construirStack`, `importsDe`,
+    and `codigoSinComentarios`.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all ten tickets. The predefined
+- **Impact on productivity:** Very high across all twelve tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -724,13 +830,17 @@ eloj:
   read-only) was similarly fast — the read port pattern was already established from
   T-009 and the Pact consumer test followed the same shape-verification template.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (165/165 tests, 0 errors, 0 warnings from
+  kept output consistent and well-tested (172/172 tests, 0 errors, 0 warnings from
   new code). The few AI mistakes were caught by `flutter test` and manual review —
   no defect reached production code. Architecture violations (ViewModel importing
   infra DTO) were caught and fixed during the same session. On ticket 09 the
   trickiest correctness concern (the incremental board re-link for adjacent arrows)
   was surfaced by design-time reasoning and pinned with a dedicated test before it
-  could become a latent gameplay bug.
+  could become a latent gameplay bug. Ticket 12 went a step further by making the
+  architecture rules *self-enforcing*: the dependency-direction, domain-purity, and
+  ubiquitous-language guards are now executable tests in the suite, so a future
+  framework leak or avoid-list identifier fails CI rather than relying on reviewer
+  vigilance.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
   established domain abstractions (like the `IColaSincronizacion` port interface)

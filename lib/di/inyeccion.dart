@@ -1,10 +1,17 @@
+import '../application/decoradores/caso_de_uso_accion.dart';
+import '../application/decoradores/decorador_metricas_caso_de_uso.dart';
+import '../application/decoradores/decorador_registro_caso_de_uso.dart';
+import '../application/decoradores/decorador_seguridad_caso_de_uso.dart';
 import '../application/generadores/configuracion_generacion.dart';
 import '../application/generadores/generacion_aleatoria_nivel.dart';
 import '../application/generadores/generacion_por_archivo_nivel.dart';
 import '../application/generadores/generador_nivel_base.dart';
 import '../application/ports/cargador_nivel.dart';
 import '../application/ports/fuente_autenticacion.dart';
+import '../application/ports/i_caso_de_uso.dart';
 import '../application/ports/i_consulta_ranking.dart';
+import '../application/ports/i_medidor_metricas.dart';
+import '../application/ports/i_registro.dart';
 import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
@@ -16,12 +23,15 @@ import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
 import '../domain/progreso/i_cola_sincronizacion.dart';
 import '../domain/puntuacion/definicion_nivel.dart';
+import '../domain/ranking/ranking_dto.dart';
 import '../domain/sesion/sesion_juego.dart';
 import '../domain/tablero.dart';
 import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
+import '../infrastructure/observabilidad/medidor_metricas_simple.dart';
+import '../infrastructure/observabilidad/registro_consola.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
@@ -227,5 +237,52 @@ abstract final class Inyeccion {
 
   static RankingViewModel construirRankingViewModel() {
     return RankingViewModel(consulta: consultaRanking);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cross-cutting concerns via Decorator (ticket 12, DM-F9, ADR-0004)
+  // ---------------------------------------------------------------------------
+  //
+  // Metrics, logging and security are added by *composition* around use cases.
+  // The use cases themselves are never edited to gain these concerns, and no
+  // logging/metrics library reaches the application or domain layers — the
+  // concrete adapters live only here in infrastructure ("AOP via SOLID").
+
+  /// The single injected logging sink — a console adapter wired once here.
+  static IRegistro get registro => _registro;
+  static const RegistroConsola _registro = RegistroConsola();
+
+  /// The single injected metrics meter — in-memory, swappable for an exporter.
+  static IMedidorMetricas get medidorMetricas => _medidorMetricas;
+  static final MedidorMetricasSimple _medidorMetricas = MedidorMetricasSimple();
+
+  /// The leaderboard read lifted into an [ICasoDeUso] and wrapped in the full
+  /// cross-cutting stack — **security → logging → metrics → use case**.
+  ///
+  /// [ConsultarRankingUseCase] is untouched: it is adapted via
+  /// [CasoDeUsoAccion] and decorated here. The security layer makes this an
+  /// authenticated leaderboard fetch by reading the token through the injected
+  /// [proveedorSesion], never a static accessor (AC3). This getter is the
+  /// canonical place to assemble such stacks for any chosen use case.
+  static ICasoDeUso<({int idNivel, int limite}), RankingDto>
+      get consultarRankingDecorado {
+    final base = CasoDeUsoAccion<({int idNivel, int limite}), RankingDto>(
+      (entrada) => consultarRankingUseCase.obtenerTop(
+        idNivel: entrada.idNivel,
+        limite: entrada.limite,
+      ),
+    );
+    return DecoradorSeguridadCasoDeUso(
+      DecoradorRegistroCasoDeUso(
+        DecoradorMetricasCasoDeUso(
+          base,
+          metricas: medidorMetricas,
+          nombre: 'ConsultarRanking',
+        ),
+        registro: registro,
+        nombre: 'ConsultarRanking',
+      ),
+      sesion: proveedorSesion,
+    );
   }
 }
