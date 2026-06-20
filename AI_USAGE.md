@@ -7,8 +7,9 @@
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (ticket 01), refactoring, coverage |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (ticket 05), architectural analysis, documentation, Clean Architecture refactoring (ticket 06) |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04), refactoring, coverage |
+| Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (ticket 05), architectural analysis, documentation |
 
 ## 2. Usage Log by Task
 
@@ -220,62 +221,73 @@
   that also crosses a collectible emits the event but skips the bonus because the
   session is already terminal (the clock has stopped anyway).
 
+### T-006 — Ticket 07 · Observer Reactions (audio/UI decoupled from rules)
 
-### T-007 — Ticket 06 · Clean Architecture fixes (circular dependency + leaked Timer)
+- **Task / problem addressed:** Implement the GoF **Observer** pattern to decouple
+  audio and UI reactions from the game rules (`.issues/07-observer-reactions.md`,
+  Stories F1). The use case must emit events through a Subject without knowing who
+  listens; `AudioServiceImp` and the `JuegoViewModel` register as observers. Three
+  acceptance criteria: (AC1) every registered observer receives emitted events;
+  (AC2) the use case holds no direct reference to audio or UI; (AC3) this Observer
+  is distinct from the MVVM data-binding (`notifyListeners()`).
+- **AI tool used:** Claude Code (Sonnet 4.6 / claude-sonnet-4-6).
+- **Prompt / instruction:** (verbatim) "implement this ticket
+  `…\.issues\07-observer-reactions.md` is obligatory to apply the rules in these
+  skills `…\clean-architecture\SKILL.md` `…\tdd-strict\SKILL.md` the visual design
+  is up to you based on `…\lib\core\theme`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `domain/evento_juego.dart` (`EventoJuego` + `TipoEvento` moved here from
+  `application/`); `domain/observador_juego.dart` (`abstract interface class
+  ObservadorJuego { alOcurrirEvento(EventoJuego) }`); `domain/publicador_eventos_juego.dart`
+  (`PublicadorEventosJuego` Subject — `suscribir / desuscribir / publicar`, iterates
+  a snapshot so observers may safely unsub from within their callback);
+  `application/use_cases/mover_flecha_use_case.dart` (accepts optional
+  `PublicadorEventosJuego`, auto-creates one when absent, exposes `publicador`
+  getter, publishes every `EventoJuego` via `_publicarTodos` — **zero** audio/UI
+  imports); `infrastructure/audio/audio_service_imp.dart` (private ctor Singleton
+  `AudioServiceImp._()` / `static final instance`, reacts to `flechaEliminada` and
+  `victoria` via `alOcurrirEvento`, stubs audio calls pending a later asset-player
+  ticket); `presentation/viewmodels/juego_view_model.dart` (implements
+  `ObservadorJuego`, subscribes to `moverFlecha.publicador` in the constructor,
+  handles `coleccionableRecogido` in `alOcurrirEvento` so `tocar()` no longer
+  inspects `resultado.eventos` directly, unsubscribes in `dispose()`);
+  `di/inyeccion.dart` (subscribes `AudioServiceImp.instance` to the use case's
+  publisher before building the ViewModel). New tests: `test/domain/publicador_eventos_test.dart`
+  (3 tests: all-observers notified, unsub stops delivery, sequential order preserved),
+  `test/application/mover_flecha_publishes_events_test.dart` (3 tests: events reach
+  spy via publisher on valid move, on penalized move; AC2 confirmed via spy),
+  `test/infrastructure/audio_service_singleton_test.dart` (4 tests: singleton
+  identity, implements ObservadorJuego, no-throw on flechaEliminada and victoria, no-throw
+  on all event kinds). Verified: `flutter test` 73/73 green (63 prior + 10 new);
+  zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and
+  code; no manual code edits were required. `flutter test` and `flutter analyze`
+  served as the guardrails.
+- **Lessons learned / limitations identified:** Moving `EventoJuego` to `domain/`
+  was architecturally necessary: the `ObservadorJuego` interface lives in domain and
+  must reference the event type; keeping it in `application/` would have inverted the
+  Dependency Rule. The "auto-create publisher" strategy in `MoverFlechaUseCase`
+  (creates a fresh `PublicadorEventosJuego` when none is injected) meant all 63
+  pre-existing tests passed unmodified — no ripple effect on the test suite.
+  The ViewModel's two concurrent Observer roles (MVVM data-binding via
+  `notifyListeners()` and game-event Observer via `alOcurrirEvento`) must be kept
+  strictly distinct; in-code comments make this explicit and AC3 tests it.
+  `AudioServiceImp._()` audio play methods are deliberate stubs — the Singleton +
+  Observer shell is the ticket's deliverable; the actual audio asset wiring belongs
+  to a later infrastructure ticket.
 
-- **Task / problem addressed:** Fix two violations identified during code review:
-  (1) circular dependency between domain/sesion/sesion_juego.dart ↔
-  domain/sesion/estado_sesion.dart (GoF State pattern gave the concrete
-  context a concrete dependency on the state hierarchy, violating DIP);
-  (2) JuegoViewModel in presentation/ imported dart:async Timer.periodic
-  directly (infrastructure leaked into presentation, violating Clean Architecture rules).
-- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
-- **Prompt / instruction:** (paraphrased) The session began with the user asking
-  "What did we do so far?" — the AI produced an anchored summary that surfaced
-  the two issues from the conversation history. The user confirmed with "Do it"
-  and "Continua" multiple times. The final cycle was "Pon el summary como un
-  anchored read. Despues, actualiza los tests." The user also provided the
-  AGENTS.md file as a reference for architecture rules.
-- **Result obtained:** (1) domain/sesion/contexto_sesion.dart — new ContextoSesion
-  interface; EstadoSesion now receives ContextoSesion instead of SesionJuego;
-  SesionJuego implements ContextoSesion; the circular dependency is replaced by
-  an acceptable abstract–abstract cycle per GoF State. (2) pplication/ports/reloj.dart
-  — new Reloj interface with iniciar(intervalo, tic) and detener();
-  infrastructure/reloj/reloj_timer.dart — concrete RelojTimer using dart:async;
-  JuegoViewModel now injects Reloj instead of using Timer directly;
-  Inyeccion.construirJuegoViewModel() passes RelojTimer(). All 4 presentation
-  test files inject _RelojNulo() (no-op). Verified: lutter test 78/78 green;
-  lutter analyze no errors; zero package:flutter or dart:async imports under
-  domain/+pplication/.
-- **Modifications made by the team:** The team reviewed all changes. During the
-  iterative back-and-forth, several test failures occurred due to missing 
-eloj:
-  parameter in existing ViewModel constructions. The AI fixed each one as the
-  user reported the failure. One presentation test file
-  (juego_viewmodel_invalido_test.dart) had the _RelojNulo import added by
-  the AI but was later refactored to define the class inline like the other test
-  files — the user instructed "Pon el summary como un anchored read. Despues,
-  actualiza los tests." which led to this final cleanup.
-- **Lessons learned / limitations identified:** (1) Changing a constructor parameter
-  that affects many callers (DI + 4+ test files) is best done by first adding the
-  parameter as optional with a default before making it required, to keep the test
-  suite green during the refactor. (2) The ContextoSesion interface was kept in
-  the domain/sesion/ package rather than a domain/ports/ package — since the
-  GoF State pattern is a domain-internal concern, this respects the project's
-  package-by-layer convention. (3) The _RelojNulo helper was initially placed
-  in the shared juego_viewmodel_test.dart but then moved inline into each
-  test file (4 copies) following the project's self-contained test file convention —
-  this is a small duplication vs. maintainability trade-off.
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, and 05 were AI-generated then human-reviewed; the theme tokens under
+  03, 04, 05, and 07 were AI-generated then human-reviewed; the theme tokens under
   `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every ticket
   followed the same pattern (full AI authoring + human review), so the share holds
-  at ~90%. Rough judgment over the files added across the slices.
+  at ~90%. Rough judgment over the files added across the slices (73 passing tests,
+  all source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
+  `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
 

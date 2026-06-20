@@ -8,13 +8,21 @@ import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
 import '../domain/puntuacion/definicion_nivel.dart';
 import '../domain/tablero.dart';
+import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
 
+/// Composition root: wires domain, application, infrastructure, and presentation
+/// into the object graph that the app consumes.
+///
+/// No business logic lives here — only construction and wiring.
 abstract final class Inyeccion {
+  /// Builds the [JuegoViewModel] for the active level, wiring the full
+  /// Observer chain: [AudioServiceImp] subscribes to the use case's publisher
+  /// before the ViewModel is constructed (which also auto-subscribes itself).
   static JuegoViewModel construirJuegoViewModel() {
     const fuente = FuenteTableroMemoria();
     const fabrica = FabricaCeldasEstandar();

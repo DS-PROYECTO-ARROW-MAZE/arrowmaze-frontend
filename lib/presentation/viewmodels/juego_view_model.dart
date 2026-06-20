@@ -17,9 +17,15 @@ import 'juego_view_state.dart';
 /// use-case calls, and notifies the View when a new state is published.
 ///
 /// It depends on the [Tablero] port and [MoverFlechaUseCase] (injected) — never
-/// on infrastructure. As a `ChangeNotifier` it plays the data-binding Observer
-/// role between View and ViewModel (distinct from the game-event Observer of
-/// ticket 07).
+/// on infrastructure. As a `ChangeNotifier` it plays the **MVVM data-binding**
+/// Observer role between View and ViewModel (distinct from the game-event
+/// Observer of ticket 07).
+///
+/// As an [ObservadorJuego] it also plays the **game-event** Observer role:
+/// it subscribes to `moverFlecha.publicador` in the constructor, accumulates
+/// incremental state from events in [alOcurrirEvento], and calls
+/// `notifyListeners()` only at the end of [tocar] — keeping the two Observer
+/// roles strictly separated.
 ///
 /// Taps are routed through the use case, which in turn runs them through the
 /// [SesionJuego]'s GoF State (DM-F5). This view model then **maps** that domain
@@ -69,16 +75,42 @@ class JuegoViewModel extends ChangeNotifier {
   /// The current immutable state the View renders.
   JuegoViewState get estado => _estado;
 
+  // ---------------------------------------------------------------------------
+  // ObservadorJuego — game-event Observer (GoF, ticket 07)
+  // ---------------------------------------------------------------------------
+
+  /// Receives each [EventoJuego] dispatched by the publisher immediately after
+  /// the use case produces it. Accumulates incremental HUD data (e.g. the
+  /// collectibles counter) so [tocar] can assemble the final state snapshot in
+  /// a single [copyWith] call.
+  ///
+  /// Does **not** call `notifyListeners()` here — that is the MVVM data-binding
+  /// channel and belongs exclusively at the end of [tocar] / [_tic].
+  @override
+  void alOcurrirEvento(EventoJuego evento) {
+    if (evento.tipo == TipoEvento.coleccionableRecogido) {
+      _coleccionables++;
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // MVVM data-binding (ChangeNotifier — View↔ViewModel)
+  // ---------------------------------------------------------------------------
+
   /// Handles a tap on the cell at [posicion].
   ///
-  /// Runs the move use case and publishes a new [JuegoViewState] via [copyWith]
-  /// for any tap that counts as a move. A **valid** move rebuilds the board
-  /// snapshot; a **penalized invalid** move keeps the existing snapshot untouched
-  /// and only raises [JuegoViewState.movimientoInvalido] so the View can play its
-  /// shake/flash. A tap that resolves to no arrow — or one rejected while paused
-  /// or finished — is ignored (no notification).
+  /// Runs the move use case (which publishes events synchronously, triggering
+  /// [alOcurrirEvento] before this method continues) and then publishes a new
+  /// [JuegoViewState] via [copyWith] for any tap that counts as a move.
+  /// A **valid** move rebuilds the board snapshot; a **penalized invalid** move
+  /// keeps the existing snapshot untouched and only raises
+  /// [JuegoViewState.movimientoInvalido] so the View can play its shake/flash.
+  /// A tap that resolves to no arrow — or one rejected while paused or
+  /// finished — is ignored (no notification).
   void tocar(Posicion posicion) {
     final resultado = _moverFlecha.ejecutar(posicion);
+    // Events were already delivered to alOcurrirEvento via the publisher;
+    // _coleccionables is up to date before we reach this line.
     if (!resultado.registrado) return;
 
     final invalido = !resultado.valido;
@@ -112,7 +144,7 @@ class JuegoViewModel extends ChangeNotifier {
       derrota: _sesion.estado is EstadoDerrota,
       tiempoRestante: _sesion.tiempoRestante,
     );
-    notifyListeners();
+    notifyListeners(); // MVVM data-binding: push new state to the View.
   }
 
   /// Pauses the session: taps are rejected and the clock freezes until [reanudar].
@@ -129,6 +161,13 @@ class JuegoViewModel extends ChangeNotifier {
     _iniciarReloj();
     _estado = _estado.copyWith(pausado: _sesion.estado is EstadoPausado);
     notifyListeners();
+  }
+
+  @override
+  void dispose() {
+    _moverFlecha.publicador.desuscribir(this);
+    _reloj?.cancel();
+    super.dispose();
   }
 
   /// Starts the one-second tick that advances a timed level's clock; a no-op on

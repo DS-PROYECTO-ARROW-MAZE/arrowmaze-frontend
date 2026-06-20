@@ -1,9 +1,10 @@
+import '../../domain/evento_juego.dart';
+import '../../domain/publicador_eventos_juego.dart';
 import '../../domain/sesion/sesion_juego.dart';
 import '../../domain/tablero.dart';
 import '../../domain/value_objects/posicion.dart';
 import 'command_history.dart';
 import 'delta_tablero.dart';
-import 'evento_juego.dart';
 import 'resultado_movimiento.dart';
 
 /// Resolves a tap on a board cell into a move, **routing it through the active
@@ -27,24 +28,34 @@ import 'resultado_movimiento.dart';
 ///   left byte-identical and the arrow is **not** consumed, yet `movimientos`
 ///   **still** advances (anti-cheat) and a no-delta `PlayerMoveCommand` is
 ///   pushed, emitting `MovimientoInvalido`.
+///
+/// After computing the event list the use case feeds every event to the
+/// [publicador] (ticket 07 — GoF Observer). It has **no** direct reference to
+/// audio or UI: it only knows about [PublicadorEventosJuego], a domain contract.
 class MoverFlechaUseCase {
-  /// Injects the [SesionJuego] this use case routes taps through, and the
-  /// [CommandHistory] that records every move (a fresh one by default).
+  /// Injects the [SesionJuego] this use case routes taps through, the
+  /// [CommandHistory] that records every move, and the [PublicadorEventosJuego]
+  /// that fans out emitted events to audio/score/HUD observers.
   ///
   /// For convenience an untimed session is built from [tablero] when no [sesion]
   /// is supplied, so existing call sites that only have a board keep working.
+  /// A fresh [PublicadorEventosJuego] is created when none is supplied, so
+  /// observers can always subscribe via [publicador].
   MoverFlechaUseCase(
     Tablero tablero, {
     CommandHistory? historial,
     SesionJuego? sesion,
+    PublicadorEventosJuego? publicador,
   })  : _sesion = sesion ?? SesionJuego(tablero: tablero),
-        _historial = historial ?? CommandHistory();
+        _historial = historial ?? CommandHistory(),
+        _publicador = publicador ?? PublicadorEventosJuego();
 
   /// Bonus time granted for each collectible a valid move's ray crosses.
   static const Duration bonusPorColeccionable = Duration(seconds: 5);
 
   final SesionJuego _sesion;
   final CommandHistory _historial;
+  final PublicadorEventosJuego _publicador;
 
   int _movimientos = 0;
 
@@ -58,7 +69,15 @@ class MoverFlechaUseCase {
   /// can map its domain state onto UI snapshots and drive pause/resume.
   SesionJuego get sesion => _sesion;
 
+  /// The Observer Subject that dispatches emitted [EventoJuego]s to all
+  /// registered observers (audio, HUD, score). Observers subscribe here at the
+  /// composition root; the use case never inspects who they are.
+  PublicadorEventosJuego get publicador => _publicador;
+
   /// Applies a tap at [posicion] and returns its [ResultadoMovimiento].
+  ///
+  /// Every event in the result is also fed to [publicador] so audio, HUD, and
+  /// score observers react without the use case knowing about them.
   ResultadoMovimiento ejecutar(Posicion posicion) {
     final toque = _sesion.tocarCelda(posicion);
 
@@ -75,12 +94,14 @@ class MoverFlechaUseCase {
     if (!toque.valido) {
       // Invalid (penalized): no board mutation, arrow not consumed, no delta.
       _historial.push(PlayerMoveCommand(posicion: posicion));
+      final eventos = <EventoJuego>[
+        EventoJuego(TipoEvento.movimientoInvalido, posicion),
+      ];
+      _publicarTodos(eventos);
       return ResultadoMovimiento(
         movimientos: _movimientos,
         registrado: true,
-        eventos: <EventoJuego>[
-          EventoJuego(TipoEvento.movimientoInvalido, posicion),
-        ],
+        eventos: eventos,
       );
     }
 
@@ -106,11 +127,19 @@ class MoverFlechaUseCase {
       eventos.add(EventoJuego(TipoEvento.victoria, posicion));
     }
 
+    _publicarTodos(eventos);
     return ResultadoMovimiento(
       movimientos: _movimientos,
       registrado: true,
       delta: delta,
       eventos: eventos,
     );
+  }
+
+  /// Publishes each event in [eventos] to the [publicador] in order.
+  void _publicarTodos(List<EventoJuego> eventos) {
+    for (final evento in eventos) {
+      _publicador.publicar(evento);
+    }
   }
 }
