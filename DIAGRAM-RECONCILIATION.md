@@ -434,3 +434,120 @@ reconciliation item**. Two gaps, both on the `DefinicionNivelDto` / `CargadorNiv
 Until the backend serve path exists, the bundled asset + DI-supplied scoring are the
 **intended** offline default — not debt. The debt is only the **schema agreement** above, owed
 when `CargadorNivelHttp` is wired.
+
+---
+
+## 10. Level progression & meta-game loop (FRONTEND-03)
+
+**Context.** End-to-end UX review found the meta-game loop incomplete: after Auth the app jumps
+straight to a single random board, there is **no Level Selection screen and no progression locks**,
+and the Victory/Defeat overlays are **dead ends** (no actionable buttons). This section records the
+diagram adjustments the fix requires. It is a **net add** of presentation + two application ports +
+one persistence adapter; the **GoF State machine does not change shape** (see §10.6). Apply each
+frontend item in every place the class appears (**P2 + P3 r5/r7/r8 + P4**). Backend is unaffected
+unless/until completion is read from the server (then it folds into the §9.4 contract item).
+
+**Current-state audit (what actually exists today, June 2026):**
+- `SeleccionNivelViewModel` / `SeleccionNivelViewState` exist but are a **single-board loader**
+  (`{tablero, cargando, mensajeError}`), are **not wired** into navigation, have **no
+  `SeleccionNivelView`**, and **bypass the use-case pattern** (call `GeneracionPorArchivoNivel`
+  directly — flagged in `AI_USAGE.md`).
+- **No progression/lock logic anywhere.** `IProgressRepository.getCompletedLevels()` is named in
+  `CLAUDE.md`/`AGENTS.md` but **unimplemented**; the real port `IRepositorioProgreso` is
+  **write-only** (`guardarLote(runs)`). `ColaSincronizacionLocal` is an **in-memory, non-persistent**
+  upload queue — it resets each launch and cannot answer "is level N done?".
+- Only **`assets/levels/level_01.json`** exists.
+- `_VictoriaOverlay` / `_DerrotaOverlay` render text/stars only — **no buttons/callbacks**;
+  `JuegoViewModel` has **no reset/retry/next** API.
+
+### 10.1 ADD — progression **read** port + persisted adapter (the unlock source of truth)
+
+The diagram (and `CLAUDE.md`/`AGENTS.md`) reference `IProgressRepository.getCompletedLevels()`,
+which **does not exist in code**. Reconcile by adding a dedicated **read** port, kept separate from
+the write/upload path so the two concerns don't merge:
+- **`ConsultaProgresoLocal` «interface»** (application port): `nivelesCompletados(): Future<Set<int>>`,
+  `mejorEstrellas(idNivel): Future<int>`, `registrarCompletado(run: RunCompletado): Future<void>`.
+- **`ProgresoLocalPersistente` «Adapter»** that `realizes ConsultaProgresoLocal`, backed by
+  `shared_preferences` (or SQLite). **This is the missing persistence** — `ColaSincronizacionLocal`
+  (§ offline-sync) stays as the **upload queue only**; mark on the diagram that the two are distinct
+  (`ConsultaProgresoLocal` = progression state read/write; `IColaSincronizacion` = pending-upload
+  queue). Relationship: `Inyeccion --> ProgresoLocalPersistente`.
+- Note: `IProgressRepository.getCompletedLevels()` as drawn should be **renamed/retyped** to this
+  read port, or deleted if it was conflated with the upload path.
+
+### 10.2 ADD — level catalog port (§3.2's reserved `CatalogoNiveles`, now real)
+
+§3.2 said *"Only introduce a separate `CatalogoNiveles` port if a list-loading need is real."* — it
+is now real (the selection grid needs the ordered set of levels, not one board).
+- **`CatalogoNiveles` «interface»**: `listar(): Future<List<ResumenNivel>>` (ordered by id).
+- **`ResumenNivel` «Modelo»** (pure value object): `+ id: int`, `+ nombre: String`,
+  `+ dificultad: Dificultad`. (Render-side lock/stars are layered on in the ViewState, §10.4 — keep
+  the domain summary free of UI/progression state.)
+- Adapter **`CatalogoNivelesArchivo`** (`realizes CatalogoNiveles`) enumerates bundled
+  `assets/levels/level_*.json` (parallels `CargadorNivelArchivo`, §3.2).
+
+### 10.3 ADD — progression rule use case (lock logic lives in application, not the View)
+
+- **`ObtenerNivelesUseCase`** (depends `..> CatalogoNiveles`, `..> ConsultaProgresoLocal`): joins the
+  catalog with completed-set to produce per-level `{ resumen, desbloqueado, estrellas }`.
+- **Lock rule (the OCP-friendly seam):** level 1 is always unlocked; level *N* is unlocked iff
+  *N−1* ∈ `nivelesCompletados`. Encapsulate as a small `ReglaDesbloqueo` (strategy-style) so the
+  policy can change (e.g. star-gated) without touching the use case or View.
+
+### 10.4 MODIFY — `SeleccionNivelViewModel` becomes a real catalog VM + ADD `SeleccionNivelView`
+
+- **Retype** `SeleccionNivelViewState`: replace `{tablero, cargando, mensajeError}` with
+  `+ niveles: List<NivelResumenUI>` where **`NivelResumenUI` «ViewState»** = `{ id, nombre,
+  dificultad, desbloqueado: bool, estrellas: int }` (`NivelResumenUI` is already named in §3.3/§4 —
+  give it these fields). Keep `cargando`/`mensajeError`.
+- **Re-point** the VM to call **`ObtenerNivelesUseCase`** instead of `GeneracionPorArchivoNivel`
+  directly — this **fixes the documented use-case-bypass** (`AI_USAGE.md`). The VM exposes a
+  `seleccionar(idNivel)` that the View turns into navigation; locked entries are non-tappable.
+- **ADD** `SeleccionNivelView` widget (P2/P4) — a grid/list of level cards with lock + star badges.
+  Diagram: `SeleccionNivelView --> SeleccionNivelViewModel ..> ObtenerNivelesUseCase`.
+
+### 10.5 MODIFY — post-game actions on `JuegoViewModel` + `GameView` overlays
+
+- **`JuegoViewModel`** gains lifecycle/navigation affordances. Two valid shapes — pick one in the
+  ticket:
+  - (a) inject navigation callbacks (`onSiguiente`, `onReintentar`, `onMenu`) wired at the
+    composition root, **or**
+  - (b) expose intent flags the View routes on.
+  "Retry"/"Next" **rebuild a fresh `SesionJuego` + board** (a new VM from `Inyeccion`), they do **not**
+  mutate the finished session (see §10.6).
+- On **victory**, after `CalcularPuntuacionUseCase`, call
+  `ConsultaProgresoLocal.registrarCompletado(run)` so the next level unlocks (and the existing
+  offline-sync queue still enqueues for upload — both fire; they are different sinks per §10.1).
+- **MODIFY `_VictoriaOverlay`**: add **Next Level** (enabled only if a next level exists / is now
+  unlocked), **Retry**, **Level Select**. **MODIFY `_DerrotaOverlay`**: add **Retry**, **Level
+  Select**. Buttons are theme-tokened like the rest of the overlay.
+
+### 10.6 State machine / sequence — **no structural change** (critical)
+
+`EstadoSesion` (GoF State: `EstadoJugando/Pausado/EstadoVictoria/EstadoDerrota`) is **unchanged**.
+`EstadoVictoria`/`EstadoDerrota` remain **terminal**. **Do not add "Retry"/"Next"/"Menu" as states or
+transitions inside the State diagram** — they are **meta-game navigation handled by the ViewModel /
+composition root**, which discards the finished `SesionJuego` and constructs a new one. The only
+diagram delta is a **navigation/flow diagram** (not the State machine):
+
+```
+Auth → SeleccionNivelView
+  → [tap unlocked level N] → GameView(idNivel=N)
+    → EstadoVictoria → {Next: GameView(N+1) | Retry: GameView(N) | Menu: SeleccionNivelView}
+    → EstadoDerrota  → {Retry: GameView(N) | Menu: SeleccionNivelView}
+```
+
+Update the **startup sequence** (§9.1): the file-backed loader takes `idNivel` **from the selection**,
+not the hard-coded `Inyeccion.idNivelInicial`. The leaderboard `idNivel` (today pinned to
+`definicionNivelInicial.id` in `main.dart`) should likewise flow from the selected level.
+
+### 10.7 Gaps the ticket must close (not diagram cleanup)
+
+1. **Content:** only `level_01.json` exists. Sequential progression needs `level_02..NN` authored to
+   the §9.3 path schema, **or** an explicit policy for generator-backed levels in the catalog.
+2. **Persistence:** completion must survive restart (§10.1) — without it there is no unlock state.
+   This is the same persistence debt `proveedor_sesion_impl` and `cola_sincronizacion_local` note.
+3. **Backend reconciliation (deferred):** if completion/stars are later read from the server rather
+   than local storage, `ConsultaProgresoLocal` grows an HTTP adapter and this folds into the §9.4
+   contract item (a `GET /progress` / completed-levels projection). Out of scope while offline-local
+   is the source of truth.

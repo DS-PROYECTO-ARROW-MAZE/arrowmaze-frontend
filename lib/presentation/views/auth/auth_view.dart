@@ -10,10 +10,24 @@ import '../../viewmodels/auth_view_model.dart';
 /// It owns no auth logic: it observes its [AuthViewModel] (a `ChangeNotifier`)
 /// and forwards field changes and button taps to the ViewModel. The design
 /// follows the Dark Mode Neón Minimalista palette via theme tokens.
+///
+/// Navigation is a View concern: once the ViewModel reports an authenticated
+/// session — or the user chooses to continue as a guest — the View replaces
+/// itself with the screen built by [construirInicio] (the Level Selection menu).
+/// The builder is injected by the composition root so this View never references
+/// the DI graph.
 class AuthView extends StatefulWidget {
-  const AuthView({required this.viewModel, super.key});
+  const AuthView({
+    required this.viewModel,
+    required this.construirInicio,
+    super.key,
+  });
 
   final AuthViewModel viewModel;
+
+  /// Builds the first screen shown once the user is authenticated or continues
+  /// as a guest (injected by the composition root).
+  final WidgetBuilder construirInicio;
 
   @override
   State<AuthView> createState() => _AuthViewState();
@@ -21,6 +35,10 @@ class AuthView extends StatefulWidget {
 
 class _AuthViewState extends State<AuthView> {
   final _formKey = GlobalKey<FormState>();
+
+  /// Guards against navigating more than once (the ViewModel may notify several
+  /// times after the session becomes valid).
+  bool _navego = false;
 
   @override
   void initState() {
@@ -36,8 +54,21 @@ class _AuthViewState extends State<AuthView> {
   }
 
   void _alCambiarEstado() {
-    // The ViewModel notifies on every state change; the ListenableBuilder
-    // rebuilds the form so there is nothing to do here.
+    // The form rebuilds via ListenableBuilder; the only extra reaction is to
+    // leave the auth screen once a session exists (fresh login or restored).
+    if (widget.viewModel.estado.autenticado) {
+      _irAlJuego();
+    }
+  }
+
+  /// Replaces the auth screen with the Level Selection menu. Used both on
+  /// successful authentication and for the guest bypass.
+  void _irAlJuego() {
+    if (_navego || !mounted) return;
+    _navego = true;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: widget.construirInicio),
+    );
   }
 
   @override
@@ -178,6 +209,13 @@ class _AuthViewState extends State<AuthView> {
                               ? 'Already have an account? Sign In'
                               : 'Don\'t have an account? Create one',
                         ),
+                      ),
+                      const SizedBox(height: AppSpacing.sm),
+
+                      // Guest bypass: skip auth and go straight to the board.
+                      TextButton(
+                        onPressed: estado.cargando ? null : _irAlJuego,
+                        child: const Text('Continue as guest'),
                       ),
                     ],
                   );

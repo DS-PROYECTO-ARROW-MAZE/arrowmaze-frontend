@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-20 (T-012 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-013 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09), refactoring, coverage |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13), refactoring, coverage, cross-platform/web fixes, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10), architectural analysis, documentation |
 
@@ -697,18 +697,120 @@ eloj:
   leaderboard read be lifted into the generic contract without a bespoke param
   object.
 
+### T-013 — Ticket 13 · Meta-Game Loop & Progression (Level Select + locks + post-game nav)
+
+- **Task / problem addressed:** An end-to-end UX review found the meta-game loop
+  broken in three ways: (1) no Level Selection screen (Auth jumped straight to a
+  board), (2) no progression locks / completion persistence, (3) the Victory and
+  Defeat overlays were dead ends with no actionable buttons. Build, as a brand-new
+  ticket (not a retrofit of the closed ticket 05), the selection UI, an unlock
+  engine with local persistence, and post-game Next/Retry/Level-Select navigation.
+  Scope captured in `.issues/13-meta-game-loop-progression.md` and
+  `DIAGRAM-RECONCILIATION.md §10`. A precondition was reconciling the docs to remove
+  phantom interfaces (`ILevelRepository`, `IProgressRepository.getCompletedLevels()`)
+  that were named in `CLAUDE.md`/`AGENTS.md` but never existed in code.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim, kickoff) "Yes, please reconcile the
+  documentation in `CLAUDE.md` and `AGENTS.md` first to remove those phantom
+  references so we have a clean slate. … we are formalizing this as a brand new
+  ticket: **Ticket 13 - Meta-Game Loop & Progression**. Please proceed with
+  implementing your 5-point plan strictly under the scope of this new Ticket 13.
+  For the local persistence (Point 1), please use the `shared_preferences` package
+  … Let me know when the first slice of this new ticket is ready to test!" Then
+  (verbatim, slice 2) "go with slice 2 and please write the issue in this folder
+  …\.issues". The 5-point plan referenced was the one previously drafted into
+  `DIAGRAM-RECONCILIATION.md §10` (progression read port + persistence, level
+  catalog port, unlock-rule use case, Level Selection UI, post-game buttons).
+- **Result obtained:** Delivered in two slices.
+  **Docs reconciliation:** rewrote the "Interfaces del dominio" sections of
+  `CLAUDE.md` and `AGENTS.md` to list the ports that actually exist and point the
+  progression read at Ticket 13.
+  **Slice 1 — progression engine (no UI):**
+  `lib/domain/niveles/dificultad.dart` (`Dificultad` enum + `desde()` JSON mapper),
+  `resumen_nivel.dart` (`ResumenNivel` value object),
+  `regla_desbloqueo.dart` (`ReglaDesbloqueo` Strategy + `ReglaDesbloqueoSecuencial`
+  — level 1 always open, level N unlocks when N−1 completed);
+  `lib/application/ports/catalogo_niveles.dart` (`CatalogoNiveles`) +
+  `consulta_progreso_local.dart` (`ConsultaProgresoLocal` read port,
+  `nivelesCompletados`/`mejorEstrellas`/`registrarCompletado`);
+  `lib/application/use_cases/nivel_con_estado.dart` + `obtener_niveles_use_case.dart`
+  (joins catalog + progress + rule);
+  `lib/infrastructure/progreso/progreso_local_persistente.dart`
+  (**`shared_preferences`** store — best-stars per level under
+  `arrowmaze.progreso.estrellas.<id>`; completed-set derived from keys);
+  `lib/infrastructure/niveles/catalogo_niveles_archivo.dart` (`AssetManifest`
+  enumeration of `assets/levels/level_*.json`); `di/inyeccion.dart` wiring;
+  `pubspec.yaml` (`shared_preferences`).
+  **Slice 2 — UI + navigation + content:**
+  `lib/presentation/viewmodels/seleccion_niveles_view_state.dart`
+  (`NivelResumenUI` + `SeleccionNivelesViewState`) +
+  `seleccion_niveles_view_model.dart` (calls `ObtenerNivelesUseCase`);
+  `lib/presentation/views/seleccion/seleccion_niveles_view.dart` (level cards with
+  lock/star badges, locked cards dimmed & non-tappable);
+  `lib/presentation/viewmodels/juego_view_model.dart` (records completion on
+  victory via the injected `ConsultaProgresoLocal` + `idNivel`);
+  `lib/presentation/views/game/game_view.dart` (Next/Retry/Level-Select buttons on
+  both end-of-game overlays via a shared `_AccionesFinDeJuego`, injected callbacks);
+  `lib/presentation/views/auth/auth_view.dart` (post-auth `construirInicio` →
+  Level Select); `lib/main.dart` (Auth → Select → `_JuegoHost` `FutureBuilder`
+  loading shell with per-level leaderboard and Next/Retry/Menu routing);
+  `assets/levels/level_02.json` + `level_03.json`;
+  `.issues/13-meta-game-loop-progression.md`. New tests (14):
+  `test/domain/regla_desbloqueo_test.dart` (4),
+  `test/application/obtener_niveles_use_case_test.dart` (3),
+  `test/infrastructure/progreso_local_persistente_test.dart` (5,
+  `SharedPreferences.setMockInitialValues`),
+  `test/presentation/seleccion_niveles_viewmodel_test.dart` (2). Verified:
+  `flutter test` 186/186 green (172 prior + 14 new); `flutter analyze` 0 errors /
+  0 warnings (info-level `prefer_initializing_formals`/`unnecessary_underscores`
+  only, matching existing style); `flutter build web` succeeds; Ticket 05's
+  `SeleccionNivelViewModel` left untouched; zero `package:flutter` imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** Review plus several deliberate design choices
+  on top of the AI's first drafts. (a) The AI's first `NivelConEstado` modelled
+  `completado` as a getter with a dead `_completadoSinEstrellas` helper (a
+  zero-star clear would have read as *not* completed) — self-caught while writing
+  and replaced with an explicit `completado` field set by the use case from the
+  completed-set, before any test run. (b) Diverged from the
+  `DIAGRAM-RECONCILIATION.md §10.1` sketch: `registrarCompletado({idNivel,
+  estrellas})` takes the two fields it needs rather than a `RunCompletado`, keeping
+  progression decoupled from the offline-sync value object — documented in the issue.
+  (c) Created a **new** `SeleccionNivelesViewModel` rather than mutating ticket 05's
+  `SeleccionNivelViewModel`, honouring the "no retrofit of closed tickets" rule.
+  (d) Renamed the post-auth builder `AuthView.construirJuego` → `construirInicio`
+  for clarity now that it opens the menu, not a board.
+- **Lessons learned / limitations identified:** (1) **Runtime gotcha (manual
+  testing):** after a guest login the screen showed "Could not load levels". This
+  was not a code or backend fault — the catalog reads bundled assets and progress
+  reads local storage — but a stale `flutter run` session: the newly added
+  `shared_preferences` web plugin and the new `level_02/03.json` assets are not
+  picked up by hot reload/restart, only a cold `flutter run`. A reminder that
+  plugin/asset additions need a full restart, especially on web. (2) The
+  `AssetManifest`-based catalog adapter is hard to unit-test (needs the asset
+  bundle), so coverage was placed on `ObtenerNivelesUseCase` via fake ports and on
+  the persistence adapter via the `shared_preferences` mock; the adapter itself is
+  exercised at runtime. (3) Content debt: `level_02/03.json` reuse level 01's
+  proven-solvable interlocking layout so the catalog has sequential content now —
+  authoring genuinely distinct boards that pass the solvability gate is follow-up
+  work. (4) Per-level scoring still comes from `Inyeccion.definicionNivelInicial`
+  (the offline default per §9.4), not from the level files yet. (5) Keeping the
+  unlock policy a Strategy and the lock computation in the use case (never the
+  View), with Retry/Next implemented as fresh-session navigation rather than new
+  GoF session states, kept the existing State machine untouched.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 06, 07, 08, 09, 10, 11, and 12 were AI-generated then human-reviewed;
-  the theme tokens under `lib/core/theme` were pre-existing (not AI-authored in
-  these tasks). Every ticket followed the same pattern (full AI authoring + human
-  review), so the share holds at ~90%. Rough judgment over the files added across
-  the slices (172 passing tests, all source in `lib/domain/`, `lib/application/`,
-  `lib/infrastructure/`, `lib/presentation/`, `lib/di/`).
+  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, and 13 were AI-generated then
+  human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
+  AI-authored in these tasks). Every ticket followed the same pattern (full AI
+  authoring + human review), so the share holds at ~90%. Rough judgment over the
+  files added across the slices (186 passing tests, all source in `lib/domain/`,
+  `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
+  `http` and `shared_preferences` added during tickets' web/persistence work).
 
 ### Incorrect or suboptimal AI results
 
@@ -817,6 +919,24 @@ eloj:
   - **How it was detected:** `flutter analyze` (3 info-level lints).
   - **How it was corrected:** Renamed the locals to `construirStack`, `importsDe`,
     and `codigoSinComentarios`.
+- **Case:** First draft of `NivelConEstado` exposed `completado` as a getter
+  (`estrellas > 0 || _completadoSinEstrellas`, the latter hard-coded to `false`),
+  so a level cleared with **zero stars** would have read as not completed and
+  failed to unlock the next level (ticket 13).
+  - **How it was detected:** Self-review while writing the model, before any test
+    run — the dead helper was an obvious smell.
+  - **How it was corrected:** Replaced it with an explicit `completado` field set by
+    `ObtenerNivelesUseCase` from the completed-set; a dedicated use-case test
+    (`should_mark_completed_even_when_cleared_with_zero_stars`) and persistence test
+    (`should_mark_completed_when_cleared_with_zero_stars`) lock the behaviour in.
+- **Case:** During manual web testing, "Could not load levels" appeared after a
+  guest login (ticket 13).
+  - **How it was detected:** User testing in Chrome (`flutter run -d chrome`).
+  - **How it was corrected:** Diagnosed as a **stale dev session**, not a code or
+    backend defect — the screen reads only bundled assets + local storage, but the
+    newly added `shared_preferences` web plugin and `level_02/03.json` assets aren't
+    registered by hot reload/restart. Resolved by a cold `flutter run`; no code
+    change required. (Noted as a deployment limitation rather than an AI defect.)
 
 ### Team reflection
 
@@ -830,9 +950,12 @@ eloj:
   read-only) was similarly fast — the read port pattern was already established from
   T-009 and the Pact consumer test followed the same shape-verification template.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (172/172 tests, 0 errors, 0 warnings from
-  new code). The few AI mistakes were caught by `flutter test` and manual review —
-  no defect reached production code. Architecture violations (ViewModel importing
+  kept output consistent and well-tested (186/186 tests, 0 errors, 0 warnings from
+  new code, web build green). The few AI mistakes were caught by `flutter test` and
+  manual review — no defect reached production code. On ticket 13 the trickiest
+  correctness slip (a zero-star clear that would not have unlocked the next level)
+  was self-caught at design time and pinned with dedicated tests before it could
+  become a latent progression bug. Architecture violations (ViewModel importing
   infra DTO) were caught and fixed during the same session. On ticket 09 the
   trickiest correctness concern (the incremental board re-link for adjacent arrows)
   was surfaced by design-time reasoning and pinned with a dedicated test before it
@@ -851,4 +974,8 @@ eloj:
   is an effective way to re-synchronise context: it forces the AI to produce a
   structured recap that surfaces pending work, blockers, and next steps, which the
   team can then confirm or redirect before spending effort on the wrong task.
+  (5) Tests and `analyze` catch logic and architecture faults, but **manual
+  runtime testing still matters**: ticket 13's "Could not load levels" was a
+  green-suite, clean-build session that only surfaced in the browser — a stale dev
+  session needing a cold restart after new plugins/assets, not a code defect.
 

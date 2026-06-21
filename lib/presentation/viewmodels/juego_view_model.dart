@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 
+import '../../application/ports/consulta_progreso_local.dart';
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
 import '../../application/use_cases/deshacer_movimiento_use_case.dart';
@@ -47,9 +48,13 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     required MoverFlechaUseCase moverFlecha,
     required this._definicionNivel,
     required this._reloj,
+    int idNivel = 1,
+    ConsultaProgresoLocal? progreso,
     CalcularPuntuacionUseCase? calcularPuntuacion,
     DeshacerMovimientoUseCase? deshacerMovimiento,
-  })  : _moverFlecha = moverFlecha,
+  })  : _idNivel = idNivel,
+        _progreso = progreso,
+        _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
         _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase(),
         // Defaults to an undo wired onto the move use case's own session,
@@ -74,6 +79,14 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   final SesionJuego _sesion;
   final DefinicionNivel _definicionNivel;
   final CalcularPuntuacionUseCase _calcularPuntuacion;
+
+  /// The id of the level being played — used to record completion against the
+  /// right level for progression/unlocks (Ticket 13).
+  final int _idNivel;
+
+  /// Optional local progression store; when present, a victory records the
+  /// level as completed with its star count so the next level unlocks.
+  final ConsultaProgresoLocal? _progreso;
 
   final Reloj _reloj;
 
@@ -140,6 +153,12 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       victoriaState = VictoriaViewState(
         movimientos: resultado.movimientos,
         puntaje: puntuacion.puntaje,
+        estrellas: puntuacion.estrellas,
+      );
+      // Record the clear so the next level unlocks (Ticket 13). Fire-and-forget:
+      // the local store persists in the background; the UI does not wait on it.
+      _progreso?.registrarCompletado(
+        idNivel: _idNivel,
         estrellas: puntuacion.estrellas,
       );
     }
