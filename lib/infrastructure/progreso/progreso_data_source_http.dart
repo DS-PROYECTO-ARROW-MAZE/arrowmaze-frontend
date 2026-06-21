@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../../application/ports/i_repositorio_progreso.dart';
 import '../../core/config/api_config.dart';
@@ -10,18 +11,19 @@ import '../dtos/sync_run_dto.dart';
 
 /// HTTP implementation of [IRepositorioProgreso].
 ///
-/// Sends a single POST with the full batch of queued runs.
+/// Sends a single POST with the full batch of queued runs using `package:http`
+/// (cross-platform, web included).
 /// Requires a valid session token from [ProveedorSesion].
 class ProgresoDataSourceHttp implements IRepositorioProgreso {
   /// Creates the HTTP progress data source.
   ProgresoDataSourceHttp({
     required ProveedorSesion proveedorSesion,
-    HttpClient? client,
+    http.Client? client,
   })  : _proveedorSesion = proveedorSesion,
-        _client = client ?? HttpClient();
+        _client = client ?? http.Client();
 
   final ProveedorSesion _proveedorSesion;
-  final HttpClient _client;
+  final http.Client _client;
 
   @override
   Future<bool> guardarLote(List<RunCompletado> runs) async {
@@ -43,13 +45,14 @@ class ProgresoDataSourceHttp implements IRepositorioProgreso {
     final body = jsonEncode(syncDto.toJson());
 
     try {
-      final request = await _client.postUrl(
+      final response = await _client.post(
         Uri.parse('${ApiConfig.baseUrl}${ApiConfig.syncPath}'),
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': 'Bearer $token',
+        },
+        body: body,
       );
-      request.headers.contentType = ContentType.json;
-      request.headers.set('Authorization', 'Bearer $token');
-      request.write(body);
-      final response = await request.close();
 
       return response.statusCode == 200 || response.statusCode == 201;
     } catch (_) {
