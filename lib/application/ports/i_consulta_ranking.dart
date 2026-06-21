@@ -5,6 +5,6 @@ import '../../domain/ranking/ranking_dto.dart';
 /// The client only **reads** top scores — no write method exists here.
 /// Writes happen server-side via the sync pipeline (ticket 10).
 abstract interface class IConsultaRanking {
-  /// Returns the top [limite] scores for level [idNivel].
-  Future<RankingDto> obtenerTop(int idNivel, int limite);
+  /// Returns the top [limite] scores for level [nivelId] (server UUID).
+  Future<RankingDto> obtenerTop(String nivelId, int limite);
 }

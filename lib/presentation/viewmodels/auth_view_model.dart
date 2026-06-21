@@ -102,7 +102,6 @@ class AuthViewModel extends ChangeNotifier {
     final resultado = await useCase.ejecutar(
       email: _estado.email,
       password: _estado.password,
-      username: _estado.username,
     );
     return switch (resultado) {
       RegistroExitoso() => const AuthResultado(exitoso: true),

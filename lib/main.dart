@@ -113,7 +113,10 @@ class _JuegoHostState extends State<_JuegoHost> {
   /// Builds the leaderboard for *this* level and starts its load.
   Widget _construirRanking(BuildContext context) {
     final viewModel = Inyeccion.construirRankingViewModel();
-    viewModel.cargarRanking(idNivel: widget.idNivel, limite: 10);
+    // Local levels are int-keyed (bundled assets); the leaderboard API keys by
+    // the backend level UUID. Until a level is created server-side, the id is
+    // forwarded as a string at this boundary.
+    viewModel.cargarRanking(nivelId: '${widget.idNivel}', limite: 10);
     return RankingView(viewModel: viewModel);
   }
 

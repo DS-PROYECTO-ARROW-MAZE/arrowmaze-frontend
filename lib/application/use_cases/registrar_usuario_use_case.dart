@@ -4,9 +4,10 @@ import 'resultado_registro.dart';
 
 /// Registers a new user account.
 ///
-/// On success it stores the session token via the injected [ProveedorSesion].
-/// On a duplicate email it surfaces a clean [RegistroEmailDuplicado] — never an
-/// unhandled exception.
+/// The backend's `POST /auth/register` returns the created user but no token,
+/// so this use case registers and then logs in to obtain and persist the
+/// session token via the injected [ProveedorSesion]. On a duplicate email it
+/// surfaces a clean [RegistroEmailDuplicado] — never an unhandled exception.
 class RegistrarUsuarioUseCase {
   const RegistrarUsuarioUseCase({
     required this.fuenteAutenticacion,
@@ -22,13 +23,12 @@ class RegistrarUsuarioUseCase {
   Future<ResultadoRegistro> ejecutar({
     required String email,
     required String password,
-    required String username,
   }) async {
     try {
-      final token = await fuenteAutenticacion.registrar(
+      await fuenteAutenticacion.registrar(email: email, password: password);
+      final token = await fuenteAutenticacion.iniciarSesion(
         email: email,
         password: password,
-        username: username,
       );
       await proveedorSesion.guardarToken(token);
       return const RegistroExitoso();

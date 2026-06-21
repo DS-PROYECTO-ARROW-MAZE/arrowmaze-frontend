@@ -16,10 +16,13 @@ import '../application/ports/i_medidor_metricas.dart';
 import '../application/ports/i_registro.dart';
 import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
+import '../application/ports/fuente_niveles.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
+import '../application/use_cases/crear_nivel_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/obtener_niveles_use_case.dart';
+import '../application/use_cases/obtener_perfil_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
 import '../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
@@ -33,7 +36,9 @@ import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
+import '../infrastructure/network/cliente_http_autenticado.dart';
 import '../infrastructure/niveles/catalogo_niveles_archivo.dart';
+import '../infrastructure/niveles/niveles_data_source_http.dart';
 import '../infrastructure/observabilidad/medidor_metricas_simple.dart';
 import '../infrastructure/observabilidad/registro_consola.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
@@ -41,7 +46,7 @@ import '../infrastructure/progreso/progreso_local_persistente.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
-import '../infrastructure/sesion/proveedor_sesion_impl.dart';
+import '../infrastructure/sesion/proveedor_sesion_persistente.dart';
 import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/ranking_view_model.dart';
@@ -203,14 +208,25 @@ abstract final class Inyeccion {
   // ---------------------------------------------------------------------------
 
   /// The single injected [ProveedorSesion] instance — wired once at the
-  /// composition root, never a static/global accessor (ADR-0002).
+  /// composition root, never a static/global accessor (ADR-0002). Persisted via
+  /// `shared_preferences` so the JWT survives restarts (Issue 14, AC3).
   static ProveedorSesion get proveedorSesion => _proveedorSesion;
-  static final ProveedorSesionImpl _proveedorSesion = ProveedorSesionImpl();
+  static final ProveedorSesionPersistente _proveedorSesion =
+      ProveedorSesionPersistente();
 
-  /// The single injected [FuenteAutenticacion] instance backed by HTTP.
+  /// The single authenticated HTTP client — the Bearer interceptor (Issue 14,
+  /// AC3). Every protected data source shares this so the token is attached
+  /// transparently and exactly once, in infrastructure.
+  static ClienteHttpAutenticado get clienteHttp => _clienteHttp;
+  static final ClienteHttpAutenticado _clienteHttp =
+      ClienteHttpAutenticado(proveedorSesion: _proveedorSesion);
+
+  /// The single injected [FuenteAutenticacion] instance backed by HTTP. It uses
+  /// the authenticated client so `/auth/me` is automatically authorized while
+  /// the public register/login routes simply carry no token.
   static FuenteAutenticacion get fuenteAutenticacion => _fuenteAutenticacion;
   static final FuenteAutenticacionHttp _fuenteAutenticacion =
-      FuenteAutenticacionHttp();
+      FuenteAutenticacionHttp(client: _clienteHttp);
 
   static RegistrarUsuarioUseCase get registrarUsuarioUseCase =>
       RegistrarUsuarioUseCase(
@@ -223,6 +239,21 @@ abstract final class Inyeccion {
         fuenteAutenticacion: fuenteAutenticacion,
         proveedorSesion: proveedorSesion,
       );
+
+  /// Use case reading the authenticated principal (`GET /auth/me`).
+  static ObtenerPerfilUseCase get obtenerPerfilUseCase =>
+      ObtenerPerfilUseCase(fuenteAutenticacion: fuenteAutenticacion);
+
+  // ---------------------------------------------------------------------------
+  // Level authoring (Issue 14 — POST /levels, protected)
+  // ---------------------------------------------------------------------------
+
+  static FuenteNiveles get fuenteNiveles => _fuenteNiveles;
+  static final NivelesDataSourceHttp _fuenteNiveles =
+      NivelesDataSourceHttp(client: _clienteHttp);
+
+  static CrearNivelUseCase get crearNivelUseCase =>
+      CrearNivelUseCase(fuenteNiveles: fuenteNiveles);
 
   /// Builds the [AuthViewModel] with all dependencies injected.
   static AuthViewModel construirAuthViewModel() {
@@ -243,7 +274,7 @@ abstract final class Inyeccion {
 
   static IRepositorioProgreso get repositorioProgreso => _repositorioProgreso;
   static final ProgresoDataSourceHttp _repositorioProgreso =
-      ProgresoDataSourceHttp(proveedorSesion: proveedorSesion);
+      ProgresoDataSourceHttp(client: _clienteHttp);
 
   static SincronizarProgresoUseCase get sincronizarProgresoUseCase =>
       SincronizarProgresoUseCase(
@@ -263,7 +294,7 @@ abstract final class Inyeccion {
 
   static IConsultaRanking get consultaRanking => _consultaRanking;
   static final RankingDataSourceHttp _consultaRanking =
-      RankingDataSourceHttp(proveedorSesion: proveedorSesion);
+      RankingDataSourceHttp(client: _clienteHttp);
 
   static ConsultarRankingUseCase get consultarRankingUseCase =>
       ConsultarRankingUseCase(consulta: consultaRanking);
@@ -297,11 +328,11 @@ abstract final class Inyeccion {
   /// authenticated leaderboard fetch by reading the token through the injected
   /// [proveedorSesion], never a static accessor (AC3). This getter is the
   /// canonical place to assemble such stacks for any chosen use case.
-  static ICasoDeUso<({int idNivel, int limite}), RankingDto>
+  static ICasoDeUso<({String nivelId, int limite}), RankingDto>
       get consultarRankingDecorado {
-    final base = CasoDeUsoAccion<({int idNivel, int limite}), RankingDto>(
+    final base = CasoDeUsoAccion<({String nivelId, int limite}), RankingDto>(
       (entrada) => consultarRankingUseCase.obtenerTop(
-        idNivel: entrada.idNivel,
+        nivelId: entrada.nivelId,
         limite: entrada.limite,
       ),
     );

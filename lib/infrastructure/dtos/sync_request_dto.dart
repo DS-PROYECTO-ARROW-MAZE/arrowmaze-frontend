@@ -1,21 +1,21 @@
-import 'sync_run_dto.dart';
+import 'progreso_sync_dto.dart';
 
-/// DTO for the batch sync request envelope (Pact consumer contract, AC3).
+/// DTO for the `POST /progress/sync` request envelope.
 ///
 /// Expected shape:
 /// ```json
-/// { "runs": [ { "nivelId", "movimientos", "segundosRestantes",
-///               "puntaje", "estrellas", "completadoEn" } ] }
+/// { "progresos": [ { nivelId, estrellas, movimientos, tiempoSegundos,
+///                    completadoEn } ] }
 /// ```
 class SyncRequestDto {
   /// Creates a sync request DTO.
-  const SyncRequestDto({required this.runs});
+  const SyncRequestDto({required this.progresos});
 
   /// The list of completed runs to upload as a batch.
-  final List<SyncRunDto> runs;
+  final List<ProgresoSyncDto> progresos;
 
-  /// Serializes to the Pact contract JSON shape.
+  /// Serializes to the contract JSON shape.
   Map<String, dynamic> toJson() => {
-        'runs': runs.map((r) => r.toJson()).toList(),
+        'progresos': progresos.map((p) => p.toJson()).toList(),
       };
 }

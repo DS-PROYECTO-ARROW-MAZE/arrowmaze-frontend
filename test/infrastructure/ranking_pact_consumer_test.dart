@@ -2,58 +2,51 @@ import 'package:arrowmaze/infrastructure/dtos/fila_ranking_dto.dart';
 import 'package:arrowmaze/infrastructure/dtos/ranking_response_dto.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Ticket 11 — RED phase: Pact consumer contract test for ranking (AC3).
+/// Issue 14 — consumer contract test for the leaderboard response (AC2/AC3).
 ///
-/// Verifies the DTO shape the client expects from the ranking response endpoint.
-/// If the backend's provider contract drifts, CI fails on shape mismatch.
+/// Verifies the DTO shape the client expects from `GET /leaderboard`:
+/// `{ "entradas": [ { puntaje, estrellas, movimientos, segundosRestantes,
+/// completadoEn, email } ] }`.
 void main() {
-  group('Pact consumer contract — ranking response DTO shape', () {
+  group('Leaderboard DTO shape (Issue 14)', () {
     test(
       'should_match_ranking_dto_contract',
       () {
-        // Arrange — build a ranking response DTO matching the expected contract.
-        final filaDto = FilaRankingDto(
-          posicion: 1,
-          nombreJugador: 'Alice',
-          puntaje: 1500,
+        // Arrange
+        final entrada = FilaRankingDto(
+          puntaje: 880,
           estrellas: 3,
+          movimientos: 12,
+          segundosRestantes: null,
+          completadoEn: '2026-06-21T20:30:00.000Z',
+          email: 'a@b.com',
         );
-        final responseDto = RankingResponseDto(
-          idNivel: 1,
-          limite: 5,
-          filas: [filaDto],
-        );
+        final responseDto = RankingResponseDto(entradas: [entrada]);
 
-        // Act — serialize to JSON (the shape the provider will verify).
+        // Act
         final json = responseDto.toJson();
 
-        // Assert — top-level contract: { idNivel, limite, filas: [...] }
-        expect(json['idNivel'], 1);
-        expect(json['limite'], 5);
-        expect(json.containsKey('filas'), isTrue);
+        // Assert — envelope key is `entradas`.
+        expect(json.containsKey('entradas'), isTrue);
+        final entradas = json['entradas'] as List<dynamic>;
+        expect(entradas, hasLength(1));
 
-        final filas = json['filas'] as List<dynamic>;
-        expect(filas, hasLength(1));
-
-        final filaJson = filas.first as Map<String, dynamic>;
-        expect(filaJson['posicion'], 1);
-        expect(filaJson['nombreJugador'], 'Alice');
-        expect(filaJson['puntaje'], 1500);
+        final filaJson = entradas.first as Map<String, dynamic>;
+        expect(filaJson['puntaje'], 880);
         expect(filaJson['estrellas'], 3);
+        expect(filaJson['movimientos'], 12);
+        expect(filaJson['segundosRestantes'], isNull);
+        expect(filaJson['completadoEn'], '2026-06-21T20:30:00.000Z');
+        expect(filaJson['email'], 'a@b.com');
 
         // Exact key contract per row.
         expect(filaJson.keys.toSet(), {
-          'posicion',
-          'nombreJugador',
           'puntaje',
           'estrellas',
-        });
-
-        // Exact top-level key contract.
-        expect(json.keys.toSet(), {
-          'idNivel',
-          'limite',
-          'filas',
+          'movimientos',
+          'segundosRestantes',
+          'completadoEn',
+          'email',
         });
       },
     );
@@ -61,19 +54,14 @@ void main() {
     test(
       'should_produce_valid_empty_ranking_contract',
       () {
-        // Arrange — an empty ranking (no scores for this level yet).
-        final responseDto = RankingResponseDto(
-          idNivel: 99,
-          limite: 10,
-          filas: const [],
-        );
+        // Arrange
+        final responseDto = RankingResponseDto(entradas: const []);
 
         // Act
         final json = responseDto.toJson();
 
         // Assert
-        expect(json['filas'], isEmpty);
-        expect(json['idNivel'], 99);
+        expect(json['entradas'], isEmpty);
       },
     );
   });

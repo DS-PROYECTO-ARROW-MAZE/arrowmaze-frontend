@@ -5,43 +5,40 @@ import 'package:arrowmaze/presentation/viewmodels/ranking_view_model.dart';
 import 'package:arrowmaze/presentation/viewmodels/ranking_view_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Ticket 11 — RED phase: RankingViewModel (AC1, presentation).
-///
-/// Tests that the ViewModel correctly exposes ranking rows in its ViewState.
+/// Issue 14 — RankingViewModel (String nivelId, `entradas`).
 void main() {
   group('RankingViewModel', () {
     test(
       'should_expose_ranking_rows_in_viewstate_when_loaded',
       () async {
-        // Arrange — a fake read port returning 2 rows.
+        // Arrange
         final port = _ConsultaRankingFake();
         final viewModel = RankingViewModel(consulta: port);
 
-        // Act — load ranking for level 1, limit 2.
-        await viewModel.cargarRanking(idNivel: 1, limite: 2);
+        // Act
+        await viewModel.cargarRanking(nivelId: 'uuid-1', limite: 2);
 
-        // Assert — ViewState has the rows.
+        // Assert
         expect(viewModel.estado.status, RankingStatus.cargado);
-        expect(viewModel.estado.filas, hasLength(2));
-        expect(viewModel.estado.filas.first.posicion, 1);
-        expect(viewModel.estado.filas.first.puntaje, 900);
-        expect(viewModel.estado.filas.last.posicion, 2);
+        expect(viewModel.estado.entradas, hasLength(2));
+        expect(viewModel.estado.entradas.first.puntaje, 900);
+        expect(viewModel.estado.entradas.first.email, 'alice@b.com');
       },
     );
 
     test(
       'should_set_error_status_when_port_fails',
       () async {
-        // Arrange — a port that throws.
+        // Arrange
         final port = _ConsultaRankingFakeError();
         final viewModel = RankingViewModel(consulta: port);
 
         // Act
-        await viewModel.cargarRanking(idNivel: 1, limite: 5);
+        await viewModel.cargarRanking(nivelId: 'uuid-1', limite: 5);
 
         // Assert
         expect(viewModel.estado.status, RankingStatus.error);
-        expect(viewModel.estado.filas, isEmpty);
+        expect(viewModel.estado.entradas, isEmpty);
       },
     );
   });
@@ -49,11 +46,25 @@ void main() {
 
 class _ConsultaRankingFake implements IConsultaRanking {
   @override
-  Future<RankingDto> obtenerTop(int idNivel, int limite) async {
+  Future<RankingDto> obtenerTop(String nivelId, int limite) async {
     return RankingDto(
-      filas: [
-        FilaRanking(posicion: 1, nombreJugador: 'Alice', puntaje: 900, estrellas: 3),
-        FilaRanking(posicion: 2, nombreJugador: 'Bob', puntaje: 700, estrellas: 2),
+      entradas: [
+        FilaRanking(
+          email: 'alice@b.com',
+          puntaje: 900,
+          estrellas: 3,
+          movimientos: 12,
+          segundosRestantes: null,
+          completadoEn: DateTime.utc(2026, 6, 21),
+        ),
+        FilaRanking(
+          email: 'bob@b.com',
+          puntaje: 700,
+          estrellas: 2,
+          movimientos: 18,
+          segundosRestantes: 5,
+          completadoEn: DateTime.utc(2026, 6, 21),
+        ),
       ],
     );
   }
@@ -61,7 +72,7 @@ class _ConsultaRankingFake implements IConsultaRanking {
 
 class _ConsultaRankingFakeError implements IConsultaRanking {
   @override
-  Future<RankingDto> obtenerTop(int idNivel, int limite) async {
+  Future<RankingDto> obtenerTop(String nivelId, int limite) async {
     throw Exception('Network error');
   }
 }

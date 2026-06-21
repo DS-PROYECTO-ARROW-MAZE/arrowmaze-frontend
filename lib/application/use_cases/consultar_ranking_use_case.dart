@@ -12,8 +12,11 @@ class ConsultarRankingUseCase {
 
   final IConsultaRanking _consulta;
 
-  /// Returns the top [limite] scores for level [idNivel].
-  Future<RankingDto> obtenerTop({required int idNivel, required int limite}) {
-    return _consulta.obtenerTop(idNivel, limite);
+  /// Returns the top [limite] scores for level [nivelId].
+  Future<RankingDto> obtenerTop({
+    required String nivelId,
+    required int limite,
+  }) {
+    return _consulta.obtenerTop(nivelId, limite);
   }
 }

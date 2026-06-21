@@ -73,18 +73,20 @@ class _RankingViewState extends State<RankingView> {
                   ],
                 ),
               ),
-            RankingStatus.cargado => estado.filas.isEmpty
+            RankingStatus.cargado => estado.entradas.isEmpty
                 ? const Center(
                     child: Text('No scores yet for this level.',
                         style: AppTypography.bodyMedium),
                   )
                 : ListView.separated(
                     padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: estado.filas.length,
+                    itemCount: estado.entradas.length,
                     separatorBuilder: (_, __) =>
                         const SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (context, index) =>
-                        _RankingRow(fila: estado.filas[index]),
+                    itemBuilder: (context, index) => _RankingRow(
+                      posicion: index + 1,
+                      fila: estado.entradas[index],
+                    ),
                   ),
           };
         },
@@ -93,10 +95,12 @@ class _RankingViewState extends State<RankingView> {
   }
 }
 
-/// A single leaderboard row — rank, name, score, stars.
+/// A single leaderboard row — rank, player email, score, stars.
 class _RankingRow extends StatelessWidget {
-  const _RankingRow({required this.fila});
+  const _RankingRow({required this.posicion, required this.fila});
 
+  /// The 1-based rank derived from the entry's position in the ordered list.
+  final int posicion;
   final FilaRanking fila;
 
   @override
@@ -111,13 +115,13 @@ class _RankingRow extends StatelessWidget {
         ),
         child: Row(
           children: [
-            _RankBadge(posicion: fila.posicion),
+            _RankBadge(posicion: posicion),
             const SizedBox(width: AppSpacing.md),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(fila.nombreJugador, style: AppTypography.bodyLarge),
+                  Text(fila.email, style: AppTypography.bodyLarge),
                   const SizedBox(height: 2),
                   _StarRow(estrellas: fila.estrellas, gameTheme: gameTheme),
                 ],

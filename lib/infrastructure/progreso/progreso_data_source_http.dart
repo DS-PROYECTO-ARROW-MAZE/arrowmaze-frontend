@@ -5,52 +5,40 @@ import 'package:http/http.dart' as http;
 import '../../application/ports/i_repositorio_progreso.dart';
 import '../../core/config/api_config.dart';
 import '../../domain/progreso/run_completado.dart';
-import '../../application/ports/proveedor_sesion.dart';
+import '../dtos/progreso_sync_dto.dart';
 import '../dtos/sync_request_dto.dart';
-import '../dtos/sync_run_dto.dart';
 
-/// HTTP implementation of [IRepositorioProgreso].
+/// HTTP implementation of [IRepositorioProgreso] — `POST /progress/sync`.
 ///
 /// Sends a single POST with the full batch of queued runs using `package:http`
-/// (cross-platform, web included).
-/// Requires a valid session token from [ProveedorSesion].
+/// (cross-platform, web included). The injected [http.Client] is expected to be
+/// a `ClienteHttpAutenticado`, so the Bearer token is attached transparently.
 class ProgresoDataSourceHttp implements IRepositorioProgreso {
-  /// Creates the HTTP progress data source.
-  ProgresoDataSourceHttp({
-    required ProveedorSesion proveedorSesion,
-    http.Client? client,
-  })  : _proveedorSesion = proveedorSesion,
-        _client = client ?? http.Client();
+  /// Creates the HTTP progress data source. Tests inject a mock/authenticated
+  /// [client].
+  ProgresoDataSourceHttp({http.Client? client})
+      : _client = client ?? http.Client();
 
-  final ProveedorSesion _proveedorSesion;
   final http.Client _client;
 
   @override
   Future<bool> guardarLote(List<RunCompletado> runs) async {
-    final token = await _proveedorSesion.obtenerToken();
-    if (token == null) return false;
-
-    final runDtos = runs
-        .map((r) => SyncRunDto(
+    final progresos = runs
+        .map((r) => ProgresoSyncDto(
               nivelId: r.nivelId,
-              movimientos: r.movimientos,
-              segundosRestantes: r.segundosRestantes,
-              puntaje: r.puntaje,
               estrellas: r.estrellas,
+              movimientos: r.movimientos,
+              tiempoSegundos: r.tiempoSegundos,
               completadoEn: r.completadoEn.toUtc().toIso8601String(),
             ))
         .toList();
 
-    final syncDto = SyncRequestDto(runs: runDtos);
-    final body = jsonEncode(syncDto.toJson());
+    final body = jsonEncode(SyncRequestDto(progresos: progresos).toJson());
 
     try {
       final response = await _client.post(
         Uri.parse('${ApiConfig.baseUrl}${ApiConfig.syncPath}'),
-        headers: {
-          'Content-Type': 'application/json',
-          'Authorization': 'Bearer $token',
-        },
+        headers: const {'Content-Type': 'application/json'},
         body: body,
       );
 

@@ -30,7 +30,7 @@ void main() {
         final pendientes = await cola.obtenerPendientes();
         expect(pendientes, hasLength(1));
         expect(pendientes.first.nivelId, run.nivelId);
-        expect(pendientes.first.puntaje, run.puntaje);
+        expect(pendientes.first.estrellas, run.estrellas);
       },
     );
 
@@ -45,9 +45,9 @@ void main() {
           repositorio: repo,
         );
 
-        final run1 = _runEjemplo(nivelId: 1);
-        final run2 = _runEjemplo(nivelId: 2);
-        final run3 = _runEjemplo(nivelId: 3);
+        final run1 = _runEjemplo(nivelId: 'uuid-1');
+        final run2 = _runEjemplo(nivelId: 'uuid-2');
+        final run3 = _runEjemplo(nivelId: 'uuid-3');
         await cola.encolar(run1);
         await cola.encolar(run2);
         await cola.encolar(run3);
@@ -59,7 +59,8 @@ void main() {
         expect(resultado.exitoso, isTrue);
         expect(repo.llamadasGuardarLote, 1);
         expect(repo.ultimaLote!.length, 3);
-        expect(repo.ultimaLote!.map((r) => r.nivelId), [1, 2, 3]);
+        expect(repo.ultimaLote!.map((r) => r.nivelId),
+            ['uuid-1', 'uuid-2', 'uuid-3']);
         expect(await cola.cantidadPendientes(), 0);
       },
     );
@@ -75,8 +76,8 @@ void main() {
           repositorio: repo,
         );
 
-        await cola.encolar(_runEjemplo(nivelId: 1));
-        await cola.encolar(_runEjemplo(nivelId: 2));
+        await cola.encolar(_runEjemplo(nivelId: 'uuid-1'));
+        await cola.encolar(_runEjemplo(nivelId: 'uuid-2'));
 
         // Act
         final resultado = await useCase.sincronizar();
@@ -110,14 +111,13 @@ void main() {
   });
 }
 
-RunCompletado _runEjemplo({int nivelId = 1}) {
+RunCompletado _runEjemplo({String nivelId = 'uuid-1'}) {
   return RunCompletado(
     nivelId: nivelId,
-    movimientos: 10,
-    segundosRestantes: 30,
-    puntaje: 950,
     estrellas: 2,
-    completadoEn: DateTime(2026, 1, 1),
+    movimientos: 10,
+    tiempoSegundos: 30,
+    completadoEn: DateTime.utc(2026, 1, 1),
   );
 }
 

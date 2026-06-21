@@ -19,35 +19,35 @@ enum RankingStatus {
 class RankingViewState {
   /// Creates a ranking view state.
   const RankingViewState({
-    this.idNivel = 0,
+    this.nivelId = '',
     this.status = RankingStatus.inicial,
-    this.filas = const [],
+    this.entradas = const [],
     this.mensajeError,
   });
 
-  /// The level ID this ranking is for.
-  final int idNivel;
+  /// The level UUID this ranking is for.
+  final String nivelId;
 
   /// Current ranking lifecycle phase.
   final RankingStatus status;
 
-  /// The ordered ranking rows.
-  final List<FilaRanking> filas;
+  /// The ordered ranking entries.
+  final List<FilaRanking> entradas;
 
   /// A user-facing error message, or `null` when no error.
   final String? mensajeError;
 
   /// Produces a new state with the specified overrides.
   RankingViewState copyWith({
-    int? idNivel,
+    String? nivelId,
     RankingStatus? status,
-    List<FilaRanking>? filas,
+    List<FilaRanking>? entradas,
     String? mensajeError,
   }) {
     return RankingViewState(
-      idNivel: idNivel ?? this.idNivel,
+      nivelId: nivelId ?? this.nivelId,
       status: status ?? this.status,
-      filas: filas ?? this.filas,
+      entradas: entradas ?? this.entradas,
       mensajeError: mensajeError,
     );
   }

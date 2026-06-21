@@ -12,6 +12,14 @@ enum Dificultad {
   /// Hard level.
   dificil;
 
+  /// The token the backend API uses for this difficulty
+  /// (`FACIL`/`MEDIO`/`DIFICIL`), as expected by `POST /levels`.
+  String get apiToken => switch (this) {
+        Dificultad.facil => 'FACIL',
+        Dificultad.medio => 'MEDIO',
+        Dificultad.dificil => 'DIFICIL',
+      };
+
   /// Maps the JSON `difficulty` token (`easy`/`medium`/`hard`) to a [Dificultad].
   ///
   /// Unknown or missing tokens fall back to [Dificultad.facil] so a malformed

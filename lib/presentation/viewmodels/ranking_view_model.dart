@@ -21,28 +21,28 @@ class RankingViewModel extends ChangeNotifier {
   /// The current immutable state the View renders.
   RankingViewState get estado => _estado;
 
-  /// Loads the top [limite] scores for level [idNivel].
+  /// Loads the top [limite] scores for level [nivelId].
   Future<void> cargarRanking({
-    required int idNivel,
+    required String nivelId,
     required int limite,
   }) async {
     _estado = _estado.copyWith(
-      idNivel: idNivel,
+      nivelId: nivelId,
       status: RankingStatus.cargando,
       mensajeError: null,
     );
     notifyListeners();
 
     try {
-      final dto = await _consulta.obtenerTop(idNivel, limite);
+      final dto = await _consulta.obtenerTop(nivelId, limite);
       _estado = _estado.copyWith(
         status: RankingStatus.cargado,
-        filas: dto.filas,
+        entradas: dto.entradas,
       );
     } catch (e) {
       _estado = _estado.copyWith(
         status: RankingStatus.error,
-        filas: <FilaRanking>[],
+        entradas: <FilaRanking>[],
         mensajeError: 'Could not load leaderboard.',
       );
     }

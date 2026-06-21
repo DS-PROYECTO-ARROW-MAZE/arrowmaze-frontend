@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-013 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-014 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13), refactoring, coverage, cross-platform/web fixes, doc reconciliation |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10), architectural analysis, documentation |
 
@@ -798,17 +798,118 @@ eloj:
   View), with Retry/Next implemented as fresh-session navigation rather than new
   GoF session states, kept the existing State machine untouched.
 
+### T-014 — Issue 14 · Connect API services with the NestJS backend (real contract)
+
+- **Task / problem addressed:** The frontend's HTTP layer had been built
+  speculatively against a mock/Pact contract that diverged from the now-finished
+  NestJS backend (validated via Postman). Issue 14 required wiring the client to
+  the **real** contract for all six endpoints (`/auth/register`, `/auth/login`,
+  `/auth/me`, `/levels`, `/progress/sync`, `/leaderboard`), with a configurable
+  base URL, typed request/response payloads, a clean service layer with error
+  handling, persistent token management, and an HTTP interceptor that attaches the
+  Bearer token to protected routes (AC1–AC3). Scope captured in
+  `.issues/14-feat-frontend-connect-api-services-with-nestjs-backend.md`.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim, kickoff) "please execute this issue
+  …\.issues\14-feat-frontend-connect-api-services-with-nestjs-backend.md follow the
+  rules inside these skills …clean-architecture\SKILL.md …tdd-strict\SKILL.md". The
+  AI surfaced the contract mismatch (existing code vs. the real backend, plus an
+  `int` vs. UUID `String` level-id conflict) and asked how far to align; the team
+  chose (verbatim option) **"Full migration incl. domain"** — migrate domain types,
+  datasources, viewmodels and tests end-to-end.
+- **Result obtained:** Delivered via strict Red→Green TDD per unit.
+  **Config & cross-cutting:** `lib/core/config/api_config.dart`
+  (`baseUrl` via `String.fromEnvironment('API_BASE_URL', default
+  'http://localhost:3000')` + the six real paths);
+  `lib/infrastructure/network/cliente_http_autenticado.dart`
+  (`ClienteHttpAutenticado extends http.BaseClient` — the Bearer **interceptor**,
+  attaches `Authorization: Bearer <token>` from the injected `ProveedorSesion`,
+  skips when no token; avoids the avoid-list `*Decorator` name);
+  `lib/infrastructure/sesion/proveedor_sesion_persistente.dart`
+  (`shared_preferences`-backed token, key `arrowmaze.sesion.token`).
+  **Auth:** `domain/sesion/perfil.dart` + `usuario_registrado.dart`;
+  `application/ports/fuente_autenticacion.dart` (`registrar({email,password}) →
+  UsuarioRegistrado`, `iniciarSesion → token`, `obtenerPerfil → Perfil`);
+  `application/use_cases/registrar_usuario_use_case.dart` (register **then** login,
+  persist token) + `obtener_perfil_use_case.dart`; `infrastructure/dtos/
+  auth_request_dto.dart` + `auth_response_dto.dart` (`AuthResponseDto`,
+  `RegistroResponseDto`, `PerfilResponseDto`); `infrastructure/datasources/
+  fuente_autenticacion_http.dart` (error mapping by status — 409→duplicate,
+  401/403→bad creds, NestJS `message` string/array extraction).
+  **Levels:** `domain/niveles/{celda_nivel,definicion_nivel_remota,nivel_creado}.dart`
+  + `Dificultad.apiToken` (`FACIL/MEDIO/DIFICIL`); `application/ports/
+  fuente_niveles.dart` + `application/use_cases/crear_nivel_use_case.dart`;
+  `infrastructure/dtos/{crear_nivel_request_dto,nivel_creado_response_dto}.dart`
+  (row-major `celdas[][]` of `{x,y,tipo}`); `infrastructure/niveles/
+  niveles_data_source_http.dart`.
+  **Progress sync:** `domain/progreso/run_completado.dart` migrated to
+  `String nivelId` + `{estrellas,movimientos,tiempoSegundos,completadoEn}`;
+  new `infrastructure/dtos/progreso_sync_dto.dart` + rewritten `sync_request_dto.dart`
+  (envelope key `progresos`); deleted obsolete `sync_run_dto.dart`;
+  `infrastructure/progreso/progreso_data_source_http.dart` (client-injected).
+  **Leaderboard:** `domain/ranking/fila_ranking.dart`
+  (`{email,puntaje,estrellas,movimientos,segundosRestantes?,completadoEn}`) +
+  `ranking_dto.dart` (`entradas`); `application/ports/i_consulta_ranking.dart` +
+  `consultar_ranking_use_case.dart` (`String nivelId`); `presentation/viewmodels/
+  ranking_view_model.dart` + `ranking_view_state.dart` (`nivelId` String,
+  `entradas`); `infrastructure/dtos/{fila_ranking_dto,ranking_response_dto}.dart`;
+  `infrastructure/ranking/ranking_data_source_http.dart`
+  (`GET /leaderboard?nivelId=<uuid>&limite=`); `presentation/views/ranking/
+  ranking_view.dart` (renders `email`, 1-based rank from list index).
+  **Wiring:** `di/inyeccion.dart` (one shared `ClienteHttpAutenticado` + persistent
+  session injected into every protected data source; new levels/perfil graph;
+  decorator record type `({String nivelId, int limite})`); `main.dart`
+  (`cargarRanking(nivelId: '${widget.idNivel}', …)`); `auth_view_model.dart`
+  (drop the `username` argument). New tests (18 net): interceptor (3),
+  persistent session (3), auth HTTP datasource (5), profile use case (1),
+  create-level use case (1) + datasource (1), progress datasource (2), ranking
+  datasource (2); migrated `registrar_usuario_use_case_test`,
+  `session_es_inyectado_test`, `sincronizar_progreso_use_case_test`,
+  `progreso_pact_consumer_test`, `ranking_pact_consumer_test`,
+  `consulta_ranking_test`, `ranking_viewmodel_test`. Verified: `flutter test`
+  **204/204 green** (186 prior → +18 net new); `flutter analyze` 0 errors /
+  0 warnings (info-level `prefer_initializing_formals`/`unnecessary_underscores`
+  only, matching existing style); architecture guards still green
+  (domain framework-free, ranking port single-method, no `*Decorator`).
+- **Modifications made by the team:** Several deliberate decisions on top of the
+  first drafts. (a) **Scope** was a human call via the clarifying question — chose
+  full end-to-end migration rather than an additive parallel client. (b) The real
+  `POST /auth/register` returns the created user but **no token**; rather than break
+  the "register then you're in" UX, the team kept the auto-login behaviour by having
+  `RegistrarUsuarioUseCase` register and then log in to obtain and persist the token.
+  (c) Auth error codes are derived from **HTTP status** instead of relying on a
+  backend `code` field, since the real error envelope was unspecified. (d) Local
+  bundled levels stay **int**-keyed while the API uses **String UUID**; the two
+  spaces are bridged at a single point in `main.dart` rather than fabricating UUIDs
+  for assets — rationale recorded in the project memory. (e) The cosmetic
+  `username` form field was left in the View/VM (harmless) but is no longer sent.
+  No commit was made — changes left for review.
+- **Lessons learned / limitations identified:** (1) Speculative API code written
+  before the provider exists drifts from reality; the Pact-style shape tests caught
+  the *envelope* drift but not the semantic ones (register returns no token,
+  `int` vs UUID ids) — those needed reading the actual contract. (2) An
+  `http.BaseClient` subclass is the idiomatic Dart way to implement an interceptor
+  and keeps auth a true cross-cutting concern: data sources depend only on
+  `http.Client` and never learn a token exists. (3) `shared_preferences` gives
+  persistence but is **not** truly secure storage; `flutter_secure_storage` would be
+  the hardened choice but was avoided here to skip a new native dependency. (4) The
+  local↔backend level-id impedance (int vs UUID) is real technical debt: the
+  leaderboard/sync paths won't return meaningful data for bundled levels until a
+  create-then-track flow assigns real UUIDs. (5) `CLAUDE.md`/`AGENTS.md` port lists
+  are now slightly stale (e.g. `obtenerTop(nivelId)`, new `FuenteNiveles`) and were
+  intentionally left untouched per the "don't edit docs unless asked" rule.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, and 13 were AI-generated then
+  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, and Issue 14 were AI-generated then
   human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
   AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (186 passing tests, all source in `lib/domain/`,
+  files added across the slices (204 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
@@ -937,10 +1038,24 @@ eloj:
     newly added `shared_preferences` web plugin and `level_02/03.json` assets aren't
     registered by hot reload/restart. Resolved by a cold `flutter run`; no code
     change required. (Noted as a deployment limitation rather than an AI defect.)
+- **Case:** Migrating the `FuenteAutenticacion` port (new `registrar` signature
+  without `username`, new `obtenerPerfil` method) broke the older
+  `session_es_inyectado_test.dart`, whose fake still overrode `registrar({email,
+  password, username})` and lacked `obtenerPerfil` (ticket 14).
+  - **How it was detected:** `flutter analyze` — 3 errors (`undefined_named_parameter`,
+    `non_abstract_class_inherits_abstract_member`, `invalid_override`).
+  - **How it was corrected:** Migrated the test's fake to the new contract
+    (`registrar` returns `UsuarioRegistrado`, added `obtenerPerfil`) and updated the
+    assertion to expect the **login** token, since register now auto-logs-in.
+- **Case:** The new HTTP data-source tests cast the `MockClient` handler argument
+  with `req as http.Request`, but `MockClientHandler` already receives an
+  `http.Request` (ticket 14).
+  - **How it was detected:** `flutter analyze` — 3 `unnecessary_cast` warnings.
+  - **How it was corrected:** Dropped the redundant casts in the three test files.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all twelve tickets. The predefined
+- **Impact on productivity:** Very high across all fourteen tasks. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -949,6 +1064,10 @@ eloj:
   slice yet (~2.5 hours of iterative Red-Green-Refactor cycles). T-010 (leaderboard
   read-only) was similarly fast — the read port pattern was already established from
   T-009 and the Pact consumer test followed the same shape-verification template.
+  T-014 (real-backend API client) touched every layer at once, yet the established
+  port/datasource/DTO conventions let the AI migrate auth, levels, sync and
+  leaderboard end-to-end in one session while keeping all 204 tests green — and the
+  up-front clarifying question on migration scope prevented a wrong-sized refactor.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
   kept output consistent and well-tested (186/186 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and

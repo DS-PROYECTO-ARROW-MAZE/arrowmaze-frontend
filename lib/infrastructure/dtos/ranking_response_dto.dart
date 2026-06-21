@@ -1,39 +1,25 @@
 import 'fila_ranking_dto.dart';
 
-/// DTO for the ranking response payload (Pact consumer, AC3).
+/// DTO for the `GET /leaderboard` response payload.
 ///
-/// Shape: `{ "idNivel": int, "limite": int, "filas": [FilaRankingDto...] }`
+/// Shape: `{ "entradas": [FilaRankingDto...] }`.
 class RankingResponseDto {
   /// Creates a ranking response DTO.
-  const RankingResponseDto({
-    required this.idNivel,
-    required this.limite,
-    required this.filas,
-  });
+  const RankingResponseDto({required this.entradas});
 
-  /// The level this ranking belongs to.
-  final int idNivel;
+  /// The ordered ranking entries.
+  final List<FilaRankingDto> entradas;
 
-  /// The limit used in the request.
-  final int limite;
-
-  /// The ordered ranking rows.
-  final List<FilaRankingDto> filas;
-
-  /// Serializes to Pact contract JSON shape.
+  /// Serializes to the contract JSON shape.
   Map<String, dynamic> toJson() => {
-        'idNivel': idNivel,
-        'limite': limite,
-        'filas': filas.map((f) => f.toJson()).toList(),
+        'entradas': entradas.map((e) => e.toJson()).toList(),
       };
 
   /// Deserializes from the backend JSON response.
   factory RankingResponseDto.fromJson(Map<String, dynamic> json) {
     return RankingResponseDto(
-      idNivel: json['idNivel'] as int,
-      limite: json['limite'] as int,
-      filas: (json['filas'] as List<dynamic>)
-          .map((f) => FilaRankingDto.fromJson(f as Map<String, dynamic>))
+      entradas: (json['entradas'] as List<dynamic>)
+          .map((e) => FilaRankingDto.fromJson(e as Map<String, dynamic>))
           .toList(),
     );
   }

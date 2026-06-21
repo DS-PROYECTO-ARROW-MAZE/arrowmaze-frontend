@@ -2,6 +2,8 @@ import 'package:arrowmaze/application/ports/fuente_autenticacion.dart';
 import 'package:arrowmaze/application/ports/proveedor_sesion.dart';
 import 'package:arrowmaze/application/use_cases/resultado_inicio_sesion.dart';
 import 'package:arrowmaze/application/use_cases/resultado_registro.dart';
+import 'package:arrowmaze/domain/sesion/perfil.dart';
+import 'package:arrowmaze/domain/sesion/usuario_registrado.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:arrowmaze/application/use_cases/iniciar_sesion_use_case.dart';
@@ -35,14 +37,14 @@ void main() {
           proveedorSesion: sesionPort,
         );
 
-        // Assert — register uses the injected port.
+        // Assert — register uses the injected port. Register auto-logs-in, so
+        // the token persisted is the login token.
         final regResult = await registerUseCase.ejecutar(
           email: 'inj@test.com',
           password: 'pass123',
-          username: 'Injected',
         );
         expect(regResult, isA<RegistroExitoso>());
-        expect(tokenInyectado, 'register-token',
+        expect(tokenInyectado, 'login-token',
             reason: 'register should save via the injected ProveedorSesion');
 
         // Assert — login uses the injected port.
@@ -65,17 +67,21 @@ void main() {
 
 class _AuthOk implements FuenteAutenticacion {
   @override
-  Future<String> registrar({
+  Future<UsuarioRegistrado> registrar({
     required String email,
     required String password,
-    required String username,
-  }) async => 'register-token';
+  }) async =>
+      UsuarioRegistrado(id: 'uuid', email: email, createdAt: DateTime.utc(2026));
 
   @override
   Future<String> iniciarSesion({
     required String email,
     required String password,
   }) async => 'login-token';
+
+  @override
+  Future<Perfil> obtenerPerfil() async =>
+      const Perfil(id: 'uuid', email: 'inj@test.com');
 }
 
 class _ProveedorSesionSeguimiento implements ProveedorSesion {
