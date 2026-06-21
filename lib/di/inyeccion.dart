@@ -45,7 +45,6 @@ import '../infrastructure/sesion/proveedor_sesion_impl.dart';
 import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/ranking_view_model.dart';
-import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
 import '../presentation/viewmodels/seleccion_niveles_view_model.dart';
 import '../presentation/viewmodels/sync_view_model.dart';
 
@@ -171,12 +170,6 @@ abstract final class Inyeccion {
 
   static GeneracionPorArchivoNivel get generadorPorArchivo =>
       GeneracionPorArchivoNivel(cargador: cargadorNivelArchivo);
-
-  static SeleccionNivelViewModel construirSeleccionNivelViewModel() {
-    return SeleccionNivelViewModel(
-      generadorArchivo: generadorPorArchivo,
-    );
-  }
 
   // ---------------------------------------------------------------------------
   // Meta-game loop & progression (Ticket 13, DM §10)

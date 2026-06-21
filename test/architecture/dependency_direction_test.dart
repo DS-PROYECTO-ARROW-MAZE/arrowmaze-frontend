@@ -77,5 +77,72 @@ void main() {
         );
       }
     });
+
+    test('should_keep_application_free_of_flutter_and_outer_layers', () {
+      // Arrange — the application layer is pure Dart use cases and ports: no
+      // Flutter, and no leakage from the presentation/infrastructure rings.
+      final dir = Directory('lib/application');
+      expect(dir.existsSync(), isTrue, reason: 'lib/application must exist');
+
+      final prohibidos = RegExp(
+        r'(package:flutter|dart:ui|dart:html|/infrastructure/|/presentation/)',
+        caseSensitive: false,
+      );
+
+      // Act / Assert
+      for (final imp in importsDe(dir)) {
+        expect(
+          prohibidos.hasMatch(imp.target),
+          isFalse,
+          reason:
+              '${imp.file} imports "${imp.target}", which breaks application '
+              'purity — application may depend only on domain and itself.',
+        );
+      }
+    });
+
+    test('should_keep_viewmodels_free_of_flutter_ui', () {
+      // Arrange — ViewModels may use ChangeNotifier (foundation) but must never
+      // touch Flutter UI surfaces; that is the View's job (strict MVVM).
+      final dir = Directory('lib/presentation/viewmodels');
+      expect(dir.existsSync(), isTrue,
+          reason: 'lib/presentation/viewmodels must exist');
+
+      final prohibidos = RegExp(
+        r'(package:flutter/material|package:flutter/widgets|'
+        r'package:flutter/cupertino)',
+        caseSensitive: false,
+      );
+
+      // Act / Assert
+      for (final imp in importsDe(dir)) {
+        expect(
+          prohibidos.hasMatch(imp.target),
+          isFalse,
+          reason:
+              '${imp.file} imports "${imp.target}", a Flutter UI library — '
+              'ViewModels must stay UI-independent (strict MVVM).',
+        );
+      }
+    });
+
+    test('should_keep_presentation_free_of_infrastructure', () {
+      // Arrange — the presentation layer reaches infrastructure only through
+      // the composition root (di/), never by importing it directly.
+      final dir = Directory('lib/presentation');
+      expect(dir.existsSync(), isTrue,
+          reason: 'lib/presentation must exist');
+
+      // Act / Assert
+      for (final imp in importsDe(dir)) {
+        expect(
+          imp.target.contains('/infrastructure/'),
+          isFalse,
+          reason:
+              '${imp.file} imports "${imp.target}" from infrastructure — '
+              'presentation must depend on application/domain abstractions only.',
+        );
+      }
+    });
   });
 }
