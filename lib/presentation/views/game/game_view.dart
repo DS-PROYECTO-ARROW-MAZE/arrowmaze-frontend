@@ -21,10 +21,32 @@ import '../../viewmodels/juego_view_state.dart';
 /// `AppSpacing`, `AppRadii`), never hard-coded here.
 class GameView extends StatefulWidget {
   /// Creates the board screen bound to [viewModel].
-  const GameView({required this.viewModel, super.key});
+  const GameView({
+    required this.viewModel,
+    this.construirRanking,
+    this.onReintentar,
+    this.onSiguiente,
+    this.onMenu,
+    super.key,
+  });
 
   /// The view model this screen renders and forwards taps to.
   final JuegoViewModel viewModel;
+
+  /// Builds the leaderboard screen to push when the app-bar trophy is tapped.
+  /// When `null` the leaderboard action is hidden. Injected by the composition
+  /// root so this View never references the DI graph.
+  final WidgetBuilder? construirRanking;
+
+  /// Replays the current level. Shown on both end-of-game overlays.
+  final VoidCallback? onReintentar;
+
+  /// Advances to the next level. When `null` (no next level), the "Next" button
+  /// is hidden — e.g. on the last level or after a defeat.
+  final VoidCallback? onSiguiente;
+
+  /// Returns to the Level Selection menu. Shown on both end-of-game overlays.
+  final VoidCallback? onMenu;
 
   @override
   State<GameView> createState() => _GameViewState();
@@ -65,6 +87,15 @@ class _GameViewState extends State<GameView>
       appBar: AppBar(
         title: const Text('ArrowMaze'),
         actions: [
+          // Leaderboard is always reachable, even after the level is decided.
+          if (widget.construirRanking != null)
+            IconButton(
+              icon: const Icon(Icons.leaderboard_outlined),
+              tooltip: 'Leaderboard',
+              onPressed: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: widget.construirRanking!),
+              ),
+            ),
           ListenableBuilder(
             listenable: widget.viewModel,
             builder: (context, _) {
@@ -138,8 +169,19 @@ class _GameViewState extends State<GameView>
               if (estado.pausado)
                 _PausaOverlay(onReanudar: widget.viewModel.reanudar),
               if (estado.victoria != null)
-                _VictoriaOverlay(game: game, victoria: estado.victoria!),
-              if (estado.derrota) _DerrotaOverlay(game: game),
+                _VictoriaOverlay(
+                  game: game,
+                  victoria: estado.victoria!,
+                  onReintentar: widget.onReintentar,
+                  onSiguiente: widget.onSiguiente,
+                  onMenu: widget.onMenu,
+                ),
+              if (estado.derrota)
+                _DerrotaOverlay(
+                  game: game,
+                  onReintentar: widget.onReintentar,
+                  onMenu: widget.onMenu,
+                ),
             ],
           );
         },
@@ -198,10 +240,19 @@ class _PausaOverlay extends StatelessWidget {
 /// Shown when the board is cleared — the victory snapshot (UI), distinct from the
 /// domain `EstadoVictoria`.
 class _VictoriaOverlay extends StatelessWidget {
-  const _VictoriaOverlay({required this.game, required this.victoria});
+  const _VictoriaOverlay({
+    required this.game,
+    required this.victoria,
+    this.onReintentar,
+    this.onSiguiente,
+    this.onMenu,
+  });
 
   final GameTheme game;
   final VictoriaViewState victoria;
+  final VoidCallback? onReintentar;
+  final VoidCallback? onSiguiente;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -224,6 +275,12 @@ class _VictoriaOverlay extends StatelessWidget {
         Text(
           'Cleared in ${victoria.movimientos} moves',
           style: AppTypography.bodyMedium,
+        ),
+        const SizedBox(height: AppSpacing.xl),
+        _AccionesFinDeJuego(
+          onReintentar: onReintentar,
+          onSiguiente: onSiguiente,
+          onMenu: onMenu,
         ),
       ],
     );
@@ -260,9 +317,15 @@ class _Estrellas extends StatelessWidget {
 /// Shown when a timed level's clock runs out — the defeat snapshot (UI),
 /// distinct from the domain `EstadoDerrota`.
 class _DerrotaOverlay extends StatelessWidget {
-  const _DerrotaOverlay({required this.game});
+  const _DerrotaOverlay({
+    required this.game,
+    this.onReintentar,
+    this.onMenu,
+  });
 
   final GameTheme game;
+  final VoidCallback? onReintentar;
+  final VoidCallback? onMenu;
 
   @override
   Widget build(BuildContext context) {
@@ -274,6 +337,55 @@ class _DerrotaOverlay extends StatelessWidget {
           'Time\'s up',
           style: AppTypography.titleLarge.copyWith(color: game.invalidMoveFlash),
         ),
+        const SizedBox(height: AppSpacing.xl),
+        // No "Next" after a defeat — only retry the same level or leave.
+        _AccionesFinDeJuego(
+          onReintentar: onReintentar,
+          onMenu: onMenu,
+        ),
+      ],
+    );
+  }
+}
+
+/// The shared action row for the end-of-game overlays: optional **Next Level**,
+/// **Retry**, and **Level Select**. Buttons whose callback is `null` are hidden.
+class _AccionesFinDeJuego extends StatelessWidget {
+  const _AccionesFinDeJuego({
+    this.onReintentar,
+    this.onSiguiente,
+    this.onMenu,
+  });
+
+  final VoidCallback? onReintentar;
+  final VoidCallback? onSiguiente;
+  final VoidCallback? onMenu;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (onSiguiente != null)
+          FilledButton.icon(
+            onPressed: onSiguiente,
+            icon: const Icon(Icons.arrow_forward),
+            label: const Text('Next Level'),
+          ),
+        if (onSiguiente != null) const SizedBox(height: AppSpacing.sm),
+        if (onReintentar != null)
+          OutlinedButton.icon(
+            onPressed: onReintentar,
+            icon: const Icon(Icons.refresh),
+            label: const Text('Retry'),
+          ),
+        if (onReintentar != null) const SizedBox(height: AppSpacing.sm),
+        if (onMenu != null)
+          TextButton.icon(
+            onPressed: onMenu,
+            icon: const Icon(Icons.list),
+            label: const Text('Level Select'),
+          ),
       ],
     );
   }

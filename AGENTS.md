@@ -67,10 +67,21 @@ LoadLevelUseCase      → carga Level desde ILevelRepository
 SaveProgressUseCase   → persiste nivel completado y puntuación
 GetLeaderboardUseCase → obtiene top scores desde API remota
 
-## Interfaces del dominio (lib/domain/repositories/)
+## Puertos / interfaces (lib/application/ports/ y lib/domain/)
 
-ILevelRepository    → getLevelById(int id), getAllLevels()
-IProgressRepository → getCompletedLevels(), saveScore(int levelId, int score)
+Puertos que EXISTEN en el código (DIP: los casos de uso dependen de ellos):
+
+CargadorNivel        → cargar(idNivel)
+Tablero              → celdaEn(pos), raycast(...), trayectoriaEn(pos), eliminarTrayectoria(id)  (puerto OCP; lo realiza GrafoTablero)
+IConsultaRanking     → obtenerTop(idNivel, limite)            (leaderboard de solo lectura)
+IRepositorioProgreso → guardarLote(runs)                      (subida batch — SOLO escritura)
+IColaSincronizacion  → encolar / obtenerPendientes / vaciar  (cola de subida offline, en memoria)
+ProveedorSesion      → obtenerToken / guardarToken / cerrarSesion
+FuenteAutenticacion  → registrar(...), iniciarSesion(...)
+
+NO existe lectura de "niveles completados" ni lógica de bloqueo todavía. Eso lo
+introduce el Ticket 13 - Meta-Game Loop & Progression (puertos
+`ConsultaProgresoLocal` y `CatalogoNiveles`). Ver DIAGRAM-RECONCILIATION.md §10.
 
 ## Formato JSON de niveles (assets/levels/level_XX.json)
 

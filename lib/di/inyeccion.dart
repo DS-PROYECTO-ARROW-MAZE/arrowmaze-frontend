@@ -7,6 +7,8 @@ import '../application/generadores/generacion_aleatoria_nivel.dart';
 import '../application/generadores/generacion_por_archivo_nivel.dart';
 import '../application/generadores/generador_nivel_base.dart';
 import '../application/ports/cargador_nivel.dart';
+import '../application/ports/catalogo_niveles.dart';
+import '../application/ports/consulta_progreso_local.dart';
 import '../application/ports/fuente_autenticacion.dart';
 import '../application/ports/i_caso_de_uso.dart';
 import '../application/ports/i_consulta_ranking.dart';
@@ -17,6 +19,7 @@ import '../application/ports/proveedor_sesion.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
+import '../application/use_cases/obtener_niveles_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
 import '../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
@@ -30,9 +33,11 @@ import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
+import '../infrastructure/niveles/catalogo_niveles_archivo.dart';
 import '../infrastructure/observabilidad/medidor_metricas_simple.dart';
 import '../infrastructure/observabilidad/registro_consola.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
+import '../infrastructure/progreso/progreso_local_persistente.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
@@ -41,6 +46,7 @@ import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/ranking_view_model.dart';
 import '../presentation/viewmodels/seleccion_nivel_view_model.dart';
+import '../presentation/viewmodels/seleccion_niveles_view_model.dart';
 import '../presentation/viewmodels/sync_view_model.dart';
 
 /// Composition root: wires domain, application, infrastructure, and presentation
@@ -75,7 +81,7 @@ abstract final class Inyeccion {
         'No se pudo cargar el nivel $idNivel (ausente o no resoluble).',
       );
     }
-    return _construirJuegoViewModel(tablero);
+    return _construirJuegoViewModel(tablero, idNivel: idNivel);
   }
 
   /// Builds the [JuegoViewModel] for a **randomly generated** level (the
@@ -90,7 +96,10 @@ abstract final class Inyeccion {
   /// [definicionNivelInicial], builds the use case, restores the Observer chain
   /// ([AudioServiceImp] subscribes to the publisher, ticket 07) and returns the
   /// ViewModel (which auto-subscribes itself).
-  static JuegoViewModel _construirJuegoViewModel(Tablero tablero) {
+  static JuegoViewModel _construirJuegoViewModel(
+    Tablero tablero, {
+    int idNivel = idNivelInicial,
+  }) {
     const definicion = definicionNivelInicial;
 
     // Open the session here (instead of letting the use case default to an
@@ -111,6 +120,10 @@ abstract final class Inyeccion {
       moverFlecha: moverFlecha,
       definicionNivel: definicion,
       reloj: RelojTimer(),
+      // Ticket 13: tie the run to its level and persist completion on victory so
+      // the next level unlocks.
+      idNivel: idNivel,
+      progreso: progresoLocal,
     );
   }
 
@@ -163,6 +176,33 @@ abstract final class Inyeccion {
     return SeleccionNivelViewModel(
       generadorArchivo: generadorPorArchivo,
     );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Meta-game loop & progression (Ticket 13, DM §10)
+  // ---------------------------------------------------------------------------
+
+  /// The single local progression store — persisted via `shared_preferences`.
+  /// This is the unlock source of truth, distinct from the upload queue.
+  static ConsultaProgresoLocal get progresoLocal => _progresoLocal;
+  static final ProgresoLocalPersistente _progresoLocal =
+      ProgresoLocalPersistente();
+
+  /// The bundled-level catalog used by the Level Selection screen.
+  static CatalogoNiveles get catalogoNiveles => _catalogoNiveles;
+  static const CatalogoNivelesArchivo _catalogoNiveles =
+      CatalogoNivelesArchivo();
+
+  /// Use case that joins the catalog with progression state and the unlock rule.
+  static ObtenerNivelesUseCase get obtenerNivelesUseCase =>
+      ObtenerNivelesUseCase(
+        catalogo: catalogoNiveles,
+        progreso: progresoLocal,
+      );
+
+  /// Builds the [SeleccionNivelesViewModel] for the Level Selection screen.
+  static SeleccionNivelesViewModel construirSeleccionNivelesViewModel() {
+    return SeleccionNivelesViewModel(obtenerNiveles: obtenerNivelesUseCase);
   }
 
   // ---------------------------------------------------------------------------

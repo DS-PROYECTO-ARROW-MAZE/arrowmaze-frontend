@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'dart:io';
+
+import 'package:http/http.dart' as http;
 
 import '../../application/ports/fuente_autenticacion.dart';
 import '../../core/config/api_config.dart';
@@ -9,14 +10,19 @@ import '../dtos/auth_response_dto.dart';
 
 /// HTTP implementation of [FuenteAutenticacion].
 ///
-/// Makes real HTTP calls to the ArrowMaze backend using `dart:io`'s
-/// [HttpClient]. Parses JSON responses and maps errors to typed
+/// Makes real HTTP calls to the ArrowMaze backend using `package:http`'s
+/// [http.Client], which works on every Flutter target (mobile, desktop and
+/// web). Parses JSON responses and maps errors to typed
 /// [AutenticacionException]s so the use case can surface them cleanly.
 class FuenteAutenticacionHttp implements FuenteAutenticacion {
-  FuenteAutenticacionHttp({HttpClient? client})
-      : _client = client ?? HttpClient();
+  FuenteAutenticacionHttp({http.Client? client})
+      : _client = client ?? http.Client();
 
-  final HttpClient _client;
+  final http.Client _client;
+
+  static const Map<String, String> _jsonHeaders = {
+    'Content-Type': 'application/json',
+  };
 
   @override
   Future<String> registrar({
@@ -31,22 +37,20 @@ class FuenteAutenticacionHttp implements FuenteAutenticacion {
     );
     final body = jsonEncode(dto.toJson());
 
-    final request = await _client.postUrl(
+    final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}${ApiConfig.registerPath}'),
+      headers: _jsonHeaders,
+      body: body,
     );
-    request.headers.contentType = ContentType.json;
-    request.write(body);
-    final response = await request.close();
-    final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode == 201) {
       final responseDto = AuthResponseDto.fromJson(
-        jsonDecode(responseBody) as Map<String, dynamic>,
+        jsonDecode(response.body) as Map<String, dynamic>,
       );
       return responseDto.token;
     }
 
-    throw _mapearError(response.statusCode, responseBody);
+    throw _mapearError(response.statusCode, response.body);
   }
 
   @override
@@ -60,22 +64,20 @@ class FuenteAutenticacionHttp implements FuenteAutenticacion {
     );
     final body = jsonEncode(dto.toJson());
 
-    final request = await _client.postUrl(
+    final response = await _client.post(
       Uri.parse('${ApiConfig.baseUrl}${ApiConfig.loginPath}'),
+      headers: _jsonHeaders,
+      body: body,
     );
-    request.headers.contentType = ContentType.json;
-    request.write(body);
-    final response = await request.close();
-    final responseBody = await response.transform(utf8.decoder).join();
 
     if (response.statusCode == 200) {
       final responseDto = AuthResponseDto.fromJson(
-        jsonDecode(responseBody) as Map<String, dynamic>,
+        jsonDecode(response.body) as Map<String, dynamic>,
       );
       return responseDto.token;
     }
 
-    throw _mapearError(response.statusCode, responseBody);
+    throw _mapearError(response.statusCode, response.body);
   }
 
   AutenticacionException _mapearError(int statusCode, String body) {

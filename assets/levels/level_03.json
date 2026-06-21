@@ -1,0 +1,40 @@
+{
+  "id": 3,
+  "name": "Deadlock",
+  "difficulty": "hard",
+  "rows": 5,
+  "cols": 5,
+  "player_start": {"row": 0, "col": 0},
+  "exit": {"row": 4, "col": 0},
+  "cells": [
+    {"row": 0, "col": 4, "type": "arrow", "id": 1, "direction": "LEFT"},
+    {"row": 1, "col": 4, "type": "arrow", "id": 1, "direction": "LEFT"},
+    {"row": 1, "col": 3, "type": "arrow", "id": 1, "direction": "LEFT"},
+    {"row": 1, "col": 2, "type": "arrow", "id": 1, "direction": "LEFT"},
+    {"row": 1, "col": 1, "type": "arrow", "id": 1, "direction": "LEFT"},
+
+    {"row": 0, "col": 3, "type": "arrow", "id": 2, "direction": "LEFT"},
+    {"row": 0, "col": 2, "type": "arrow", "id": 2, "direction": "LEFT"},
+    {"row": 0, "col": 1, "type": "arrow", "id": 2, "direction": "LEFT"},
+    {"row": 0, "col": 0, "type": "arrow", "id": 2, "direction": "LEFT"},
+    {"row": 1, "col": 0, "type": "arrow", "id": 2, "direction": "LEFT"},
+
+    {"row": 3, "col": 0, "type": "arrow", "id": 3, "direction": "RIGHT"},
+    {"row": 2, "col": 0, "type": "arrow", "id": 3, "direction": "RIGHT"},
+    {"row": 2, "col": 1, "type": "arrow", "id": 3, "direction": "RIGHT"},
+    {"row": 2, "col": 2, "type": "arrow", "id": 3, "direction": "RIGHT"},
+    {"row": 2, "col": 3, "type": "arrow", "id": 3, "direction": "RIGHT"},
+
+    {"row": 2, "col": 4, "type": "arrow", "id": 4, "direction": "DOWN"},
+    {"row": 3, "col": 4, "type": "arrow", "id": 4, "direction": "DOWN"},
+    {"row": 4, "col": 4, "type": "arrow", "id": 4, "direction": "DOWN"},
+    {"row": 4, "col": 3, "type": "arrow", "id": 4, "direction": "DOWN"},
+    {"row": 4, "col": 2, "type": "arrow", "id": 4, "direction": "DOWN"},
+
+    {"row": 3, "col": 3, "type": "arrow", "id": 5, "direction": "LEFT"},
+    {"row": 3, "col": 2, "type": "arrow", "id": 5, "direction": "LEFT"},
+    {"row": 3, "col": 1, "type": "arrow", "id": 5, "direction": "LEFT"},
+    {"row": 4, "col": 1, "type": "arrow", "id": 5, "direction": "LEFT"},
+    {"row": 4, "col": 0, "type": "arrow", "id": 5, "direction": "LEFT"}
+  ]
+}
