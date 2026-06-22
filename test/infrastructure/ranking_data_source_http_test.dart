@@ -45,7 +45,9 @@ void main() {
 
       // Assert — endpoint, query params and bearer token.
       expect(pedida.path, '/leaderboard');
-      expect(pedida.queryParameters['nivelId'], 'uuid-1');
+      // Backend contract is `GET /leaderboard?idNivel=UUID&limite=N`
+      // (see arrowmaze-backend leaderboard/progress e2e specs).
+      expect(pedida.queryParameters['idNivel'], 'uuid-1');
       expect(pedida.queryParameters['limite'], '10');
       expect(enviada.headers['Authorization'], 'Bearer tok-r');
 

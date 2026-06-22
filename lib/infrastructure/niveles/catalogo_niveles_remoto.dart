@@ -47,11 +47,22 @@ class CatalogoNivelesRemoto implements CatalogoNiveles {
     return _fallback.listar();
   }
 
+  /// Maps one `GET /levels` item (the backend `NivelResumenDto`) to a
+  /// [ResumenNivel].
+  ///
+  /// The backend contract is `{ id: uuid, numero: int, nombre, dificultad,
+  /// … }`: `numero` is the sequential ordinal used everywhere locally, and `id`
+  /// is the UUID carried as [ResumenNivel.idRemoto] for sync/leaderboard. (The
+  /// previous code read `id` as an int and used `name`/`difficulty`, which threw
+  /// on the real UUID payload and silently fell back to the bundled catalog —
+  /// the root cause of progress never saving.)
   ResumenNivel _desdeJson(Map<String, dynamic> json) {
+    final numero = json['numero'] as int;
     return ResumenNivel(
-      id: json['id'] as int,
-      nombre: json['name'] as String? ?? 'Level ${json['id']}',
-      dificultad: Dificultad.desde(json['difficulty'] as String?),
+      id: numero,
+      idRemoto: json['id'] as String?,
+      nombre: json['nombre'] as String? ?? 'Level $numero',
+      dificultad: Dificultad.desde(json['dificultad'] as String?),
     );
   }
 }

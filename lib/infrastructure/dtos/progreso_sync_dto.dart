@@ -1,11 +1,15 @@
 /// DTO for a single item in the `POST /progress/sync` batch.
 ///
-/// Mirrors the backend `progresos[]` contract item.
+/// Mirrors the backend `ProgresoEntradaRequestDto` exactly: `nivelId`,
+/// `movimientos`, optional `segundosRestantes`, `completadoEn`. The backend runs
+/// with `forbidNonWhitelisted: true` (Ticket 19 / ADR-0005), so any extra field
+/// — notably a client-computed `estrellas` — would make the whole request fail
+/// with `400 Bad Request`. The server recomputes stars/score itself, so none is
+/// sent.
 class ProgresoSyncDto {
   /// Creates a progress sync item DTO.
   const ProgresoSyncDto({
     required this.nivelId,
-    required this.estrellas,
     required this.movimientos,
     this.segundosRestantes,
     required this.completadoEn,
@@ -13,9 +17,6 @@ class ProgresoSyncDto {
 
   /// The level that was cleared (server UUID).
   final String nivelId;
-
-  /// Star rating: 0–3.
-  final int estrellas;
 
   /// Total registered taps.
   final int movimientos;
@@ -29,7 +30,6 @@ class ProgresoSyncDto {
   /// Serializes to the contract JSON shape.
   Map<String, dynamic> toJson() => {
         'nivelId': nivelId,
-        'estrellas': estrellas,
         'movimientos': movimientos,
         'segundosRestantes': segundosRestantes,
         'completadoEn': completadoEn,

@@ -22,18 +22,21 @@ void main() {
 
   group('CatalogoNivelesRemoto', () {
     test('should_return_catalog_from_http_when_online', () async {
-      // Arrange — HTTP 200 with two levels.
+      // Arrange — HTTP 200 with two levels in the real backend shape:
+      // `id` is a UUID, `numero` the ordinal, `nombre`/`dificultad` Spanish keys.
       (client as _HttpClientFake).respuesta = http.Response(
         jsonEncode([
           {
-            'id': 1,
-            'name': 'Remote One',
-            'difficulty': 'easy',
+            'id': 'uuid-aaa',
+            'numero': 1,
+            'nombre': 'Remote One',
+            'dificultad': 'FACIL',
           },
           {
-            'id': 2,
-            'name': 'Remote Two',
-            'difficulty': 'hard',
+            'id': 'uuid-bbb',
+            'numero': 2,
+            'nombre': 'Remote Two',
+            'dificultad': 'DIFICIL',
           },
         ]),
         200,
@@ -44,22 +47,24 @@ void main() {
       // Act
       final niveles = await remoto.listar();
 
-      // Assert — from HTTP, not fallback.
+      // Assert — from HTTP, not fallback. `id` is the ordinal; `idRemoto` the UUID.
       expect(niveles.length, 2);
       expect(niveles[0].nombre, 'Remote One');
       expect(niveles[0].id, 1);
+      expect(niveles[0].idRemoto, 'uuid-aaa');
       expect(niveles[1].nombre, 'Remote Two');
+      expect(niveles[1].idRemoto, 'uuid-bbb');
       expect(niveles[1].dificultad, Dificultad.dificil);
     });
 
     test('should_map_difficulty_tokens_correctly', () async {
-      // Arrange — all difficulty variants.
+      // Arrange — all difficulty variants (backend FACIL/MEDIO/DIFICIL tokens).
       (client as _HttpClientFake).respuesta = http.Response(
         jsonEncode([
-          {'id': 1, 'name': 'E', 'difficulty': 'easy'},
-          {'id': 2, 'name': 'M', 'difficulty': 'medium'},
-          {'id': 3, 'name': 'H', 'difficulty': 'hard'},
-          {'id': 4, 'name': 'X', 'difficulty': 'unknown'},
+          {'id': 'u1', 'numero': 1, 'nombre': 'E', 'dificultad': 'FACIL'},
+          {'id': 'u2', 'numero': 2, 'nombre': 'M', 'dificultad': 'MEDIO'},
+          {'id': 'u3', 'numero': 3, 'nombre': 'H', 'dificultad': 'DIFICIL'},
+          {'id': 'u4', 'numero': 4, 'nombre': 'X', 'dificultad': 'unknown'},
         ]),
         200,
       );
@@ -108,9 +113,9 @@ void main() {
       // Arrange — unordered response.
       (client as _HttpClientFake).respuesta = http.Response(
         jsonEncode([
-          {'id': 3, 'name': 'C', 'difficulty': 'hard'},
-          {'id': 1, 'name': 'A', 'difficulty': 'easy'},
-          {'id': 2, 'name': 'B', 'difficulty': 'medium'},
+          {'id': 'u3', 'numero': 3, 'nombre': 'C', 'dificultad': 'DIFICIL'},
+          {'id': 'u1', 'numero': 1, 'nombre': 'A', 'dificultad': 'FACIL'},
+          {'id': 'u2', 'numero': 2, 'nombre': 'B', 'dificultad': 'MEDIO'},
         ]),
         200,
       );

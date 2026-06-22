@@ -22,22 +22,36 @@ class RankingViewModel extends ChangeNotifier {
   RankingViewState get estado => _estado;
 
   /// Loads the top [limite] scores for level [nivelId].
+  ///
+  /// When [sincronizacionPendiente] is supplied (the in-flight upload of a run
+  /// just completed), it is awaited **before** the leaderboard is fetched, so
+  /// the read never races the `POST /progress/sync` write and the score just
+  /// earned is reflected. A `false` result means that upload failed (already
+  /// logged upstream): the board is still shown, but with a warning that it may
+  /// be missing the latest run rather than silently presenting stale data.
   Future<void> cargarRanking({
     required String nivelId,
     required int limite,
+    Future<bool>? sincronizacionPendiente,
   }) async {
     _estado = _estado.copyWith(
       nivelId: nivelId,
       status: RankingStatus.cargando,
       mensajeError: null,
+      mensajeAdvertencia: null,
     );
     notifyListeners();
 
     try {
+      final sincronizado = await sincronizacionPendiente;
       final dto = await _consulta.obtenerTop(nivelId, limite);
       _estado = _estado.copyWith(
         status: RankingStatus.cargado,
         entradas: dto.entradas,
+        mensajeAdvertencia: sincronizado == false
+            ? 'Your latest score could not be uploaded, so it may not appear '
+                'here yet.'
+            : null,
       );
     } catch (e) {
       _estado = _estado.copyWith(

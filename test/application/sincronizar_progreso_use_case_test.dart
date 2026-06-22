@@ -30,7 +30,7 @@ void main() {
         final pendientes = await cola.obtenerPendientes();
         expect(pendientes, hasLength(1));
         expect(pendientes.first.nivelId, run.nivelId);
-        expect(pendientes.first.estrellas, run.estrellas);
+        expect(pendientes.first.movimientos, run.movimientos);
       },
     );
 
@@ -114,7 +114,6 @@ void main() {
 RunCompletado _runEjemplo({String nivelId = 'uuid-1'}) {
   return RunCompletado(
     nivelId: nivelId,
-    estrellas: 2,
     movimientos: 10,
     segundosRestantes: 60,
     completadoEn: DateTime.utc(2026, 1, 1),

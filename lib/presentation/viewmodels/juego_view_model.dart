@@ -1,9 +1,8 @@
-import 'dart:async';
-
 import 'package:flutter/foundation.dart';
 
 import '../../application/ports/consulta_progreso_local.dart';
 import '../../application/ports/i_control_audio.dart';
+import '../../application/ports/i_registro.dart';
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
 import '../../application/use_cases/deshacer_movimiento_use_case.dart';
@@ -54,14 +53,18 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     required this._definicionNivel,
     required this._reloj,
     int idNivel = 1,
+    String? nivelIdRemoto,
     ConsultaProgresoLocal? progreso,
     CalcularPuntuacionUseCase? calcularPuntuacion,
     DeshacerMovimientoUseCase? deshacerMovimiento,
     IControlAudio? audioControl,
     SincronizarProgresoUseCase? sincronizar,
+    IRegistro? registro,
   })  : _idNivel = idNivel,
+        _nivelIdRemoto = nivelIdRemoto,
         _progreso = progreso,
         _sincronizar = sincronizar,
+        _registro = registro,
         _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
         _audioControl = audioControl,
@@ -95,11 +98,33 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// right level for progression/unlocks (Ticket 13).
   final int _idNivel;
 
+  /// The backend level UUID, when known — the identity a synced run is keyed by.
+  /// `null` for the offline/random board, which simply skips sync.
+  final String? _nivelIdRemoto;
+
   /// Optional local progression store; when present, a victory records the
   /// level as completed with its star count so the next level unlocks.
   final ConsultaProgresoLocal? _progreso;
 
   final SincronizarProgresoUseCase? _sincronizar;
+
+  /// Optional logging sink; failures of the background sync are reported here
+  /// instead of being swallowed.
+  final IRegistro? _registro;
+
+  /// The in-flight upload of the just-won run (`POST /progress/sync`), or `null`
+  /// when nothing is syncing (no victory yet, or an offline/random board with no
+  /// backend level to attribute the run to).
+  ///
+  /// The leaderboard awaits this before it fetches, so the read never races the
+  /// write and the score just earned is reflected. It completes with `true` when
+  /// the run uploaded (or there was nothing to send) and `false` when the upload
+  /// failed — failures are also logged through [_registro].
+  Future<bool>? _sincronizacionEnCurso;
+
+  /// The in-flight victory sync the leaderboard should await before fetching, or
+  /// `null` when there is nothing to wait on.
+  Future<bool>? get sincronizacionEnCurso => _sincronizacionEnCurso;
 
   final Reloj _reloj;
 
@@ -176,15 +201,20 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       );
 
       // Enqueue the run for sync and trigger an immediate flush (Ticket 15).
-      // Fire-and-forget: the sync pipeline runs in the background.
-      final run = RunCompletado(
-        nivelId: _idNivel.toString(),
-        estrellas: puntuacion.estrellas,
-        movimientos: resultado.movimientos,
-        segundosRestantes: _sesion.tiempoRestante?.inSeconds,
-        completadoEn: DateTime.now(),
-      );
-      _encolarYFlushear(run);
+      // Fire-and-forget: the sync pipeline runs in the background. The run is
+      // keyed by the backend level UUID; without it (offline/random board) there
+      // is no server level to attribute the run to, so sync is skipped. No
+      // client-side score travels — the backend recomputes it (ADR-0005).
+      final idRemoto = _nivelIdRemoto;
+      if (idRemoto != null) {
+        final run = RunCompletado(
+          nivelId: idRemoto,
+          movimientos: resultado.movimientos,
+          segundosRestantes: _sesion.tiempoRestante?.inSeconds,
+          completadoEn: DateTime.now(),
+        );
+        _encolarYFlushear(run);
+      }
     }
 
     _estado = _estado.copyWith(
@@ -267,11 +297,40 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     notifyListeners();
   }
 
-  /// Enqueues [run] in the sync queue and triggers an immediate flush.
+  /// Enqueues [run] and starts its upload, keeping the in-flight future in
+  /// [_sincronizacionEnCurso] so the leaderboard can await it before fetching.
+  ///
+  /// The victory overlay is shown without waiting on this — the upload runs in
+  /// the background — but the future is retained (instead of fire-and-forget) so
+  /// the leaderboard read can confirm the write resolved (no read-before-write
+  /// race) and so a failed upload is surfaced rather than swallowed.
   void _encolarYFlushear(RunCompletado run) {
     final sincronizar = _sincronizar;
     if (sincronizar == null) return;
-    unawaited(sincronizar.encolar(run).then((_) => sincronizar.sincronizar()));
+    _sincronizacionEnCurso = _subirRun(sincronizar, run);
+  }
+
+  /// Uploads [run] and reports whether it succeeded, logging any failure so a
+  /// rejected sync (an expired token → 401, a malformed batch → 400, or a
+  /// dropped connection) is never silently lost.
+  Future<bool> _subirRun(
+    SincronizarProgresoUseCase sincronizar,
+    RunCompletado run,
+  ) async {
+    try {
+      await sincronizar.encolar(run);
+      final resultado = await sincronizar.sincronizar();
+      if (!resultado.exitoso) {
+        _registro?.error(
+          'Progress sync failed for level $_nivelIdRemoto: '
+          '${resultado.mensajeError}',
+        );
+      }
+      return resultado.exitoso;
+    } catch (e) {
+      _registro?.error('Progress sync threw for level $_nivelIdRemoto: $e');
+      return false;
+    }
   }
 
   @override

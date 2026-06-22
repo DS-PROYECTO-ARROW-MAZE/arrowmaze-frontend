@@ -1,3 +1,4 @@
+import 'package:arrowmaze/application/ports/i_registro.dart';
 import 'package:arrowmaze/application/ports/i_repositorio_progreso.dart';
 import 'package:arrowmaze/application/ports/reloj.dart';
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
@@ -56,6 +57,7 @@ void main() {
         definicionNivel: definicion,
         reloj: _RelojNulo(),
         idNivel: 1,
+        nivelIdRemoto: 'uuid-nivel-1',
         sincronizar: sincronizar,
       );
 
@@ -79,8 +81,8 @@ void main() {
       final lote = repo.ultimaLote;
       expect(lote, isNotNull);
       expect(lote!.length, 1);
-      expect(lote.first.nivelId, '1');
-      expect(lote.first.estrellas, greaterThan(0));
+      // The run is keyed by the backend UUID, not the local ordinal.
+      expect(lote.first.nivelId, 'uuid-nivel-1');
       // Session is untimed (default from MoverFlechaUseCase), so segundosRestantes
       // is null.
       expect(lote.first.segundosRestantes, isNull);
@@ -112,6 +114,102 @@ void main() {
       expect(viewModel.estado.victoria, isNotNull);
     },
   );
+
+  test(
+    'should_expose_successful_sync_future_for_leaderboard_to_await',
+    () async {
+      // Arrange — sync wired with a backend UUID and a repo that succeeds.
+      final sincronizar = SincronizarProgresoUseCase(
+        cola: _ColaSincronizacionFake(),
+        repositorio: _RepositorioProgresoFake(exito: true),
+      );
+      final tablero = tableroDeUnaFlecha();
+      final viewModel = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(tablero),
+        definicionNivel: definicion,
+        reloj: _RelojNulo(),
+        idNivel: 1,
+        nivelIdRemoto: 'uuid-nivel-1',
+        sincronizar: sincronizar,
+      );
+
+      // Act — win, then await the exposed sync future (what the leaderboard does).
+      viewModel.tocar(const Posicion.en(fila: 2, columna: 1));
+      final resultado = await viewModel.sincronizacionEnCurso;
+
+      // Assert — the future is exposed and reports success.
+      expect(resultado, isTrue);
+    },
+  );
+
+  test(
+    'should_report_failure_and_log_when_sync_rejected',
+    () async {
+      // Arrange — repo rejects the batch (e.g. 401/400 surfaces as a failed
+      // upload), and a logger is injected to capture the failure.
+      final registro = _RegistroFake();
+      final sincronizar = SincronizarProgresoUseCase(
+        cola: _ColaSincronizacionFake(),
+        repositorio: _RepositorioProgresoFake(exito: false),
+      );
+      final tablero = tableroDeUnaFlecha();
+      final viewModel = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(tablero),
+        definicionNivel: definicion,
+        reloj: _RelojNulo(),
+        idNivel: 1,
+        nivelIdRemoto: 'uuid-nivel-1',
+        sincronizar: sincronizar,
+        registro: registro,
+      );
+
+      // Act
+      viewModel.tocar(const Posicion.en(fila: 2, columna: 1));
+      final resultado = await viewModel.sincronizacionEnCurso;
+
+      // Assert — failure is surfaced to the awaiter and logged, not swallowed.
+      expect(resultado, isFalse);
+      expect(registro.errores, isNotEmpty);
+    },
+  );
+
+  test(
+    'should_skip_sync_when_no_remote_uuid_known',
+    () async {
+      // Arrange — sync is wired, but the level has no backend UUID (offline /
+      // bundled catalog), so there is no server level to attribute the run to.
+      final cola = _ColaSincronizacionFake();
+      final repo = _RepositorioProgresoFake(exito: true);
+      final sincronizar = SincronizarProgresoUseCase(
+        cola: cola,
+        repositorio: repo,
+      );
+      final tablero = tableroDeUnaFlecha();
+      final moverFlecha = MoverFlechaUseCase(tablero);
+      final viewModel = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: moverFlecha,
+        definicionNivel: definicion,
+        reloj: _RelojNulo(),
+        idNivel: 1,
+        // nivelIdRemoto intentionally omitted (null).
+        sincronizar: sincronizar,
+      );
+
+      // Act — reach victory.
+      viewModel.tocar(const Posicion.en(fila: 2, columna: 1));
+      for (var i = 0; i < 10; i++) {
+        await Future(() {});
+      }
+
+      // Assert — victory still happens, but nothing is enqueued or uploaded.
+      expect(viewModel.estado.victoria, isNotNull);
+      expect(repo.llamadasGuardarLote, 0);
+      expect(await cola.cantidadPendientes(), 0);
+    },
+  );
 }
 
 class _RelojNulo implements Reloj {
@@ -119,6 +217,17 @@ class _RelojNulo implements Reloj {
   void iniciar(Duration intervalo, void Function() tic) {}
   @override
   void detener() {}
+}
+
+class _RegistroFake implements IRegistro {
+  final List<String> infos = [];
+  final List<String> errores = [];
+
+  @override
+  void info(String mensaje) => infos.add(mensaje);
+
+  @override
+  void error(String mensaje) => errores.add(mensaje);
 }
 
 class _ColaSincronizacionFake implements IColaSincronizacion {

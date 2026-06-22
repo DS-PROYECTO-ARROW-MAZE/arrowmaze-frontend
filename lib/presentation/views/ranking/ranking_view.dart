@@ -73,23 +73,62 @@ class _RankingViewState extends State<RankingView> {
                   ],
                 ),
               ),
-            RankingStatus.cargado => estado.entradas.isEmpty
-                ? const Center(
-                    child: Text('No scores yet for this level.',
-                        style: AppTypography.bodyMedium),
-                  )
-                : ListView.separated(
-                    padding: const EdgeInsets.all(AppSpacing.md),
-                    itemCount: estado.entradas.length,
-                    separatorBuilder: (_, __) =>
-                        const SizedBox(height: AppSpacing.sm),
-                    itemBuilder: (context, index) => _RankingRow(
-                      posicion: index + 1,
-                      fila: estado.entradas[index],
-                    ),
+            RankingStatus.cargado => Column(
+                children: [
+                  if (estado.mensajeAdvertencia != null)
+                    _AdvertenciaBanner(mensaje: estado.mensajeAdvertencia!),
+                  Expanded(
+                    child: estado.entradas.isEmpty
+                        ? const Center(
+                            child: Text('No scores yet for this level.',
+                                style: AppTypography.bodyMedium),
+                          )
+                        : ListView.separated(
+                            padding: const EdgeInsets.all(AppSpacing.md),
+                            itemCount: estado.entradas.length,
+                            separatorBuilder: (_, __) =>
+                                const SizedBox(height: AppSpacing.sm),
+                            itemBuilder: (context, index) => _RankingRow(
+                              posicion: index + 1,
+                              fila: estado.entradas[index],
+                            ),
+                          ),
                   ),
+                ],
+              ),
           };
         },
+      ),
+    );
+  }
+}
+
+/// A non-blocking warning strip shown above the leaderboard when the latest run
+/// could not be uploaded — so the board may be missing it.
+class _AdvertenciaBanner extends StatelessWidget {
+  const _AdvertenciaBanner({required this.mensaje});
+
+  final String mensaje;
+
+  @override
+  Widget build(BuildContext context) {
+    final gameTheme = Theme.of(context).extension<GameTheme>()!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(AppSpacing.md),
+      color: gameTheme.syncError.withValues(alpha: 0.12),
+      child: Row(
+        children: [
+          Icon(Icons.warning_amber_rounded,
+              size: 20, color: gameTheme.syncError),
+          const SizedBox(width: AppSpacing.sm),
+          Expanded(
+            child: Text(
+              mensaje,
+              style: AppTypography.bodyMedium.copyWith(color: gameTheme.syncError),
+            ),
+          ),
+        ],
       ),
     );
   }

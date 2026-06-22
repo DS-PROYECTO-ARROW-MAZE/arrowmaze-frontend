@@ -84,4 +84,7 @@ class _ProgresoFake implements ConsultaProgresoLocal {
     required int idNivel,
     required int estrellas,
   }) async {}
+
+  @override
+  Future<void> limpiar() async {}
 }

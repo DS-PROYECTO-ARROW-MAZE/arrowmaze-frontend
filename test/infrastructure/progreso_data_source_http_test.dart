@@ -28,7 +28,6 @@ void main() {
       final runs = [
         RunCompletado(
           nivelId: 'uuid-1',
-          estrellas: 3,
           movimientos: 12,
           segundosRestantes: 55,
           completadoEn: DateTime.utc(2026, 6, 21, 20, 30),
@@ -45,10 +44,11 @@ void main() {
       final progresos = body['progresos'] as List<dynamic>;
       final item = progresos.first as Map<String, dynamic>;
       expect(item['nivelId'], 'uuid-1');
-      expect(item['estrellas'], 3);
       expect(item['movimientos'], 12);
       expect(item['segundosRestantes'], 55);
       expect(item['completadoEn'], '2026-06-21T20:30:00.000Z');
+      // No client-side score is sent — the backend whitelist would 400 on it.
+      expect(item.containsKey('estrellas'), isFalse);
     });
 
     test('should_return_false_when_server_errors', () async {
@@ -64,7 +64,6 @@ void main() {
       final ok = await fuente.guardarLote([
         RunCompletado(
           nivelId: 'uuid-1',
-          estrellas: 1,
           movimientos: 4,
           segundosRestantes: null,
           completadoEn: DateTime.utc(2026),

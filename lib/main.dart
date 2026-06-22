@@ -5,6 +5,7 @@ import 'di/inyeccion.dart';
 import 'presentation/viewmodels/juego_view_model.dart';
 import 'presentation/views/auth/auth_view.dart';
 import 'presentation/views/game/game_view.dart';
+import 'presentation/viewmodels/seleccion_niveles_view_state.dart';
 import 'presentation/views/ranking/ranking_view.dart';
 import 'presentation/views/seleccion/seleccion_niveles_view.dart';
 
@@ -63,11 +64,17 @@ void _cerrarSesionYVolverALogin(BuildContext context) {
   });
 }
 
-/// Pushes the game host for [idNivel]; [idsOrdenados] lets the host offer "Next".
-void _abrirNivel(BuildContext context, int idNivel, List<int> idsOrdenados) {
+/// Pushes the game host for [nivel]; [nivelesOrdenados] lets the host offer
+/// "Next" and carries each level's backend UUID for sync/leaderboard.
+void _abrirNivel(
+  BuildContext context,
+  NivelResumenUI nivel,
+  List<NivelResumenUI> nivelesOrdenados,
+) {
   Navigator.of(context).push(
     MaterialPageRoute(
-      builder: (_) => _JuegoHost(idNivel: idNivel, idsOrdenados: idsOrdenados),
+      builder: (_) =>
+          _JuegoHost(nivel: nivel, nivelesOrdenados: nivelesOrdenados),
     ),
   );
 }
@@ -79,10 +86,10 @@ void _abrirNivel(BuildContext context, int idNivel, List<int> idsOrdenados) {
 /// the DI graph. The board load is asynchronous (file-backed level), so this is
 /// the `FutureBuilder` loading shell promised in DIAGRAM-RECONCILIATION.md §9.1.
 class _JuegoHost extends StatefulWidget {
-  const _JuegoHost({required this.idNivel, required this.idsOrdenados});
+  const _JuegoHost({required this.nivel, required this.nivelesOrdenados});
 
-  final int idNivel;
-  final List<int> idsOrdenados;
+  final NivelResumenUI nivel;
+  final List<NivelResumenUI> nivelesOrdenados;
 
   @override
   State<_JuegoHost> createState() => _JuegoHostState();
@@ -91,31 +98,43 @@ class _JuegoHost extends StatefulWidget {
 class _JuegoHostState extends State<_JuegoHost> {
   late final Future<JuegoViewModel> _viewModel;
 
+  /// The resolved game ViewModel, captured once the board finishes loading so
+  /// the leaderboard builder can await its in-flight progress sync.
+  JuegoViewModel? _juego;
+
   @override
   void initState() {
     super.initState();
-    _viewModel = Inyeccion.construirJuegoViewModelDesdeArchivo(widget.idNivel);
+    // The board is loaded from the bundled asset by ordinal (`id`); the backend
+    // UUID (`idRemoto`) is forwarded so a victory syncs against the right level.
+    _viewModel = Inyeccion.construirJuegoViewModelDesdeArchivo(
+      widget.nivel.id,
+      nivelIdRemoto: widget.nivel.idRemoto,
+    );
+    _viewModel.then((vm) => _juego = vm);
   }
 
-  /// The next level's id in catalog order, or `null` when this is the last one.
-  int? get _siguienteNivel {
-    final i = widget.idsOrdenados.indexOf(widget.idNivel);
-    if (i < 0 || i + 1 >= widget.idsOrdenados.length) return null;
-    return widget.idsOrdenados[i + 1];
+  /// The next level in catalog order, or `null` when this is the last one.
+  NivelResumenUI? get _siguienteNivel {
+    final i = widget.nivelesOrdenados.indexWhere((n) => n.id == widget.nivel.id);
+    if (i < 0 || i + 1 >= widget.nivelesOrdenados.length) return null;
+    return widget.nivelesOrdenados[i + 1];
   }
 
-  void _reintentar() => _reemplazarCon(widget.idNivel);
+  void _reintentar() => _reemplazarCon(widget.nivel);
 
   void _siguiente() {
     final next = _siguienteNivel;
     if (next != null) _reemplazarCon(next);
   }
 
-  void _reemplazarCon(int idNivel) {
+  void _reemplazarCon(NivelResumenUI nivel) {
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(
-        builder: (_) =>
-            _JuegoHost(idNivel: idNivel, idsOrdenados: widget.idsOrdenados),
+        builder: (_) => _JuegoHost(
+          nivel: nivel,
+          nivelesOrdenados: widget.nivelesOrdenados,
+        ),
       ),
     );
   }
@@ -131,10 +150,19 @@ class _JuegoHostState extends State<_JuegoHost> {
   /// Builds the leaderboard for *this* level and starts its load.
   Widget _construirRanking(BuildContext context) {
     final viewModel = Inyeccion.construirRankingViewModel();
-    // Local levels are int-keyed (bundled assets); the leaderboard API keys by
-    // the backend level UUID. Until a level is created server-side, the id is
-    // forwarded as a string at this boundary.
-    viewModel.cargarRanking(nivelId: '${widget.idNivel}', limite: 10);
+    // The leaderboard API keys by the backend level UUID. It is available only
+    // when the catalog was served by the backend; offline (bundled catalog) it
+    // is null, and the read surfaces an empty/error state gracefully.
+    //
+    // Pass the in-flight victory sync so the read waits for the
+    // `POST /progress/sync` write to resolve before fetching — the score just
+    // earned is reflected and the GET never races the POST. `null` when no run
+    // is syncing (e.g. opening the board before winning).
+    viewModel.cargarRanking(
+      nivelId: widget.nivel.idRemoto ?? '',
+      limite: 10,
+      sincronizacionPendiente: _juego?.sincronizacionEnCurso,
+    );
     return RankingView(viewModel: viewModel);
   }
 
@@ -150,7 +178,7 @@ class _JuegoHostState extends State<_JuegoHost> {
               child: Padding(
                 padding: const EdgeInsets.all(24),
                 child: Text(
-                  'Could not load level ${widget.idNivel}.',
+                  'Could not load level ${widget.nivel.id}.',
                   textAlign: TextAlign.center,
                 ),
               ),

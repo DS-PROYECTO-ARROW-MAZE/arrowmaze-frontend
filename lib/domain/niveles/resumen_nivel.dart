@@ -13,10 +13,19 @@ class ResumenNivel {
     required this.id,
     required this.nombre,
     required this.dificultad,
+    this.idRemoto,
   });
 
-  /// The level's unique, sequential identifier (1, 2, 3, …).
+  /// The level's sequential ordinal (1, 2, 3, …) — the `numero`. Drives local
+  /// asset loading, unlock order, and progression. This is **not** the backend
+  /// primary key.
   final int id;
+
+  /// The backend level **UUID**, when this entry came from the remote catalog
+  /// (`GET /levels`). Used as the identity for progress sync and the
+  /// leaderboard, which key by UUID. `null` for the bundled/offline catalog,
+  /// in which case those server features are unavailable for the level.
+  final String? idRemoto;
 
   /// The human-readable level name shown on the card.
   final String nombre;

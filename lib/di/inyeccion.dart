@@ -21,6 +21,7 @@ import '../application/use_cases/cerrar_sesion_use_case.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
 import '../application/use_cases/crear_nivel_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
+import '../application/use_cases/limpiar_progreso_local_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/obtener_niveles_use_case.dart';
 import '../application/use_cases/obtener_perfil_use_case.dart';
@@ -73,9 +74,10 @@ abstract final class Inyeccion {
   /// [FuenteTableroMemoria]). The loaded layout passes the solvability gate;
   /// should loading fail or the level be unsolvable, this throws so the caller
   /// (a `FutureBuilder`) can show an error state.
-  static Future<JuegoViewModel> construirJuegoViewModelDesdeArchivo([
-    int idNivel = idNivelInicial,
-  ]) async {
+  static Future<JuegoViewModel> construirJuegoViewModelDesdeArchivo(
+    int idNivel, {
+    String? nivelIdRemoto,
+  }) async {
     final tablero = await generadorPorArchivo.generarAsync(
       // Dimensions are taken from the level file itself; this placeholder is
       // overwritten by `generarAsync` once the definition is read.
@@ -87,7 +89,11 @@ abstract final class Inyeccion {
         'No se pudo cargar el nivel $idNivel (ausente o no resoluble).',
       );
     }
-    return _construirJuegoViewModel(tablero, idNivel: idNivel);
+    return _construirJuegoViewModel(
+      tablero,
+      idNivel: idNivel,
+      nivelIdRemoto: nivelIdRemoto,
+    );
   }
 
   /// Builds the [JuegoViewModel] for a **randomly generated** level (the
@@ -105,6 +111,7 @@ abstract final class Inyeccion {
   static JuegoViewModel _construirJuegoViewModel(
     Tablero tablero, {
     int idNivel = idNivelInicial,
+    String? nivelIdRemoto,
   }) {
     const definicion = definicionNivelInicial;
 
@@ -129,9 +136,15 @@ abstract final class Inyeccion {
       // Ticket 13: tie the run to its level and persist completion on victory so
       // the next level unlocks.
       idNivel: idNivel,
+      // Backend level UUID — the identity a synced run is keyed by. Null for the
+      // offline/random board, which disables sync for that run.
+      nivelIdRemoto: nivelIdRemoto,
       progreso: progresoLocal,
       // Ticket 15: wire sync so victory enqueues the run and flushes to backend.
       sincronizar: sincronizarProgresoUseCase,
+      // Surface a failed background sync (e.g. expired token → 401) instead of
+      // swallowing it, so the leaderboard can warn rather than show stale data.
+      registro: registro,
       audioControl: AudioServiceImp.instance,
     );
   }
@@ -206,6 +219,15 @@ abstract final class Inyeccion {
     fallback: _catalogoNivelesArchivo,
   );
 
+  /// Use case that wipes device-local play state (progression + pending-sync
+  /// queue) so one account's progress never leaks into another's on logout or a
+  /// fresh login/register.
+  static LimpiarProgresoLocalUseCase get limpiarProgresoLocalUseCase =>
+      LimpiarProgresoLocalUseCase(
+        progreso: progresoLocal,
+        cola: colaSincronizacion,
+      );
+
   /// Use case that joins the catalog with progression state and the unlock rule.
   static ObtenerNivelesUseCase get obtenerNivelesUseCase =>
       ObtenerNivelesUseCase(
@@ -247,12 +269,14 @@ abstract final class Inyeccion {
       RegistrarUsuarioUseCase(
         fuenteAutenticacion: fuenteAutenticacion,
         proveedorSesion: proveedorSesion,
+        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
       );
 
   static IniciarSesionUseCase get iniciarSesionUseCase =>
       IniciarSesionUseCase(
         fuenteAutenticacion: fuenteAutenticacion,
         proveedorSesion: proveedorSesion,
+        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
       );
 
   /// Use case reading the authenticated principal (`GET /auth/me`).
@@ -271,7 +295,10 @@ abstract final class Inyeccion {
       CrearNivelUseCase(fuenteNiveles: fuenteNiveles);
 
   static CerrarSesionUseCase get cerrarSesionUseCase =>
-      CerrarSesionUseCase(proveedorSesion: proveedorSesion);
+      CerrarSesionUseCase(
+        proveedorSesion: proveedorSesion,
+        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
+      );
 
   /// Builds the [AuthViewModel] with all dependencies injected.
   static AuthViewModel construirAuthViewModel() {

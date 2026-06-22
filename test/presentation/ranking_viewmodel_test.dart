@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:arrowmaze/application/ports/i_consulta_ranking.dart';
 import 'package:arrowmaze/domain/ranking/fila_ranking.dart';
 import 'package:arrowmaze/domain/ranking/ranking_dto.dart';
@@ -73,6 +75,60 @@ void main() {
         expect(viewModel.estado.entradas, isEmpty);
       },
     );
+
+    test(
+      'should_await_pending_sync_before_fetching_leaderboard',
+      () async {
+        // Arrange — the leaderboard read must not start until the in-flight
+        // POST /progress/sync has resolved (no read-before-write race).
+        final port = _ConsultaRankingFake();
+        final viewModel = RankingViewModel(consulta: port);
+        final syncCompleter = Completer<bool>();
+
+        // Act — kick off the load with an unresolved sync future.
+        final carga = viewModel.cargarRanking(
+          nivelId: 'uuid-1',
+          limite: 2,
+          sincronizacionPendiente: syncCompleter.future,
+        );
+        // Let microtasks drain; the fetch must still be blocked on the sync.
+        await Future(() {});
+
+        // Assert — no fetch happened yet because the sync is still pending.
+        expect(port.llamadas, 0,
+            reason: 'Leaderboard must wait for the sync to resolve first');
+
+        // Resolve the sync; now the fetch may proceed.
+        syncCompleter.complete(true);
+        await carga;
+
+        expect(port.llamadas, 1);
+        expect(viewModel.estado.status, RankingStatus.cargado);
+        expect(viewModel.estado.mensajeAdvertencia, isNull);
+      },
+    );
+
+    test(
+      'should_warn_but_still_load_when_pending_sync_failed',
+      () async {
+        // Arrange — the in-flight sync resolves to false (upload failed, e.g.
+        // 401/400). The board still loads, but with a non-blocking warning.
+        final port = _ConsultaRankingFake();
+        final viewModel = RankingViewModel(consulta: port);
+
+        // Act
+        await viewModel.cargarRanking(
+          nivelId: 'uuid-1',
+          limite: 2,
+          sincronizacionPendiente: Future<bool>.value(false),
+        );
+
+        // Assert — leaderboard shown, warning surfaced rather than silent stale.
+        expect(viewModel.estado.status, RankingStatus.cargado);
+        expect(viewModel.estado.entradas, hasLength(2));
+        expect(viewModel.estado.mensajeAdvertencia, isNotNull);
+      },
+    );
   });
 }
 
@@ -98,8 +154,13 @@ class _ConsultaRankingFake implements IConsultaRanking {
     ),
   ];
 
+  /// Number of times the leaderboard read was invoked — used to assert the
+  /// fetch is ordered after the pending sync.
+  int llamadas = 0;
+
   @override
   Future<RankingDto> obtenerTop(String nivelId, int limite) async {
+    llamadas++;
     return RankingDto(entradas: List.of(entradas));
   }
 }

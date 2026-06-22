@@ -26,7 +26,6 @@ class ProgresoDataSourceHttp implements IRepositorioProgreso {
     final progresos = runs
         .map((r) => ProgresoSyncDto(
               nivelId: r.nivelId,
-              estrellas: r.estrellas,
               movimientos: r.movimientos,
               segundosRestantes: r.segundosRestantes,
               completadoEn: r.completadoEn.toUtc().toIso8601String(),

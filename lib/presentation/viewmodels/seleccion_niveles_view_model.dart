@@ -47,6 +47,7 @@ class SeleccionNivelesViewModel extends ChangeNotifier {
   NivelResumenUI _mapear(NivelConEstado nivel) {
     return NivelResumenUI(
       id: nivel.resumen.id,
+      idRemoto: nivel.resumen.idRemoto,
       nombre: nivel.resumen.nombre,
       dificultad: nivel.resumen.dificultad,
       desbloqueado: nivel.desbloqueado,

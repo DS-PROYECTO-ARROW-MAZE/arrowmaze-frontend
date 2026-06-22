@@ -15,10 +15,15 @@ class NivelResumenUI {
     required this.desbloqueado,
     required this.completado,
     required this.estrellas,
+    this.idRemoto,
   });
 
-  /// The level's sequential id.
+  /// The level's sequential id (ordinal). Drives asset loading and unlocks.
   final int id;
+
+  /// The backend level UUID, used as the identity for progress sync and the
+  /// leaderboard. `null` when the catalog came from the offline bundle.
+  final String? idRemoto;
 
   /// The level's display name.
   final String nombre;

@@ -26,12 +26,12 @@ class SeleccionNivelesView extends StatefulWidget {
   /// The ViewModel this screen observes.
   final SeleccionNivelesViewModel viewModel;
 
-  /// Opens the level [idNivel]; [idsOrdenados] is the full ordered id list so the
-  /// game can offer "Next level".
+  /// Opens [nivel]; [nivelesOrdenados] is the full ordered catalog (so the game
+  /// can offer "Next level" and carry each level's backend UUID).
   final void Function(
     BuildContext context,
-    int idNivel,
-    List<int> idsOrdenados,
+    NivelResumenUI nivel,
+    List<NivelResumenUI> nivelesOrdenados,
   ) alSeleccionar;
 
   /// Called when the user taps the Logout button. The composition root wires
@@ -96,7 +96,7 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
             );
           }
 
-          final ids = estado.niveles.map((n) => n.id).toList();
+          final ordenados = estado.niveles;
           return GridView.builder(
             padding: const EdgeInsets.all(AppSpacing.md),
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
@@ -111,7 +111,7 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
               return _NivelCard(
                 nivel: nivel,
                 onTap: nivel.desbloqueado
-                    ? () => widget.alSeleccionar(context, nivel.id, ids)
+                    ? () => widget.alSeleccionar(context, nivel, ordenados)
                     : null,
               );
             },

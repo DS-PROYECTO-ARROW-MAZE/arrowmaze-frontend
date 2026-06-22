@@ -9,7 +9,7 @@ import '../dtos/ranking_response_dto.dart';
 
 /// HTTP implementation of [IConsultaRanking] — read-only (DM-B5, E3).
 ///
-/// Fetches top-N scores per level from `GET /leaderboard?nivelId=&limite=`
+/// Fetches top-N scores per level from `GET /leaderboard?idNivel=&limite=`
 /// using `package:http` (cross-platform, web included). The injected
 /// [http.Client] is expected to be a `ClienteHttpAutenticado`, so the Bearer
 /// token is attached transparently. No write path exists (AC2). On any failure
@@ -27,7 +27,7 @@ class RankingDataSourceHttp implements IConsultaRanking {
     try {
       final uri = Uri.parse('${ApiConfig.baseUrl}${ApiConfig.leaderboardPath}')
           .replace(queryParameters: {
-        'nivelId': nivelId,
+        'idNivel': nivelId,
         'limite': '$limite',
       });
 
