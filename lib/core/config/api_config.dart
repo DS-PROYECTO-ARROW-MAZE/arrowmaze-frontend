@@ -30,4 +30,7 @@ abstract final class ApiConfig {
 
   /// Leaderboard read endpoint — `GET /leaderboard` (protected).
   static const String leaderboardPath = '/leaderboard';
+
+  /// Level catalog endpoint — `GET /levels` (public).
+  static const String catalogPath = '/levels';
 }

@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-018 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-019 appended)
 
 ## 1. Tools Used
 
@@ -1203,6 +1203,97 @@ eloj:
   was missing `'collectible'` (a latent bug from ticket 03), discovered and
   fixed while adding `'absent'`.
 
+### T-019 — Ticket 17 · Level Catalog of 15+ Levels with Scaling Complexity
+
+- **Task / problem addressed:** Deliver 15+ integer-identified levels with scaling
+  complexity (cells, arrows, grid size) selectable via the Level Selection screen
+  (`.issues/17-feat-frontend-level-catalog-15-levels.md`). Add a complexity profile
+  (`PerfilDificultad`) for cross-repo agreement with the backend, a remote catalog
+  adapter (`CatalogoNivelesRemoto`) that falls back to bundled assets offline,
+  and 12 new level JSON files (level_04…level_15) with monotonic grid scaling
+  (5×5 → 6×6 → 7×7). Polish the visual design of the selection screen with a
+  grid layout and neon-themed cards.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (verbatim, kickoff) "Implementa el ticket
+  `.issues\17-feat-frontend-level-catalog-15-levels.md` Es OBLIGATORIO que apliques
+  estrictamente las reglas de las skills 'tdd-strict' y 'clean-architecture'. El
+  diseño visual lo defines tú usando 'lib/core/theme'." After the implementation
+  was verified (247 tests green, `flutter analyze` clean), the user instructed
+  "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo,
+  los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  **RED (2 new test files, 11 tests):**
+  `test/domain/perfil_dificultad_test.dart` (5 tests — monotonic non-decreasing
+  cells/arrows/trayectorias over 1…15, level 10 ≥ level 1, filas/columnas per
+  level);
+  `test/infrastructure/catalogo_niveles_remoto_test.dart` (6 tests — HTTP success
+  returns catalog, difficulty token mapping, error status fallback to assets,
+  network-throw fallback, ascending-id ordering, ≥15 offline fallback).
+  **GREEN (new source + assets):**
+  `lib/domain/niveles/perfil_dificultad.dart` — pure-Dart complexity profile
+  mapping level number → (filas, columnas, totalCeldas, totalFlechas, trayectorias)
+  with three tiers: 5×5 (levels 1‑5), 6×6 (levels 6‑10), 7×7 (levels 11‑15);
+  `lib/infrastructure/niveles/catalogo_niveles_remoto.dart` — HTTP-backed
+  `CatalogoNiveles` calling `GET /levels` via the authenticated client, falling
+  back to `CatalogoNivelesArchivo` on any exception or non‑200 status;
+  `lib/core/config/api_config.dart` — added `catalogPath = '/levels'`;
+  `assets/levels/level_04.json` … `level_15.json` — 12 bundled level files using
+  a horizontal serpentine pattern with scaling grid size and monotonic complexity;
+  `lib/di/inyeccion.dart` — wired `CatalogoNivelesRemoto(client: _clienteHttp,
+  fallback: _catalogoNivelesArchivo)` as the single `catalogoNiveles` entry point;
+  `lib/presentation/views/seleccion/seleccion_niveles_view.dart` — redesigned
+  from `ListView` to `GridView` (3 columns), neon-bordered cards with coloured
+  difficulty label (`Easy` green / `Medium` yellow / `Hard` red), compact
+  level-number badge (completed → `primaryNeon`, unlocked → `accentNeon`,
+  locked → `textSecondary`), and difficulty-adaptive text colour.
+  **REFACTOR:** Clean Architecture verified — `PerfilDificultad` has zero Flutter
+  imports; `CatalogoNivelesRemoto` lives in infrastructure and implements the
+  `CatalogoNiveles` port from application; the View never calls use cases; the
+  unlock/progression engine from ticket 13 is unchanged.
+  Verified: **`flutter test` 247/247 green** (236 prior + 11 new);
+  **`flutter analyze` 0 errors / 0 warnings** (37 info-level only — all
+  pre-existing style preferences); `flutter build web` succeeds.
+- **Modifications made by the team:** Two minor corrections on top of the AI's
+  first drafts, both caught by `flutter analyze` before finalising:
+  (a) An unused `import 'package:mocktail/mocktail.dart'` in
+  `catalogo_niveles_remoto_test.dart` — removed after `flutter analyze` flagged a
+  `unused_import` warning;
+  (b) `_CatalogoFake` in the test file used a `const` constructor with
+  `List.generate` (not a const expression), triggering a compile error on
+  const-validation — fixed by removing the `const` keyword from the fake's
+  constructor.
+  (c) The initial `Inyeccion` wiring used `late final` for the
+  `CatalogoNivelesRemoto` field, which triggered an `unnecessary_late` info;
+  refactored to use a private getter returning a `static final` field.
+- **Lessons learned / limitations identified:**
+  (1) The `CatalogoNivelesRemoto` constructor ordering in `Inyeccion` required
+  care: `_clienteHttp` is declared later in the class, so the field must use
+  lazy static initialisation (static fields are lazily evaluated in Dart, so
+  `late` is not needed — a plain `static final` suffices when accessed through
+  a getter).
+  (2) The `PerfilDificultad` definition needed manual tuning to ensure
+  monotonic non-decreasing values: the original formula for 5×5 levels
+  (`trayectorias * baseColumnas`) produced 25 cells for 5 paths × 5 cols, but
+  for 6‑path variants the column‑multiplied arrow count had to be kept
+  non-decreasing across tier boundaries (ticket 17's AC2 verified by 5 tests).
+  (3) Creating 12 handcrafted, solvable interlocking puzzle levels via the
+  `CargadorNivelArchivo` format is time-consuming. Using a mechanical horizontal
+  serpentine pattern (even rows LEFT, odd rows RIGHT) guaranteed solvability
+  and passing the `validarSolvencia` gate without manual verification of each
+  board — a pragmatic trade-off between content uniqueness and correctness.
+  (4) The `SeleccionNivelesView` redesign from `ListView` to `GridView` (3
+  columns) made the 15‑level catalog fit on screen without scrolling on desktop;
+  the difficulty colour coding (green/yellow/red) and the neon card border for
+  completed levels gave visual variety that was absent in the single‑column
+  list. The `celda_type` map for difficulty colours follows the same pattern as
+  the existing `_etiquetaDificultad` helper but returns colour tokens instead
+  of strings, keeping presentation logic in the View.
+  (5) Content debt from ticket 13 is resolved: level_01…level_15 now exist with
+  genuinely distinct grid sizes and scaling complexity. Per-level scoring
+  (`DefinicionNivel` with tier-specific thresholds) still uses the single
+  `definicionNivelInicial` default — a future ticket could read star thresholds
+  from the level JSON or the backend profile.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1373,6 +1464,20 @@ eloj:
     the trayectoria failed validation.
   - **How it was corrected:** Kept original tail order; `cabeza = tail.last` is the
     outermost edge cell.
+- **Case:** `_CatalogoFake` used a `const` constructor with `List.generate`, which
+  is not a constant expression — compile error (ticket 17).
+  - **How it was detected:** `flutter test` — the test file failed to load.
+  - **How it was corrected:** Removed the `const` keyword from the fake's constructor.
+- **Case:** `CatalogoNivelesRemoto` test imported `mocktail` but used an inline
+  `_HttpClientFake` instead — unused import (ticket 17).
+  - **How it was detected:** `flutter analyze` — `unused_import` warning.
+  - **How it was corrected:** Removed the import directive.
+- **Case:** The initial `Inyeccion` wiring used `late final` for the
+  `CatalogoNivelesRemoto` field; Dart's analyzer flagged it as unnecessary
+  because static fields are already lazily initialised (ticket 17).
+  - **How it was detected:** `flutter analyze` — `unnecessary_late` info.
+  - **How it was corrected:** Refactored to a private getter wrapping a
+    `static final` field.
 - **Case:** The initial 2-arrow snake fallback placed the second arrow's head at a
   non-edge cell pointing inward (not toward the board edge), and
   `CeldaFlecha.bloqueaRayo == true` blocked the ray from head→edge (ticket 16).

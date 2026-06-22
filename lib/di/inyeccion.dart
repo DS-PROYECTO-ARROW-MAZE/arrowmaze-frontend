@@ -39,6 +39,7 @@ import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
 import '../infrastructure/network/cliente_http_autenticado.dart';
 import '../infrastructure/niveles/catalogo_niveles_archivo.dart';
+import '../infrastructure/niveles/catalogo_niveles_remoto.dart';
 import '../infrastructure/niveles/niveles_data_source_http.dart';
 import '../infrastructure/observabilidad/medidor_metricas_simple.dart';
 import '../infrastructure/observabilidad/registro_consola.dart';
@@ -190,10 +191,20 @@ abstract final class Inyeccion {
   static final ProgresoLocalPersistente _progresoLocal =
       ProgresoLocalPersistente();
 
-  /// The bundled-level catalog used by the Level Selection screen.
-  static CatalogoNiveles get catalogoNiveles => _catalogoNiveles;
-  static const CatalogoNivelesArchivo _catalogoNiveles =
+  /// The bundled-level catalog used as offline fallback.
+  static const CatalogoNivelesArchivo _catalogoNivelesArchivo =
       CatalogoNivelesArchivo();
+
+  /// The remote catalog with local asset fallback (Ticket 17).
+  ///
+  /// Lazy initialised because [_clienteHttp] is declared later in this class.
+  static CatalogoNiveles get catalogoNiveles => _catalogoNiveles;
+  static CatalogoNivelesRemoto get _catalogoNiveles => _catalogoNivelesImple;
+  static final CatalogoNivelesRemoto _catalogoNivelesImple =
+      CatalogoNivelesRemoto(
+    client: _clienteHttp,
+    fallback: _catalogoNivelesArchivo,
+  );
 
   /// Use case that joins the catalog with progression state and the unlock rule.
   static ObtenerNivelesUseCase get obtenerNivelesUseCase =>

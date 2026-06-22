@@ -97,10 +97,15 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
           }
 
           final ids = estado.niveles.map((n) => n.id).toList();
-          return ListView.separated(
+          return GridView.builder(
             padding: const EdgeInsets.all(AppSpacing.md),
+            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+              crossAxisCount: 3,
+              mainAxisSpacing: AppSpacing.sm,
+              crossAxisSpacing: AppSpacing.sm,
+              childAspectRatio: 0.85,
+            ),
             itemCount: estado.niveles.length,
-            separatorBuilder: (_, __) => const SizedBox(height: AppSpacing.sm),
             itemBuilder: (context, index) {
               final nivel = estado.niveles[index];
               return _NivelCard(
@@ -131,22 +136,77 @@ class _NivelCard extends StatelessWidget {
     final bloqueado = !nivel.desbloqueado;
 
     return Opacity(
-      opacity: bloqueado ? 0.5 : 1,
+      opacity: bloqueado ? 0.45 : 1,
       child: Card(
-        child: ListTile(
-          onTap: onTap,
-          leading: _NumeroNivel(numero: nivel.id, completado: nivel.completado),
-          title: Text(nivel.nombre, style: AppTypography.bodyLarge),
-          subtitle: Text(
-            _etiquetaDificultad(nivel.dificultad),
-            style: AppTypography.bodyMedium,
+        shape: RoundedRectangleBorder(
+          borderRadius: AppRadii.cardRadius,
+          side: BorderSide(
+            color: bloqueado
+                ? AppColors.surfaceVariant
+                : nivel.completado
+                    ? AppColors.primaryNeon.withValues(alpha: 0.3)
+                    : AppColors.surfaceVariant,
+            width: 1.5,
           ),
-          trailing: bloqueado
-              ? const Icon(Icons.lock_outline, color: AppColors.textSecondary)
-              : _StarRow(estrellas: nivel.estrellas, gameTheme: gameTheme),
+        ),
+        color: bloqueado ? AppColors.surface : AppColors.surface,
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: AppRadii.cardRadius,
+          child: Padding(
+            padding: const EdgeInsets.all(AppSpacing.sm),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                _NumeroNivel(
+                  numero: nivel.id,
+                  completado: nivel.completado,
+                  desbloqueado: nivel.desbloqueado,
+                ),
+                const SizedBox(height: AppSpacing.xs),
+                Text(
+                  nivel.nombre,
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: bloqueado
+                        ? AppColors.textSecondary
+                        : AppColors.textPrimary,
+                  ),
+                  maxLines: 2,
+                  textAlign: TextAlign.center,
+                  overflow: TextOverflow.ellipsis,
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  _etiquetaDificultad(nivel.dificultad),
+                  style: AppTypography.bodyMedium.copyWith(
+                    fontSize: 10,
+                    color: _colorDificultad(nivel.dificultad),
+                  ),
+                ),
+                const Spacer(),
+                bloqueado
+                    ? Icon(Icons.lock_outline,
+                        size: 20, color: AppColors.textSecondary)
+                    : _StarRow(estrellas: nivel.estrellas, gameTheme: gameTheme),
+              ],
+            ),
+          ),
         ),
       ),
     );
+  }
+
+  Color _colorDificultad(Dificultad d) {
+    switch (d) {
+      case Dificultad.facil:
+        return AppColors.primaryNeon;
+      case Dificultad.medio:
+        return AppColors.warningNeon;
+      case Dificultad.dificil:
+        return AppColors.errorNeon;
+    }
   }
 
   String _etiquetaDificultad(Dificultad d) {
@@ -163,19 +223,28 @@ class _NivelCard extends StatelessWidget {
 
 /// The circular level-number badge; tinted when the level is completed.
 class _NumeroNivel extends StatelessWidget {
-  const _NumeroNivel({required this.numero, required this.completado});
+  const _NumeroNivel({
+    required this.numero,
+    required this.completado,
+    required this.desbloqueado,
+  });
 
   final int numero;
   final bool completado;
+  final bool desbloqueado;
 
   @override
   Widget build(BuildContext context) {
-    final color = completado ? AppColors.accentNeon : AppColors.textSecondary;
+    final color = !desbloqueado
+        ? AppColors.textSecondary
+        : completado
+            ? AppColors.primaryNeon
+            : AppColors.accentNeon;
     return Container(
       width: 40,
       height: 40,
       decoration: BoxDecoration(
-        color: color.withValues(alpha: 0.15),
+        color: color.withValues(alpha: 0.12),
         shape: BoxShape.circle,
         border: Border.all(color: color, width: 2),
       ),
@@ -204,12 +273,16 @@ class _StarRow extends StatelessWidget {
   Widget build(BuildContext context) {
     return Row(
       mainAxisSize: MainAxisSize.min,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: List.generate(3, (i) {
         final filled = i < estrellas;
-        return Icon(
-          filled ? Icons.star : Icons.star_border,
-          size: 18,
-          color: filled ? gameTheme.starActive : gameTheme.starInactive,
+        return Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 1),
+          child: Icon(
+            filled ? Icons.star : Icons.star_border,
+            size: 16,
+            color: filled ? gameTheme.starActive : gameTheme.starInactive,
+          ),
         );
       }),
     );
