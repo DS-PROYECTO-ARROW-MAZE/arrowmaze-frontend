@@ -96,6 +96,20 @@ class _GameViewState extends State<GameView>
                 MaterialPageRoute(builder: widget.construirRanking!),
               ),
             ),
+          // Audio mute toggle — always visible in the app bar.
+          IconButton(
+            icon: ListenableBuilder(
+              listenable: widget.viewModel,
+              builder: (context, _) {
+                final muted = widget.viewModel.estado.muted;
+                return Icon(
+                  muted ? Icons.volume_off_outlined : Icons.volume_up_outlined,
+                );
+              },
+            ),
+            tooltip: 'Toggle sound',
+            onPressed: widget.viewModel.toggleMute,
+          ),
           ListenableBuilder(
             listenable: widget.viewModel,
             builder: (context, _) {

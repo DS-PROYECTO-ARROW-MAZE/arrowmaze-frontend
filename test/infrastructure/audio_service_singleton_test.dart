@@ -3,10 +3,26 @@ import 'package:arrowmaze/domain/observador_juego.dart';
 import 'package:arrowmaze/domain/publicador_eventos_juego.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:arrowmaze/infrastructure/audio/audio_service_imp.dart';
+import 'package:arrowmaze/infrastructure/audio/i_reproductor_audio.dart';
 import 'package:flutter_test/flutter_test.dart';
+
+/// Silent player used by the singleton in tests so platform-channel
+/// dependencies are never triggered.
+class _ReproductorSilencioso implements IReproductorAudio {
+  @override
+  void reproducir(String asset) {}
+  @override
+  void detener() {}
+  @override
+  void liberar() {}
+}
 
 void main() {
   const posicion = Posicion.en(fila: 0, columna: 0);
+
+  setUpAll(() {
+    AudioServiceImp.usarReproductor(_ReproductorSilencioso());
+  });
 
   group('AudioServiceImp — GoF Singleton + Observer', () {
     test(

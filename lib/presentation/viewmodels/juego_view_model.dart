@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../application/ports/consulta_progreso_local.dart';
+import '../../application/ports/i_control_audio.dart';
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
 import '../../application/use_cases/deshacer_movimiento_use_case.dart';
@@ -52,10 +53,12 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     ConsultaProgresoLocal? progreso,
     CalcularPuntuacionUseCase? calcularPuntuacion,
     DeshacerMovimientoUseCase? deshacerMovimiento,
+    IControlAudio? audioControl,
   })  : _idNivel = idNivel,
         _progreso = progreso,
         _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
+        _audioControl = audioControl,
         _calcularPuntuacion = calcularPuntuacion ?? const CalcularPuntuacionUseCase(),
         // Defaults to an undo wired onto the move use case's own session,
         // history and counter, so both share one source of truth.
@@ -68,6 +71,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     _estado = JuegoViewState(
       tablero: _instantanea(),
       movimientos: 0,
+      muted: _audioControl?.muted ?? false,
       tiempoRestante: _sesion.tiempoRestante,
     );
     _iniciarReloj();
@@ -79,6 +83,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   final SesionJuego _sesion;
   final DefinicionNivel _definicionNivel;
   final CalcularPuntuacionUseCase _calcularPuntuacion;
+  final IControlAudio? _audioControl;
 
   /// The id of the level being played — used to record completion against the
   /// right level for progression/unlocks (Ticket 13).
@@ -173,6 +178,13 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners(); // MVVM data-binding: push new state to the View.
+  }
+
+  /// Toggles global audio mute on/off.
+  void toggleMute() {
+    _audioControl?.toggleMute();
+    _estado = _estado.copyWith(muted: _audioControl?.muted ?? false);
+    notifyListeners();
   }
 
   /// Whether an undo is available right now — there is a move to reverse and the

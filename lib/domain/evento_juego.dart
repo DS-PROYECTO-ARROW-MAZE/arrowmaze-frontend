@@ -24,6 +24,9 @@ enum TipoEvento {
   /// The valid move that exited the last arrow emptied the board: the session
   /// has reached `EstadoVictoria` (PRD §3 B1).
   victoria,
+
+  /// Terminal defeat: a timed level's clock reached zero (PRD §3 B2).
+  derrota,
 }
 
 /// An immutable value object describing one [TipoEvento] at a [posicion].

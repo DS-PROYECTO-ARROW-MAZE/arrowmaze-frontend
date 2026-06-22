@@ -126,6 +126,28 @@ void main() {
       }
     });
 
+    test('should_not_reference_audio_in_domain_or_application', () {
+      // AC2: domain/use-case code contains no reference to audio — audio is
+      // driven only through the Observer pattern.
+      for (final capa in ['lib/domain', 'lib/application']) {
+        final dir = Directory(capa);
+        expect(dir.existsSync(), isTrue, reason: '$capa must exist');
+        for (final imp in importsDe(dir)) {
+          final prohibido = imp.target.contains('audio') ||
+              imp.target.contains('audioplayers') ||
+              imp.target.contains('IReproductorAudio') ||
+              imp.target.contains('AudioService');
+          expect(
+            prohibido,
+            isFalse,
+            reason:
+                '${imp.file} imports "${imp.target}" — domain/application '
+                'must not reference audio concerns (AC2).',
+          );
+        }
+      }
+    });
+
     test('should_keep_presentation_free_of_infrastructure', () {
       // Arrange — the presentation layer reaches infrastructure only through
       // the composition root (di/), never by importing it directly.

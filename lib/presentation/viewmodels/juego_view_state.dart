@@ -123,6 +123,7 @@ class JuegoViewState {
     this.derrota = false,
     this.victoria,
     this.tiempoRestante,
+    this.muted = false,
   });
 
   /// The board snapshot to render.
@@ -148,6 +149,9 @@ class JuegoViewState {
   /// (the domain `EstadoDerrota`).
   final bool derrota;
 
+  /// Whether audio is globally muted (the View shows a mute/unmute icon).
+  final bool muted;
+
   /// The victory snapshot to render, or `null` while the level is still in play.
   /// Distinct from the domain `EstadoVictoria`.
   final VictoriaViewState? victoria;
@@ -163,6 +167,7 @@ class JuegoViewState {
     bool? movimientoInvalido,
     bool? pausado,
     bool? derrota,
+    bool? muted,
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
   }) {
@@ -173,6 +178,7 @@ class JuegoViewState {
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
+      muted: muted ?? this.muted,
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,
     );

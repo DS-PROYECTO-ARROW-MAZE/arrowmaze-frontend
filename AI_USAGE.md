@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-015 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-016 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10, 21), architectural analysis, documentation |
 
 ## 2. Usage Log by Task
 
@@ -957,17 +957,94 @@ eloj:
   `AuthViewState` consistent and making the ViewModel testable without building the
   full widget tree.
 
+### T-016 — Issue 21 · Audio Sound Effects (Observer-driven audio)
+
+- **Task / problem addressed:** Implement the Observer-driven audio system from
+  `.issues/21-feat-frontend-audio-sound-effects.md`. Acceptance criteria: (AC1)
+  distinct sound effects for valid move, invalid/wall move, collectible pickup,
+  victory, and defeat; (AC2) audio driven only through the Observer — domain/use-case
+  code contains zero audio references; (AC3) `AudioServiceImp` is a single Singleton
+  instance registered once via DI; (AC4) sounds can be globally muted without
+  touching game logic, with graceful degradation on missing assets.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) "Implementa el ticket
+  `.issues\21-feat-frontend-audio-sound-effects.md`. Sigue TDD estricto (Red →
+  Green → Refactor) y Clean Architecture. Primero escribe el puerto `IControlAudio`
+  en application/, la interface `IReproductorAudio` y su implementación con
+  `audioplayers` en infrastructure/, y el `AudioServiceImp` como Singleton que
+  implementa `ObservadorJuego`. Luego añade el mute toggle al `JuegoViewModel` y
+  al `GameView`. Genera assets WAV para los 5 eventos. Escribe tests completos
+  y ejecuta `flutter test` y `flutter analyze` después de cada ciclo." After
+  verification the user instructed "Usa la skill 'ai-usage-doc' para documentar en
+  el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/evento_juego.dart` (+`TipoEvento.derrota`);
+  `lib/application/ports/i_control_audio.dart` (new port — `muted`, `toggleMute`);
+  `lib/infrastructure/audio/i_reproductor_audio.dart` (new abstract interface);
+  `lib/infrastructure/audio/reproductor_audio_assets.dart` (`audioplayers`-backed
+  implementation with graceful `onError` degradation);
+  `lib/infrastructure/audio/audio_service_imp.dart` (full rewrite — data-driven
+  `TipoEvento`→asset map, Singleton with injectable `usarReproductor()`, implements
+  `ObservadorJuego` + `IControlAudio`);
+  `lib/presentation/viewmodels/juego_view_state.dart` (+`muted` field with `copyWith`);
+  `lib/presentation/viewmodels/juego_view_model.dart` (+`IControlAudio` injection,
+  `toggleMute()`);
+  `lib/presentation/views/game/game_view.dart` (+mute toggle `IconButton` in AppBar);
+  `lib/di/inyeccion.dart` (wired `AudioServiceImp.instance` as `IControlAudio`);
+  `pubspec.yaml` (+`audioplayers: ^6.1.0`, +`assets/sounds/`);
+  `assets/sounds/move.wav`, `invalid.wav`, `collect.wav`, `victory.wav`,
+  `defeat.wav` (generated WAV files with distinct tones);
+  `test/infrastructure/audio_service_imp_test.dart` (14 tests: 6 event→sound
+  mapping, 2 mute toggle, 2 graceful degradation, 1 Singleton identity,
+  1 ObservadorJuego subscription wiring, 2 publisher→observer integration);
+  `test/infrastructure/audio_service_singleton_test.dart` (updated with injectable
+  fake via `usarReproductor()`);
+  `test/architecture/dependency_direction_test.dart`
+  (+`should_not_reference_audio_in_domain_or_application`).
+  Verified: `flutter test` **223/223 green** (208 prior + 15 new);
+  `flutter analyze` 0 errors, 0 warnings (36 pre-existing info-level lints only);
+  zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review plus several analyzer-driven
+  corrections. (a) The initial mute `IconButton` used `game.accentNeon` as the
+  unmuted icon colour, but `GameTheme` has no `accentNeon` — flagged by
+  `flutter analyze` and fixed by removing the custom colour and using the default
+  icon colour. (b) `package:meta/meta.dart` + `@visibleForTesting` on
+  `usarReproductor()` triggered `depend_on_referenced_packages` info — fixed by
+  removing the import and keeping the method public with a doc-comment contract.
+  (c) `AudioServiceImp` constructor used body assignment instead of an initializing
+  formal — flagged by `prefer_initializing_formals` (info) and fixed to `this._reproductor`.
+  (d) A double-underscore `__` in `reproductor_audio_assets.dart` triggered
+  `unnecessary_underscores` — fixed to single `_`. (e) An unused import in
+  `audio_service_imp_test.dart` — removed.
+- **Lessons learned / limitations identified:** (1) The `IControlAudio` port in
+  application/ satisfied DIP cleanly — the ViewModel never imports infrastructure,
+  yet the mute toggle flows through the same Observer-driven Singleton that also
+  plays sounds. (2) The `usarReproductor()` method (package-visible via doc-contract,
+  not `@visibleForTesting`) proved simpler than DI-injecting a factory into a
+  Singleton — all 14 audio tests pass with a `FakeReproductorAudio` that never
+  touches platform channels, avoiding the need for `audioplayers` mocking. (3) The
+  data-driven `_mapaSonidos` (`Map<TipoEvento, String>`) currently lives inside
+  `AudioServiceImp`; extracting it to a separate class for independent testability
+  is a ready refactor. (4) `TipoEvento.derrota` was added to the enum but no use
+  case currently emits it — the audio service handles it via Observer when/if
+  emitted by a future timed-loss flow. (5) The `prefer_initializing_formals` lint
+  is a style preference, not an error, but keeping code consistent with the
+  project's convention avoids distracting infos. (6) `GameTheme` has distinct
+  colour tokens (`validMoveFlash`, `syncActive`, `scoreColor`) but no generic
+  `accentNeon` — an API design lesson to verify theme properties exist before
+  referencing them.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, and 20 were AI-generated then
+   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 20, and 21 were AI-generated then
   human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
   AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (208 passing tests, all source in `lib/domain/`,
+  files added across the slices (223 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
@@ -1110,6 +1187,15 @@ eloj:
   `http.Request` (ticket 14).
   - **How it was detected:** `flutter analyze` — 3 `unnecessary_cast` warnings.
   - **How it was corrected:** Dropped the redundant casts in the three test files.
+- **Case:** The mute `IconButton` in `GameView` referenced `game.accentNeon` as the
+  unmuted icon colour, but `GameTheme` has no `accentNeon` property — the theme has
+  `validMoveFlash`, `syncActive`, `scoreColor` etc. but no generic accent colour
+  (ticket 21).
+  - **How it was detected:** `flutter analyze` — `accentNeon` not defined on
+    `GameTheme`.
+  - **How it was corrected:** Removed the explicit colour reference; the mute icon
+    now uses the default AppBar icon colour, which is consistent with the other app
+    bar controls.
 
 ### Team reflection
 

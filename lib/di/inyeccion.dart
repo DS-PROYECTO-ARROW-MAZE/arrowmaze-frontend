@@ -129,6 +129,7 @@ abstract final class Inyeccion {
       // the next level unlocks.
       idNivel: idNivel,
       progreso: progresoLocal,
+      audioControl: AudioServiceImp.instance,
     );
   }
 
