@@ -42,7 +42,25 @@ Widget _construirSeleccion(BuildContext context) {
   return SeleccionNivelesView(
     viewModel: viewModel,
     alSeleccionar: _abrirNivel,
+    onLogout: () => _cerrarSesionYVolverALogin(context),
   );
+}
+
+/// Clears the session token and replaces the entire stack with a fresh login
+/// screen (AC2, AC3).
+void _cerrarSesionYVolverALogin(BuildContext context) {
+  final navigator = Navigator.of(context);
+  Inyeccion.cerrarSesionUseCase.ejecutar().then((_) {
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => AuthView(
+          viewModel: Inyeccion.construirAuthViewModel(),
+          construirInicio: _construirSeleccion,
+        ),
+      ),
+      (_) => false,
+    );
+  });
 }
 
 /// Pushes the game host for [idNivel]; [idsOrdenados] lets the host offer "Next".

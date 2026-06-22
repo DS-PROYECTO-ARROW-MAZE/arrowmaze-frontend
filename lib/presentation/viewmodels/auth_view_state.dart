@@ -9,6 +9,7 @@ class AuthViewState {
     this.username = '',
     this.cargando = false,
     this.autenticado = false,
+    this.sesionCerrada = false,
     this.mensajeError,
     this.esRegistro = false,
   });
@@ -28,6 +29,9 @@ class AuthViewState {
   /// Whether the user has a valid session.
   final bool autenticado;
 
+  /// Set to `true` after a successful logout so the View can navigate away.
+  final bool sesionCerrada;
+
   /// A user-facing error message, or `null` when no error.
   final String? mensajeError;
 
@@ -40,6 +44,7 @@ class AuthViewState {
     String? username,
     bool? cargando,
     bool? autenticado,
+    bool? sesionCerrada,
     String? mensajeError,
     bool? esRegistro,
   }) {
@@ -49,6 +54,7 @@ class AuthViewState {
       username: username ?? this.username,
       cargando: cargando ?? this.cargando,
       autenticado: autenticado ?? this.autenticado,
+      sesionCerrada: sesionCerrada ?? this.sesionCerrada,
       mensajeError: mensajeError,
       esRegistro: esRegistro ?? this.esRegistro,
     );

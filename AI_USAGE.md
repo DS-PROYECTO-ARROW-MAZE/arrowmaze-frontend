@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-014 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-015 appended)
 
 ## 1. Tools Used
 
@@ -899,17 +899,75 @@ eloj:
   are now slightly stale (e.g. `obtenerTop(nivelId)`, new `FuenteNiveles`) and were
   intentionally left untouched per the "don't edit docs unless asked" rule.
 
+### T-015 — Issue 20 · Logout Button (CerrarSesión)
+
+- **Task / problem addressed:** Implement the logout button on the level-selection
+  screen (`.issues/20-feat-frontend-logout-button.md`). Acceptance criteria: (AC1) a
+  visible Logout control exists on the post-login surface; (AC2) tapping it calls
+  `ProveedorSesion.cerrarSesion()`; (AC3) after logout the app returns to the auth
+  screen; (AC4) the View never calls the use case directly — it delegates via an
+  `onLogout` callback wired from the composition root.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) "Implementa el Issue 20: Botón de Cerrar
+  Sesión. Sigue TDD estricto (Red → Green → Refactor) y Clean Architecture. Primero
+  escribe el `CerrarSesionUseCase` con test, luego refactoriza el `AuthViewModel`
+  para usarlo, y finalmente añade el botón a `SeleccionNivelesView` con callback
+  `onLogout` y wiring en `main.dart`. Ejecuta `flutter test` y `flutter analyze`
+  después de cada ciclo."  After each Red → Green cycle the user prompted
+  "continua", and after the final analyzer fix the user instructed "Usa la skill
+  'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo, los prompts y
+  el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/application/use_cases/cerrar_sesion_use_case.dart` (delegates
+  `ejecutar()` → `ProveedorSesion.cerrarSesion()`);
+  `lib/presentation/viewmodels/auth_view_state.dart` (new `sesionCerrada` bool +
+  `copyWith`);
+  `lib/presentation/viewmodels/auth_view_model.dart` (now requires
+  `CerrarSesionUseCase` as constructor param; `cerrarSesion()` sets
+  `sesionCerrada: true`);
+  `lib/presentation/views/seleccion/seleccion_niveles_view.dart`
+  (`IconButton(Icons.logout)` in AppBar actions, wired via new optional `onLogout`
+  `VoidCallback`);
+  `lib/di/inyeccion.dart` (`cerrarSesionUseCase` getter; updated
+  `construirAuthViewModel()`);
+  `lib/main.dart` (`_cerrarSesionYVolverALogin` — calls use case then
+  `pushAndRemoveUntil` to fresh `AuthView`; fixes `use_build_context_synchronously`
+  by capturing `Navigator.of(context)` before the `then`).
+  New tests: `test/application/cerrar_sesion_use_case_test.dart` (2 tests: clears
+  session on logout, no-op when already logged out);
+  `test/presentation/auth_view_model_test.dart` (2 tests: exposes `sesionCerrada`
+  after logout, resets form fields).
+  Verified: `flutter test` 208/208 green (204 prior + 4 new); `flutter analyze`
+  0 errors, 0 warnings on all new code; architecture guards still green.
+- **Modifications made by the team:** Review only — the team reviewed the tests and
+  code; no manual code edits were required. The AI self-corrected two minor issues
+  after `flutter analyze` flagged them: (a) a `use_build_context_synchronously`
+  warning in `main.dart` — fixed by capturing `Navigator.of(context)` before the
+  async `then`; (b) an unused import in `auth_view_model_test.dart` — removed before
+  finalizing. `flutter test` / `flutter analyze` served as guardrails throughout.
+- **Lessons learned / limitations identified:** (1) The MVP `ProveedorSesion` port
+  already had a `cerrarSesion()` method (from ticket 08), so the new
+  `CerrarSesionUseCase` was a thin one-line delegation — keeping the port stable
+  and the new class trivial. (2) Adding an `onLogout` callback on the View (rather
+  than adding auth logic to `SeleccionNivelesViewModel`) respected SRP: the
+  level-selection VM never learns about auth. (3) The `use_build_context_synchronously`
+  lint is a common trap when chaining async use-case calls with navigation inside a
+  `then` — capturing the navigator reference before the async gap is the idiomatic
+  fix. (4) All 4 new tests pass with the `sesionCerrada` state field, keeping
+  `AuthViewState` consistent and making the ViewModel testable without building the
+  full widget tree.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, and Issue 14 were AI-generated then
+  03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, and 20 were AI-generated then
   human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
   AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (204 passing tests, all source in `lib/domain/`,
+  files added across the slices (208 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
