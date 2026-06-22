@@ -62,3 +62,23 @@ PHASE 3 — DOWNSTREAM (depend on Phase-2 results)
 - **Sprint 2:** 09–12 unlock as their parents merge.
 
 Story→module→test traceability mirrors PRD §11 / §7.
+
+## Phase 5 — Enhancement batch (tickets 15–21)
+
+> Added after the MVP graph above. Ticket **15 is Priority 1** (hotfix) and pairs with backend
+> ticket 12. Diagram deltas are planned in `DIAGRAM-RECONCILIATION.md §11`.
+
+| Ticket | Phase | Blocked by | Backend twin | Priority |
+|---|---|---|---|---|
+| 15 fix flush gameplay progress & leaderboard | Hotfix | 10, 11, 14 | backend 12 | **1** |
+| 16 dynamic board shapes + arrow-length-≥2 | 5 | 01, 05 | backend 14 | — |
+| 17 level catalog of 15+ levels (scaling) | 5 | 05, 13, 16 | backend 16 | — |
+| 18 timer rules — timed ≥10, bonus exemption | 5 | 04, 06, 17 | backend 15 | — |
+| 19 proportional star display | 5 | 06, 18 | backend 17 | — |
+| 20 logout button | 5 | 08 | — | — |
+| 21 audio sound effects (Observer) | 5 | 07 | — | — |
+
+- **Grab first:** 15 (P1, with backend 12). 16/20/21 are independent off their parents. 17 needs
+  16 + ticket 13; 18 needs 17; 19 needs 18.
+- **Cross-repo agreement:** 16 (shaped golden boards), 17 (`PerfilDificultad`), 19 (golden scores)
+  stay in lockstep with their backend twins.

@@ -551,3 +551,62 @@ not the hard-coded `Inyeccion.idNivelInicial`. The leaderboard `idNivel` (today 
    than local storage, `ConsultaProgresoLocal` grows an HTTP adapter and this folds into the §9.4
    contract item (a `GET /progress` / completed-levels projection). Out of scope while offline-local
    is the source of truth.
+
+## 11. Enhancement batch — shapes, catalog, timer, stars, logout, audio (FRONTEND tickets 15–21)
+
+> **Plan only — no diagram edits applied yet.** Checklist of Lucid deltas required once
+> frontend tickets 15–21 land, in the §1–§10 DELETE / ADD / MODIFY grammar. Cross-repo twins
+> live in the backend DR §10. Per [[lucid-arrowmaze-doc]] member-compartment edits are **by-hand**.
+
+### 11.1 MODIFY — board model distinguishes *absent* positions (ticket 16, shapes)
+
+- Annotate `Tablero` «interface» / `GrafoTablero`: a position may be **absent** (non-existent),
+  distinct from `EmptyCell` (present-but-transparent). `celdaEn`/raycast/hit-test skip absent.
+- Annotate the level JSON schema note (§9.4 contract): positions with no cell = absent (mask).
+- ADD invariant note on `GeneradorNivelBase` / `validarSolvencia`: **"never emits a length-1
+  arrow"** (minimum arrow length 2). No new box — strengthen the Template Method note.
+
+### 11.2 ADD — remote catalog + complexity profile (ticket 17, 15+ levels)
+
+- ADD `CatalogoNivelesRemoto` «Adapter» realizing the `CatalogoNiveles` port (reserved in
+  §10.2), alongside `CatalogoNivelesArchivo` (asset fallback). Show both realizing the port.
+- ADD `PerfilDificultad` «servicio» (`numero → cells/arrows` targets); mirror of backend
+  `PerfilDificultad` (agreement note). Add `numero: int` to `ResumenNivel`/`NivelConEstado`.
+
+### 11.3 MODIFY — timer rule on `JuegoViewModel` (ticket 18)
+
+- Annotate `JuegoViewModel`: starts a countdown **iff** the level is timed (`numero ≥ 10`,
+  non-bonus); bonus ⇒ no timer/score. Note timeout → `EstadoDerrota` is an **existing**
+  transition — **no new State box** (consistent with §10.6 and ticket 13's State note).
+
+### 11.4 MODIFY — proportional stars (ticket 19)
+
+- Annotate `CalcularPuntuacionUseCase` / `VictoriaViewState`: `Estrellas` is **proportional**
+  to `Puntaje / referencia`, not absolute thresholds; bonus ⇒ no stars. Golden-fixture
+  regeneration is the cross-repo agreement obligation (backend DR §10.5). No new box.
+
+### 11.5 ADD — logout action surfaced (ticket 20)
+
+- ADD `CerrarSesionUseCase` «caso de uso» depending on the existing `ProveedorSesion`
+  («interface», added in the P2 reconciliation). Annotate the auth/session ViewModel with a
+  `logout()` action and the host's post-logout navigation back to the auth view.
+
+### 11.6 ADD — audio observer enabled (ticket 21)
+
+- Promote `AudioServiceImp` to a concrete box realizing `ObservadorJuego` (Observer, §4.3),
+  registered on `PublicadorEventosJuego`; stereotype it the **one** «Singleton» (ADR-0002).
+- Annotate `EventoJuego` `tipo: TipoEvento` → sound-asset mapping (data-driven). Confirm no
+  audio dependency crosses into domain/application (the §7.8 language guard already covers it).
+
+### 11.7 No diagram element (ticket 15, P1 bug)
+
+- The gameplay→sync flush fix is wiring/contract (victory→enqueue→flush, JWT interceptor,
+  field-name reconciliation). No structural box changes — **annotate** the API-client note
+  with the canonical sync contract once agreed with backend ticket 12. No new shapes.
+
+### 11.8 Caveats
+
+- The "absent position" concept (§11.1) must stay vocabulary-aligned with the backend
+  `mascara` (backend DR §10.2) — one idea, one term across repos.
+- `numero` (§11.2/§11.3) is the **product** integer ordinal driving rules; do not conflate it
+  with the storage `uuid` or with the authoring `idFlecha`/`Trayectoria.id` indices (§8).
