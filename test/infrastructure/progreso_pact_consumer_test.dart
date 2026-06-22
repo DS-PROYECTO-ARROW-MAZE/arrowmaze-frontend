@@ -5,7 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// Issue 14 — consumer contract test for the batch sync payload (AC2/AC3).
 ///
 /// Verifies the DTO shape the client sends to `POST /progress/sync`:
-/// `{ "progresos": [ { nivelId, estrellas, movimientos, tiempoSegundos,
+/// `{ "progresos": [ { nivelId, estrellas, movimientos, segundosRestantes,
 /// completadoEn } ] }`.
 void main() {
   group('Sync DTO shape (Issue 14)', () {
@@ -17,7 +17,7 @@ void main() {
           nivelId: 'uuid-1',
           estrellas: 3,
           movimientos: 12,
-          tiempoSegundos: 35,
+          segundosRestantes: 55,
           completadoEn: '2026-06-21T20:30:00.000Z',
         );
         final syncDto = SyncRequestDto(progresos: [item]);
@@ -34,7 +34,7 @@ void main() {
         expect(itemJson['nivelId'], 'uuid-1');
         expect(itemJson['estrellas'], 3);
         expect(itemJson['movimientos'], 12);
-        expect(itemJson['tiempoSegundos'], 35);
+        expect(itemJson['segundosRestantes'], 55);
         expect(itemJson['completadoEn'], '2026-06-21T20:30:00.000Z');
 
         // Exact key contract per item.
@@ -42,7 +42,7 @@ void main() {
           'nivelId',
           'estrellas',
           'movimientos',
-          'tiempoSegundos',
+          'segundosRestantes',
           'completadoEn',
         });
       },

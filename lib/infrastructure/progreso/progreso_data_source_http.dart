@@ -28,7 +28,7 @@ class ProgresoDataSourceHttp implements IRepositorioProgreso {
               nivelId: r.nivelId,
               estrellas: r.estrellas,
               movimientos: r.movimientos,
-              tiempoSegundos: r.tiempoSegundos,
+              segundosRestantes: r.segundosRestantes,
               completadoEn: r.completadoEn.toUtc().toIso8601String(),
             ))
         .toList();

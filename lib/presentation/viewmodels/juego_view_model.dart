@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/foundation.dart';
 
 import '../../application/ports/consulta_progreso_local.dart';
@@ -5,10 +7,12 @@ import '../../application/ports/i_control_audio.dart';
 import '../../application/ports/reloj.dart';
 import '../../application/use_cases/calcular_puntuacion_use_case.dart';
 import '../../application/use_cases/deshacer_movimiento_use_case.dart';
+import '../../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../../domain/evento_juego.dart';
 import '../../domain/observador_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
+import '../../domain/progreso/run_completado.dart';
 import '../../domain/puntuacion/definicion_nivel.dart';
 import '../../domain/sesion/estado_sesion.dart';
 import '../../domain/sesion/sesion_juego.dart';
@@ -54,8 +58,10 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     CalcularPuntuacionUseCase? calcularPuntuacion,
     DeshacerMovimientoUseCase? deshacerMovimiento,
     IControlAudio? audioControl,
+    SincronizarProgresoUseCase? sincronizar,
   })  : _idNivel = idNivel,
         _progreso = progreso,
+        _sincronizar = sincronizar,
         _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
         _audioControl = audioControl,
@@ -92,6 +98,8 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// Optional local progression store; when present, a victory records the
   /// level as completed with its star count so the next level unlocks.
   final ConsultaProgresoLocal? _progreso;
+
+  final SincronizarProgresoUseCase? _sincronizar;
 
   final Reloj _reloj;
 
@@ -166,6 +174,17 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
         idNivel: _idNivel,
         estrellas: puntuacion.estrellas,
       );
+
+      // Enqueue the run for sync and trigger an immediate flush (Ticket 15).
+      // Fire-and-forget: the sync pipeline runs in the background.
+      final run = RunCompletado(
+        nivelId: _idNivel.toString(),
+        estrellas: puntuacion.estrellas,
+        movimientos: resultado.movimientos,
+        segundosRestantes: _sesion.tiempoRestante?.inSeconds,
+        completadoEn: DateTime.now(),
+      );
+      _encolarYFlushear(run);
     }
 
     _estado = _estado.copyWith(
@@ -246,6 +265,13 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners();
+  }
+
+  /// Enqueues [run] in the sync queue and triggers an immediate flush.
+  void _encolarYFlushear(RunCompletado run) {
+    final sincronizar = _sincronizar;
+    if (sincronizar == null) return;
+    unawaited(sincronizar.encolar(run).then((_) => sincronizar.sincronizar()));
   }
 
   @override

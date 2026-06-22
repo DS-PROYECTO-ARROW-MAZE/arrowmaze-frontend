@@ -116,7 +116,7 @@ RunCompletado _runEjemplo({String nivelId = 'uuid-1'}) {
     nivelId: nivelId,
     estrellas: 2,
     movimientos: 10,
-    tiempoSegundos: 30,
+    segundosRestantes: 60,
     completadoEn: DateTime.utc(2026, 1, 1),
   );
 }

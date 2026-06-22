@@ -30,7 +30,7 @@ void main() {
           nivelId: 'uuid-1',
           estrellas: 3,
           movimientos: 12,
-          tiempoSegundos: 35,
+          segundosRestantes: 55,
           completadoEn: DateTime.utc(2026, 6, 21, 20, 30),
         ),
       ];
@@ -47,7 +47,7 @@ void main() {
       expect(item['nivelId'], 'uuid-1');
       expect(item['estrellas'], 3);
       expect(item['movimientos'], 12);
-      expect(item['tiempoSegundos'], 35);
+      expect(item['segundosRestantes'], 55);
       expect(item['completadoEn'], '2026-06-21T20:30:00.000Z');
     });
 
@@ -66,7 +66,7 @@ void main() {
           nivelId: 'uuid-1',
           estrellas: 1,
           movimientos: 4,
-          tiempoSegundos: 10,
+          segundosRestantes: null,
           completadoEn: DateTime.utc(2026),
         ),
       ]);

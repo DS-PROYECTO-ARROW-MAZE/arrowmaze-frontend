@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-21 (T-016 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-017 appended)
 
 ## 1. Tools Used
 
@@ -1034,17 +1034,87 @@ eloj:
   `accentNeon` — an API design lesson to verify theme properties exist before
   referencing them.
 
+### T-017 — Issue 15 · Fix Frontend Flush / Gameplay Progress + Leaderboard
+
+- **Task / problem addressed:** Wire the offline sync queue (`IColaSincronizacion` +
+  `SincronizarProgresoUseCase`) from the gameplay loop so that winning a level
+  triggers queue-and-flush; canonicalise the `tiempoSegundos`/`segundosRestantes`
+  split into a single field; ensure the leaderboard can be refreshed after sync.
+  Scope captured in `.issues/15-fix-frontend-flush-gameplay-progress-leaderboard.md`.
+  Acceptance criteria: (AC1) victory → `POST /progress/sync` with canonical
+  `segundosRestantes` field; (AC2) single canonical contract — no
+  `tiempoSegundos`/`segundosRestantes` split; (AC3) JWT auto-attached via
+  `ClienteHttpAutenticado`; (AC4) leaderboard refreshable via
+  `RankingViewModel.cargarRanking()`; (AC5) offline queue drains on flush; failure
+  keeps queue intact.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) "Implementar el ticket 15. Es OBLIGATORIO
+  que apliques estrictamente las reglas de las skills 'tdd-strict' y
+  'clean-architecture'." The session began with the user asking "What did we do so
+  far?" — the AI produced an anchored summary that surfaced the pending task, then
+  was instructed "Implement the RED phase: write a failing test for JuegoViewModel
+  that verifies victory→enqueue→flush". After RED → green → final green + refactor
+  cycles the user instructed "Usa la skill 'ai-usage-doc' para documentar en el
+  AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  **RED (3 failing tests):**
+  `test/presentation/juego_viewmodel_sync_test.dart` — victory enqueues `RunCompletado`
+  + triggers flush via `SincronizarProgresoUseCase`;
+  `test/infrastructure/progreso_data_source_http_test.dart` + `progreso_pact_consumer_test.dart`
+  — updated contract assertions to expect `segundosRestantes` instead of `tiempoSegundos`;
+  `test/presentation/ranking_viewmodel_test.dart` — added `should_refresh_rankings_when_cargarRanking_called_again`
+  test + configurable `_ConsultaRankingFake`.
+  **GREEN (source changes):**
+  `lib/domain/progreso/run_completado.dart` — renamed `tiempoSegundos` →
+  `segundosRestantes` (`int?`, nullable for untimed levels);
+  `lib/infrastructure/dtos/progreso_sync_dto.dart` — same rename + nullable type;
+  `lib/infrastructure/progreso/progreso_data_source_http.dart` — uses
+  `r.segundosRestantes`;
+  `lib/infrastructure/dtos/sync_request_dto.dart` — doc comment updated;
+  `lib/presentation/viewmodels/juego_view_model.dart` —
+  +`SincronizarProgresoUseCase?` optional constructor param + `_sincronizar` field;
+  +`_encolarYFlushear(RunCompletado)` helper that enqueues and calls
+  `sincronizar()` fire-and-forget via `unawaited`; wired into victory path alongside
+  existing `_progreso?.registrarCompletado`;
+  `lib/di/inyeccion.dart` — wires `sincronizarProgresoUseCase` into
+  `JuegoViewModel`.
+  **REFACTOR:** Flush lives in VM layer (View never calls use cases);
+  `SincronizarProgresoUseCase.sincronizar()` already idempotent from ticket 10
+  (empty queue → no-op, success → vacuum, failure → queue intact) — no use-case
+  or queue changes needed.
+  Verified: `flutter test` **226/226 green** (223 prior + 3 new);
+  `flutter analyze` 0 errors, 0 warnings from new code.
+- **Modifications made by the team:** (a) One test assertion fix:
+  `juego_viewmodel_sync_test.dart` initially expected
+  `lote.first.segundosRestantes isNotNull`, but for an untimed level (default from
+  `MoverFlechaUseCase`) the value is `null` — changed to `isNull` to match domain
+  behaviour. (b) The existing `sync_request_dto.dart` doc comment still referenced
+  the old `tiempoSegundos` key — updated to `segundosRestantes`. No other manual
+  code edits were required; `flutter test` / `flutter analyze` served as guardrails.
+- **Lessons learned / limitations identified:** (1) The `_encolarYFlushear` helper
+  in `JuegoViewModel` follows the same fire-and-forget pattern as the existing
+  `_progreso?.registrarCompletado` — keeping the ViewModel consistent. (2) The sync
+  use case already handled idempotency from ticket 10, so the REFACTOR phase needed
+  no changes to the use case or queue — reusing established ports paid off. (3) The
+  initial assertion failure (`segundosRestantes isNotNull` for an untimed level) was
+  a test-design error, not a code bug — the domain correctly represents untimed
+  levels with `null` remaining seconds. The fix confirmed the architecture was sound
+  and the test needed alignment, not the domain. (4) The `segundosRestantes`
+  canonical name is now consistent across all five touchpoints: domain entity, Sync
+  DTO, HTTP datasource, Pact consumer tests, and API client test — zero
+  `tiempoSegundos` references remain in source code.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 20, and 21 were AI-generated then
-  human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
-  AI-authored in these tasks). Every ticket followed the same pattern (full AI
+   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 20, and 21 were AI-generated
+  then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
+  (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (223 passing tests, all source in `lib/domain/`,
+  files added across the slices (226 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
@@ -1199,7 +1269,7 @@ eloj:
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all fourteen tasks. The predefined
+- **Impact on productivity:** Very high across all fifteen tasks. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain

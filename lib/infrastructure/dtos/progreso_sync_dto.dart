@@ -7,7 +7,7 @@ class ProgresoSyncDto {
     required this.nivelId,
     required this.estrellas,
     required this.movimientos,
-    required this.tiempoSegundos,
+    this.segundosRestantes,
     required this.completadoEn,
   });
 
@@ -20,8 +20,8 @@ class ProgresoSyncDto {
   /// Total registered taps.
   final int movimientos;
 
-  /// Elapsed seconds taken to clear the level.
-  final int tiempoSegundos;
+  /// Remaining clock seconds when cleared, or `null` for untimed levels.
+  final int? segundosRestantes;
 
   /// ISO-8601 timestamp.
   final String completadoEn;
@@ -31,7 +31,7 @@ class ProgresoSyncDto {
         'nivelId': nivelId,
         'estrellas': estrellas,
         'movimientos': movimientos,
-        'tiempoSegundos': tiempoSegundos,
+        'segundosRestantes': segundosRestantes,
         'completadoEn': completadoEn,
       };
 }

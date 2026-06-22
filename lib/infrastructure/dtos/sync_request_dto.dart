@@ -4,7 +4,7 @@ import 'progreso_sync_dto.dart';
 ///
 /// Expected shape:
 /// ```json
-/// { "progresos": [ { nivelId, estrellas, movimientos, tiempoSegundos,
+/// { "progresos": [ { nivelId, estrellas, movimientos, segundosRestantes,
 ///                    completadoEn } ] }
 /// ```
 class SyncRequestDto {

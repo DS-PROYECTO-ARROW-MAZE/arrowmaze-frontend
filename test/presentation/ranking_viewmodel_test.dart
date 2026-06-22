@@ -5,7 +5,7 @@ import 'package:arrowmaze/presentation/viewmodels/ranking_view_model.dart';
 import 'package:arrowmaze/presentation/viewmodels/ranking_view_state.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Issue 14 — RankingViewModel (String nivelId, `entradas`).
+/// Issue 14 / 15 — RankingViewModel: read-only, reloadable.
 void main() {
   group('RankingViewModel', () {
     test(
@@ -23,6 +23,38 @@ void main() {
         expect(viewModel.estado.entradas, hasLength(2));
         expect(viewModel.estado.entradas.first.puntaje, 900);
         expect(viewModel.estado.entradas.first.email, 'alice@b.com');
+      },
+    );
+
+    test(
+      'should_refresh_rankings_when_cargarRanking_called_again',
+      () async {
+        // Arrange — initial load with 2 entries.
+        final port = _ConsultaRankingFake();
+        final viewModel = RankingViewModel(consulta: port);
+        await viewModel.cargarRanking(nivelId: 'uuid-1', limite: 2);
+        expect(viewModel.estado.entradas, hasLength(2));
+
+        // Reconfigure the fake to return different data.
+        port.entradas = [
+          FilaRanking(
+            email: 'new@b.com',
+            puntaje: 1200,
+            estrellas: 3,
+            movimientos: 8,
+            segundosRestantes: 82,
+            completadoEn: DateTime.utc(2026, 6, 22),
+          ),
+        ];
+
+        // Act — refresh (simulating post-sync reload).
+        await viewModel.cargarRanking(nivelId: 'uuid-1', limite: 5);
+
+        // Assert — state reflects the new data.
+        expect(viewModel.estado.status, RankingStatus.cargado);
+        expect(viewModel.estado.entradas, hasLength(1));
+        expect(viewModel.estado.entradas.first.puntaje, 1200);
+        expect(viewModel.estado.entradas.first.email, 'new@b.com');
       },
     );
 
@@ -45,28 +77,30 @@ void main() {
 }
 
 class _ConsultaRankingFake implements IConsultaRanking {
+  _ConsultaRankingFake();
+
+  List<FilaRanking> entradas = [
+    FilaRanking(
+      email: 'alice@b.com',
+      puntaje: 900,
+      estrellas: 3,
+      movimientos: 12,
+      segundosRestantes: null,
+      completadoEn: DateTime.utc(2026, 6, 21),
+    ),
+    FilaRanking(
+      email: 'bob@b.com',
+      puntaje: 700,
+      estrellas: 2,
+      movimientos: 18,
+      segundosRestantes: 5,
+      completadoEn: DateTime.utc(2026, 6, 21),
+    ),
+  ];
+
   @override
   Future<RankingDto> obtenerTop(String nivelId, int limite) async {
-    return RankingDto(
-      entradas: [
-        FilaRanking(
-          email: 'alice@b.com',
-          puntaje: 900,
-          estrellas: 3,
-          movimientos: 12,
-          segundosRestantes: null,
-          completadoEn: DateTime.utc(2026, 6, 21),
-        ),
-        FilaRanking(
-          email: 'bob@b.com',
-          puntaje: 700,
-          estrellas: 2,
-          movimientos: 18,
-          segundosRestantes: 5,
-          completadoEn: DateTime.utc(2026, 6, 21),
-        ),
-      ],
-    );
+    return RankingDto(entradas: List.of(entradas));
   }
 }
 

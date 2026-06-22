@@ -129,6 +129,8 @@ abstract final class Inyeccion {
       // the next level unlocks.
       idNivel: idNivel,
       progreso: progresoLocal,
+      // Ticket 15: wire sync so victory enqueues the run and flushes to backend.
+      sincronizar: sincronizarProgresoUseCase,
       audioControl: AudioServiceImp.instance,
     );
   }
