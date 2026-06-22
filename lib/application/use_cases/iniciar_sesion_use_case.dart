@@ -1,19 +1,27 @@
 import '../ports/fuente_autenticacion.dart';
 import '../ports/proveedor_sesion.dart';
+import 'limpiar_progreso_local_use_case.dart';
 import 'resultado_inicio_sesion.dart';
 
 /// Authenticates an existing user.
 ///
-/// On success it stores the session token via the injected [ProveedorSesion].
-/// On wrong credentials it surfaces a clean [InicioSesionCredencialesInvalidas].
+/// On success it wipes any leftover device-local progression (so a previous
+/// account's unlocks never leak in) and stores the session token via the
+/// injected [ProveedorSesion]. On wrong credentials it surfaces a clean
+/// [InicioSesionCredencialesInvalidas].
 class IniciarSesionUseCase {
   const IniciarSesionUseCase({
     required this.fuenteAutenticacion,
     required this.proveedorSesion,
+    this.limpiarProgresoLocal,
   });
 
   final FuenteAutenticacion fuenteAutenticacion;
   final ProveedorSesion proveedorSesion;
+
+  /// Wipes device-local progression on a fresh login so no ghost data carries
+  /// over from a prior account; optional so token-only tests need not wire it.
+  final LimpiarProgresoLocalUseCase? limpiarProgresoLocal;
 
   /// Executes the login flow.
   ///
@@ -27,6 +35,9 @@ class IniciarSesionUseCase {
         email: email,
         password: password,
       );
+      // Start from a clean slate: drop any progression left on the device from
+      // a prior account before this user's session begins.
+      await limpiarProgresoLocal?.ejecutar();
       await proveedorSesion.guardarToken(token);
       return const InicioSesionExitoso();
     } on AutenticacionException catch (e) {

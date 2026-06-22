@@ -60,6 +60,39 @@ void main() {
       expect(await store.mejorEstrellas(4), 0);
     });
 
+    test('should_wipe_all_progress_when_limpiar_called', () async {
+      // Arrange — several levels recorded.
+      final store = ProgresoLocalPersistente();
+      await store.registrarCompletado(idNivel: 1, estrellas: 3);
+      await store.registrarCompletado(idNivel: 2, estrellas: 1);
+      await store.registrarCompletado(idNivel: 3, estrellas: 0);
+      expect(await store.nivelesCompletados(), {1, 2, 3});
+
+      // Act — wipe (logout / account switch).
+      await store.limpiar();
+
+      // Assert — no progression remains; a brand-new account starts fresh.
+      expect(await store.nivelesCompletados(), isEmpty);
+      expect(await store.mejorEstrellas(1), 0);
+    });
+
+    test('should_leave_unrelated_keys_intact_when_limpiar_called', () async {
+      // Arrange — a non-progress key (e.g. the session token) coexists in prefs.
+      SharedPreferences.setMockInitialValues({
+        'arrowmaze.sesion.token': 'tok-keep',
+      });
+      final store = ProgresoLocalPersistente();
+      await store.registrarCompletado(idNivel: 5, estrellas: 2);
+
+      // Act
+      await store.limpiar();
+
+      // Assert — progress gone, but the unrelated key is untouched.
+      expect(await store.nivelesCompletados(), isEmpty);
+      final prefs = await SharedPreferences.getInstance();
+      expect(prefs.getString('arrowmaze.sesion.token'), 'tok-keep');
+    });
+
     test('should_survive_a_new_instance_when_backed_by_same_storage', () async {
       // Arrange — write through one instance.
       await ProgresoLocalPersistente().registrarCompletado(

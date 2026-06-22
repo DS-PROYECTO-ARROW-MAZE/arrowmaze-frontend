@@ -25,4 +25,12 @@ abstract interface class ConsultaProgresoLocal {
     required int idNivel,
     required int estrellas,
   });
+
+  /// Wipes **all** recorded progression (every completed level and star count).
+  ///
+  /// Called on logout and on a fresh login/register so one account's unlocks
+  /// never leak into another's: progression is device-local (there is no
+  /// server-side read path), so a clean slate is the only way to guarantee the
+  /// next session renders solely the signed-in user's progress.
+  Future<void> limpiar();
 }

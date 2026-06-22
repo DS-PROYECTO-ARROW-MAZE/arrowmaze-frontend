@@ -55,4 +55,15 @@ class ProgresoLocalPersistente implements ConsultaProgresoLocal {
       await prefs.setInt(clave, estrellas);
     }
   }
+
+  @override
+  Future<void> limpiar() async {
+    final prefs = await _instancia;
+    // Snapshot the keys first — removing entries mutates the key set.
+    final claves =
+        prefs.getKeys().where((k) => k.startsWith(prefijoEstrellas)).toList();
+    for (final clave in claves) {
+      await prefs.remove(clave);
+    }
+  }
 }
