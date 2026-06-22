@@ -172,7 +172,7 @@ abstract final class Inyeccion {
   );
 
   static GeneradorNivelBase get generadorAleatorio =>
-      const GeneracionAleatoriaNivel();
+      GeneracionAleatoriaNivel();
 
   static CargadorNivel get cargadorNivelArchivo =>
       const CargadorNivelArchivo();

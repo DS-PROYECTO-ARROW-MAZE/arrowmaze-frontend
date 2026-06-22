@@ -15,8 +15,8 @@ Trayectoria flecha(int id, int fila, int columna, Direccion direccion) =>
       segmentos: [Posicion.en(fila: fila, columna: columna)],
     );
 
-/// A solvable 3×3 board: every arrow is on the border pointing off-board,
-/// so all are immediately clearable in any order.
+/// A solvable 4×4 board: arrows are length-2, heads on the border pointing
+/// off-board, so all are immediately clearable in any order.
 class _GeneradorSolvable extends GeneradorNivelBase {
   final List<String> ordenLlamadas;
 
@@ -26,15 +26,38 @@ class _GeneradorSolvable extends GeneradorNivelBase {
   void poblar(Tablero tablero, ConfiguracionGeneracion config) {
     ordenLlamadas.add('poblar');
     final g = tablero as GrafoTablero;
-    g.agregarTrayectoria(flecha(1, 0, 0, Direccion.arriba));
-    g.agregarTrayectoria(flecha(2, 0, 1, Direccion.arriba));
-    g.agregarTrayectoria(flecha(3, 0, 2, Direccion.arriba));
-    g.agregarTrayectoria(flecha(4, 1, 0, Direccion.izquierda));
-    g.agregarTrayectoria(flecha(5, 2, 0, Direccion.abajo));
-    g.agregarTrayectoria(flecha(6, 2, 1, Direccion.abajo));
-    g.agregarTrayectoria(flecha(7, 2, 2, Direccion.abajo));
-    g.agregarTrayectoria(flecha(8, 1, 2, Direccion.derecha));
-    // (1,1) is the only empty cell — not covered by any path.
+    g.agregarTrayectoria(Trayectoria(
+      id: 1,
+      direccionCabeza: Direccion.arriba,
+      segmentos: const [
+        Posicion.en(fila: 1, columna: 0),
+        Posicion.en(fila: 0, columna: 0),
+      ],
+    ));
+    g.agregarTrayectoria(Trayectoria(
+      id: 2,
+      direccionCabeza: Direccion.arriba,
+      segmentos: const [
+        Posicion.en(fila: 1, columna: 1),
+        Posicion.en(fila: 0, columna: 1),
+      ],
+    ));
+    g.agregarTrayectoria(Trayectoria(
+      id: 3,
+      direccionCabeza: Direccion.izquierda,
+      segmentos: const [
+        Posicion.en(fila: 2, columna: 2),
+        Posicion.en(fila: 2, columna: 1),
+      ],
+    ));
+    g.agregarTrayectoria(Trayectoria(
+      id: 4,
+      direccionCabeza: Direccion.derecha,
+      segmentos: const [
+        Posicion.en(fila: 3, columna: 1),
+        Posicion.en(fila: 3, columna: 2),
+      ],
+    ));
   }
 }
 
@@ -46,6 +69,15 @@ class _GeneradorInsolvable extends GeneradorNivelBase {
     g.agregarTrayectoria(flecha(1, 1, 0, Direccion.derecha));
     g.agregarTrayectoria(flecha(2, 1, 2, Direccion.izquierda));
     // Both arrows point at each other — no clear exit.
+  }
+}
+
+/// A generator that emits a length-1 arrow (violates the ≥2 invariant).
+class _GeneradorFlechaCorta extends GeneradorNivelBase {
+  @override
+  void poblar(Tablero tablero, ConfiguracionGeneracion config) {
+    final g = tablero as GrafoTablero;
+    g.agregarTrayectoria(flecha(1, 1, 1, Direccion.arriba));
   }
 }
 
@@ -63,7 +95,7 @@ void main() {
     test('should_call_validarSolvencia_before_entregar', () {
       final ordenLlamadas = <String>[];
       final generador = _GeneradorSolvable(ordenLlamadas);
-      final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
+      final config = ConfiguracionGeneracion(filas: 4, columnas: 4);
 
       generador.generar(config);
 
@@ -72,12 +104,21 @@ void main() {
 
     test('should_return_tablero_when_poblar_yields_solvable_board', () {
       final generador = _GeneradorSolvable([]);
-      final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
+      final config = ConfiguracionGeneracion(filas: 4, columnas: 4);
 
       final resultado = generador.generar(config);
 
       expect(resultado, isNotNull);
       expect(resultado, isA<Tablero>());
+    });
+
+    test('should_fail_generation_when_arrow_has_length_one', () {
+      final generador = _GeneradorFlechaCorta();
+      final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
+
+      final resultado = generador.generar(config);
+
+      expect(resultado, isNull);
     });
   });
 }

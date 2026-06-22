@@ -26,7 +26,8 @@ class GrafoTablero implements Tablero {
   );
 
   /// Builds a board of [filas] × [columnas], empty everywhere except where a
-  /// fixed [celdas] (walls) or a [trayectorias] segment overrides a position.
+  /// fixed [celdas] (walls), a [trayectorias] segment overrides a position, or
+  /// the position is marked [ausentes] (outside the playable region).
   ///
   /// [detector] is injectable for testing; it defaults to the standard collision
   /// walk.
@@ -35,14 +36,17 @@ class GrafoTablero implements Tablero {
     required int columnas,
     List<Trayectoria> trayectorias = const <Trayectoria>[],
     List<Celda> celdas = const <Celda>[],
+    Set<Posicion> ausentes = const <Posicion>{},
     DetectorColisiones detector = const DetectorColisiones(),
   }) {
     final nodos = <Posicion, Nodo>{};
 
-    // Seed every position with transparent empty space.
+    // Seed every playable position with transparent empty space.
+    // Absent positions get no node — they are void (like the board edge).
     for (var f = 0; f < filas; f++) {
       for (var c = 0; c < columnas; c++) {
         final posicion = Posicion.en(fila: f, columna: c);
+        if (ausentes.contains(posicion)) continue;
         nodos[posicion] = Nodo(CeldaVacia(posicion));
       }
     }
@@ -96,10 +100,15 @@ class GrafoTablero implements Tablero {
 
   /// The node at [posicion]. Exposed so the graph's incremental re-wiring is
   /// observable by domain tests; not part of the [Tablero] port.
+  ///
+  /// Throws when [posicion] is absent (no node was seeded for it).
   Nodo nodoEn(Posicion posicion) => _nodos[posicion]!;
 
   @override
-  Celda celdaEn(Posicion posicion) => nodoEn(posicion).celda;
+  Celda celdaEn(Posicion posicion) {
+    final nodo = _nodos[posicion];
+    return nodo?.celda ?? CeldaAusente(posicion);
+  }
 
   @override
   Trayectoria? trayectoriaEn(Posicion posicion) {

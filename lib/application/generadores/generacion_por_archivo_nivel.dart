@@ -1,3 +1,5 @@
+import 'package:arrowmaze/domain/value_objects/posicion.dart';
+
 import '../../domain/entities/fabrica_celdas_estandar.dart';
 import '../../domain/grafo_tablero.dart';
 import '../../domain/tablero.dart';
@@ -18,9 +20,13 @@ class GeneracionPorArchivoNivel extends GeneradorNivelBase {
     required int idNivel,
   }) async {
     _definicion = await cargador.cargar(idNivel);
+    final ausentes = _definicion!.ausentes
+        .map((j) => Posicion.en(fila: j['row'] as int, columna: j['col'] as int))
+        .toSet();
     final configAjustada = ConfiguracionGeneracion(
       filas: _definicion!.filas,
       columnas: _definicion!.columnas,
+      ausentes: ausentes,
     );
     return generar(configAjustada);
   }
@@ -35,5 +41,7 @@ class GeneracionPorArchivoNivel extends GeneradorNivelBase {
     for (final json in definicion.celdas) {
       grafo.agregarCelda(_fabrica.crear(json));
     }
+    // Absent cells are already handled by the board construction (via config.ausentes),
+    // so no need to apply them here.
   }
 }

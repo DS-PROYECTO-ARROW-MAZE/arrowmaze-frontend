@@ -97,6 +97,59 @@ Tablero tableroInsolvable() {
   );
 }
 
+/// A 4×2 shaped golden board (solvable): the right column (col 1) is absent,
+/// so arrows in the left column can only exit left or up/down.
+/// A 3×3 shaped golden board (solvable): the border is absent, leaving only the
+/// centre cell (1,1) and the top-left corner (0,0) playable. An arrow at (0,0)
+/// pointing LEFT exits clear (no neighbour → board edge). All arrows are length
+/// ≥ 2 to satisfy the structural invariant.
+Tablero tableroShapedSolvable() {
+  return GrafoTablero.desde(
+    filas: 3,
+    columnas: 2,
+    ausentes: {
+      const Posicion.en(fila: 0, columna: 1),
+      const Posicion.en(fila: 1, columna: 1),
+      const Posicion.en(fila: 2, columna: 1),
+    },
+    trayectorias: [
+      Trayectoria(
+        id: 1,
+        direccionCabeza: Direccion.izquierda,
+        segmentos: const [
+          Posicion.en(fila: 0, columna: 0),
+        ],
+      ),
+    ],
+  );
+}
+
+/// A 3×2 shaped golden board (unsolvable): the right column is absent, a wall
+/// at (0,0) blocks the arrow below it pointing UP — the ray cannot exit.
+Tablero tableroShapedInsolvable() {
+  return GrafoTablero.desde(
+    filas: 3,
+    columnas: 2,
+    ausentes: {
+      const Posicion.en(fila: 0, columna: 1),
+      const Posicion.en(fila: 1, columna: 1),
+      const Posicion.en(fila: 2, columna: 1),
+    },
+    celdas: const [
+      CeldaPared(Posicion.en(fila: 0, columna: 0)),
+    ],
+    trayectorias: [
+      Trayectoria(
+        id: 1,
+        direccionCabeza: Direccion.arriba,
+        segmentos: const [
+          Posicion.en(fila: 1, columna: 0),
+        ],
+      ),
+    ],
+  );
+}
+
 void main() {
   group('Solver.esSolvable', () {
     test('should_return_true_for_known_solvable_golden_board', () {
@@ -200,6 +253,42 @@ void main() {
       );
       final resultado = Solver.esSolvable(tablero);
       expect(resultado, isFalse);
+    });
+
+    test('should_skip_absent_positions_during_raycast', () {
+      // Arrow at (0,0) pointing left; (0,1) is absent so the left ray
+      // should see the absent position as a non-node (like board edge).
+      final tablero = GrafoTablero.desde(
+        filas: 2,
+        columnas: 3,
+        ausentes: {const Posicion.en(fila: 0, columna: 1)},
+        trayectorias: [flecha(1, 0, 2, Direccion.izquierda)],
+      );
+      // Ray from (0,2) left: hits (0,1) which is absent → no node → edge.
+      final resultado = tablero.raycast(
+        const Posicion.en(fila: 0, columna: 2),
+        Direccion.izquierda,
+      );
+      expect(resultado.despejadoHastaBorde, isTrue);
+    });
+
+    test('should_return_true_for_shaped_solvable_golden_board', () {
+      final tablero = tableroShapedSolvable();
+      expect(Solver.esSolvable(tablero), isTrue);
+    });
+
+    test('should_return_false_for_shaped_unsolvable_golden_board', () {
+      final tablero = tableroShapedInsolvable();
+      expect(Solver.esSolvable(tablero), isFalse);
+    });
+
+    test('should_return_true_for_shaped_empty_board', () {
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        ausentes: {const Posicion.en(fila: 0, columna: 0)},
+      );
+      expect(Solver.esSolvable(tablero), isTrue);
     });
   });
 }

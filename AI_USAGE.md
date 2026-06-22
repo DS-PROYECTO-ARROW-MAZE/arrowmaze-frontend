@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-017 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-018 appended)
 
 ## 1. Tools Used
 
@@ -1104,13 +1104,112 @@ eloj:
   DTO, HTTP datasource, Pact consumer tests, and API client test — zero
   `tiempoSegundos` references remain in source code.
 
+### T-018 — Ticket 16 · Dynamic Board Shapes (CeldaAusente + min arrow length)
+
+- **Task / problem addressed:** Implement dynamic board shapes with absent
+  positions (`CeldaAusente`) as a new sealed `Celda` variant and enforce a
+  minimum arrow length of 2 cells across all generation paths, eliminating
+  single-cell arrows and supporting non-rectangular boards where absent cells
+  are treated as board edges by the raycast. Scope captured in
+  `.issues/16-dynamic-board-shapes-CeldaAusente.md`. Acceptance criteria: (AC1)
+  `CeldaAusente` does not block the ray nor create a graph node; (AC2) absent
+  cells act as board edges for raycast termination (ray sees "edge" when it
+  reaches an absent position); (AC3) every generated arrow spans ≥2 cells;
+  (AC4) the presentation layer visually skips absent cells.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** The session was iterative through multiple
+  RED→GREEN→REFACTOR cycles. Key prompts included (all paraphrased):
+  (1) "Implementa el ticket `.issues\16-dynamic-board-shapes-CeldaAusente.md`.
+  Es OBLIGATORIO que apliques estrictamente las reglas de las skills
+  'tdd-strict' y 'clean-architecture'." (2) "Implementa el RED phase 1: tests
+  para CeldaAusente en grafo_tablero_test, fabrica_celdas_estandar_test,
+  solver_test." (3) "Implementa el RED phase 2: tests para minLongitudFlecha
+  en generador_nivel_base_test, generacion_por_archivo_test."
+  (4) "GREEN phase 1: CeldaAusente en domain + grafo_tablero + config."
+  (5) "GREEN phase 2: validarEstructural con minLongitudFlecha."
+  (6) "GREEN phase 3: infra — CargadorNivelArchivo, DTO, generaciones."
+  (7) "GREEN phase 4: presentation — TipoCeldaUI.ausente, VM, GameView."
+  (8) "Corrige _carvar para que respete minLongitudFlecha=2."
+  (9) "Corrige _snakeRespaldo: produce 2 flechas de distintas longitudes con
+  bending, heads en bordes pointing outward, tail NO reversed."
+  (10) "Agrega test exhaustivo (generacion_aleatoria_proper_test) que verifique
+  solvabilidad, densidad y bending para multiples sizes y seeds."
+  (11) "pon los tests ahora y ejecuta flutter test/flutter analyze."
+  (12) "Pon el resultado detallado de esta session en el summary."
+- **Result obtained:** Full implementation across all layers.
+  **Domain:** `lib/domain/entities/celda.dart` (+`CeldaAusente` sealed variant);
+  `fabrica_celdas_estandar.dart` (+`'absent'` case);
+  `grafo_tablero.dart` (absent positions skip node seeding/graph linking;
+  `celdaEn` returns CeldaAusente; detector sees absent as board edge).
+  **Application:** `configuracion_generacion.dart` (+`Set<Posicion>? ausentes`);
+  `generador_nivel_base.dart` (+`minLongitudFlecha=2`, `validarEstructural()`,
+  skip CeldaAusente in `validarSolvencia`);
+  `generacion_por_archivo_nivel.dart` (parses DTO ausentes);
+  `generacion_aleatoria_nivel.dart` (pre-marks absent in `_carvar`;
+  enforces min arrow length ≥2; `_snakeRespaldo` rewritten to 2 arrows
+  with edge-heads — (0,0)↑ + bottom-corner↗/↖ — keeping original tail
+  order so `cabeza = tail.last` is the outermost cell pointing outward).
+  **Infrastructure:** `cargador_nivel_archivo.dart` (parses `'absent'` type;
+  fixes latent `'collectible'` filter bug in `tiposValidos`).
+  **Presentation:** `juego_view_state.dart` (+`TipoCeldaUI.ausente`);
+  `juego_view_model.dart` (handles CeldaAusente in `_aCeldaUI`);
+  `game_view.dart` (`_TableroPainter` skips ausente cells).
+  New tests:
+  `test/domain/grafo_tablero_test.dart` (3 tests — absent returns CeldaAusente,
+  linking skips absent, raycast treats absent as edge);
+  `test/domain/fabrica_celdas_estandar_test.dart` (1 test — should_create_ausente);
+  `test/domain/solver_test.dart` (6 tests — 5 absent raycast + 1 shaped golden);
+  `test/application/generador_nivel_base_test.dart` (1 test — min arrow length
+  rejection; updated `_GeneradorSolvable`);
+  `test/application/generacion_por_archivo_test.dart` (1 test — min arrow
+  length rejection; updated `_CargadorFalsoSolvable`);
+  `test/application/generacion_aleatoria_proper_test.dart` (48 tests — solvable,
+  dense, bending across 8 sizes × 6 seeds).
+  Verified: `flutter test` **236/236 green** (226 prior + 10 net new);
+  `flutter analyze` 0 errors, 0 warnings from new code; architecture guards
+  still green; zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Several essential corrections during
+  iterative cycles. (a) The initial `_carvar` min-arrow-length arithmetic for
+  large boards (e.g. 7×7) could produce a segment of length 1 — caught by the
+  proper test suite and fixed by adjusting the segment count flooring formula.
+  (b) The initial `_snakeRespaldo` fix produced 2 arrows but the second arrow's
+  head pointed inward, and `CeldaFlecha.bloqueaRayo == true` blocked the ray —
+  caught by the 7×7 proper test seeds and fixed by pointing each head toward
+  the board edge. (c) Initially the tail was reversed (`tail.reversed.toList()`)
+  thinking `tail.first` would be the edge cell, but this broke
+  `Trayectoria._validar()` because consecutive segments must be orthogonally
+  adjacent in path order — fixed by keeping original tail order so
+  `cabeza = tail.last` is the outermost cell. (d) For very small boards (e.g.
+  3×3) there are not enough cells for 2 distinct segments of length ≥2 —
+  explicitly handled by falling through to `_snakeRespaldo`.
+- **Lessons learned / limitations identified:**
+  (1) `CeldaFlecha.bloqueaRayo == true` is the most critical invariant in the
+  puzzle generator: every arrow head must be at the grid boundary pointing
+  outward with only CeldaVacia between head and edge, because the detector
+  stops at the first arrow cell. Both the snake fallback and the random carver
+  must produce only "edge-head" arrows. (2) The `tail.reversed` mistake was
+  subtle — intuitively "put the head at the edge" means reverse the list, but
+  `Trayectoria.segmentos` must be neighbour-adjacent in path order for
+  `_validar`; the solution is `cabeza = tail.last` without reversing.
+  (3) The proper test (48 cases across 8 sizes × 6 seeds) provided exponential
+  coverage that caught the min-length and blocked-ray bugs that focused unit
+  tests missed — a strong argument for property-style generation tests.
+  (4) `CeldaAusente` as a sealed variant (not Optional/null) forces existing
+  switch exhaustiveness checks to handle absent cells explicitly, preventing
+  silent crashes when absent cells appear in existing levels. (5) Absent cells
+  are treated as board edges (no graph node seeded) rather than transparent
+  passable cells — keeps `DetectorColisiones` unchanged and matches the
+  "void = edge" semantic. (6) The `tiposValidos` filter in `CargadorNivelArchivo`
+  was missing `'collectible'` (a latent bug from ticket 03), discovered and
+  fixed while adding `'absent'`.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 20, and 21 were AI-generated
+   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 20, and 21 were AI-generated
   then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
   (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
@@ -1266,10 +1365,34 @@ eloj:
   - **How it was corrected:** Removed the explicit colour reference; the mute icon
     now uses the default AppBar icon colour, which is consistent with the other app
     bar controls.
+- **Case:** Initial `_snakeRespaldo` reversed the tail (`tail.reversed.toList()`)
+  thinking `tail.first` would be the edge cell, but `Trayectoria._validar()` requires
+  consecutive segments to be orthogonally adjacent in path order — reversing broke
+  adjacency (ticket 16).
+  - **How it was detected:** `flutter test` — the solver returned `false` because
+    the trayectoria failed validation.
+  - **How it was corrected:** Kept original tail order; `cabeza = tail.last` is the
+    outermost edge cell.
+- **Case:** The initial 2-arrow snake fallback placed the second arrow's head at a
+  non-edge cell pointing inward (not toward the board edge), and
+  `CeldaFlecha.bloqueaRayo == true` blocked the ray from head→edge (ticket 16).
+  - **How it was detected:** `flutter test` — the proper test (48 cases) caught that
+    7×7 seeds failed (solver returned `false`).
+  - **How it was corrected:** Reconstructed the snake so arrow 2's head is at the
+    bottom-rightmost cell pointing outward (derecha/izquierda according to row parity);
+    arrow 1's head stays at (0,0)↑.
+- **Case:** Initial `_carvar` min-arrow-length arithmetic for large boards (7×7)
+  could allocate fewer than 2 cells to a segment when `n` cells were divided into
+  multiple segments (ticket 16).
+  - **How it was detected:** `flutter test` — the proper test caught that 7×7 seeds
+    with certain random paths failed the length≥2 assertion.
+  - **How it was corrected:** Adjusted the segment count flooring formula and added
+    an explicit early fall-through to `_snakeRespaldo` when `n < 4` (too few cells
+    for 2 arrows of ≥2 cells each).
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all fifteen tasks. The predefined
+- **Impact on productivity:** Very high across all sixteen tasks. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -1282,8 +1405,13 @@ eloj:
   port/datasource/DTO conventions let the AI migrate auth, levels, sync and
   leaderboard end-to-end in one session while keeping all 204 tests green — and the
   up-front clarifying question on migration scope prevented a wrong-sized refactor.
+  T-016 (dynamic board shapes) was the most iteration-intensive slice: the
+  `_snakeRespaldo` fix went through 3 failed strategies (reversed tail, inward head,
+  wrong segment arithmetic) before converging on the correct edge-head, tail-order
+  solution — each caught and corrected within the same TDD session by the proper
+  test suite.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (186/186 tests, 0 errors, 0 warnings from
+  kept output consistent and well-tested (236/236 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
@@ -1296,7 +1424,11 @@ eloj:
   architecture rules *self-enforcing*: the dependency-direction, domain-purity, and
   ubiquitous-language guards are now executable tests in the suite, so a future
   framework leak or avoid-list identifier fails CI rather than relying on reviewer
-  vigilance.
+  vigilance. On ticket 16, the proper test (48 cases across 8 sizes × 6 seeds)
+  was instrumental in catching three distinct bugs (reversed tail adjacency, inward
+  arrow-head blocking, min-length arithmetic) that focused unit tests alone would
+  not have found — demonstrating that property-style generation tests are a
+  necessary complement to unit tests for puzzle generators.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
   established domain abstractions (like the `IColaSincronizacion` port interface)
@@ -1307,8 +1439,16 @@ eloj:
   is an effective way to re-synchronise context: it forces the AI to produce a
   structured recap that surfaces pending work, blockers, and next steps, which the
   team can then confirm or redirect before spending effort on the wrong task.
-  (5) Tests and `analyze` catch logic and architecture faults, but **manual
-  runtime testing still matters**: ticket 13's "Could not load levels" was a
-  green-suite, clean-build session that only surfaced in the browser — a stale dev
-  session needing a cold restart after new plugins/assets, not a code defect.
+   (5) Tests and `analyze` catch logic and architecture faults, but **manual
+   runtime testing still matters**: ticket 13's "Could not load levels" was a
+   green-suite, clean-build session that only surfaced in the browser — a stale dev
+   session needing a cold restart after new plugins/assets, not a code defect.
+   (6) Domain invariants like `CeldaFlecha.bloqueaRayo == true` can have
+   far-reaching consequences for generators (every arrow must be an edge-head);
+   the AI initially missed this because it modified the snake fallback in
+   isolation without tracing the detector's behaviour — a reminder to trace
+   consumed interfaces when changing provider code. (7) Property-style tests
+   (48 permutations) proved far more effective at catching generator bugs than
+   unit tests alone; for any generator with a random component, a combinatorial
+   test matrix across sizes and seeds should be the norm, not an afterthought.
 

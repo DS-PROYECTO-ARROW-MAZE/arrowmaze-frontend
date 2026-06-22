@@ -306,6 +306,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       CeldaVacia() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.vacia),
       Coleccionable() =>
         CeldaUI(posicion: posicion, tipo: TipoCeldaUI.coleccionable),
+      CeldaAusente() => CeldaUI(posicion: posicion, tipo: TipoCeldaUI.ausente),
     };
   }
 

@@ -54,9 +54,12 @@ class _Cabeza {
 class GeneracionAleatoriaNivel extends GeneradorNivelBase {
   /// Creates the strategy. Pass [semilla] to make generation deterministic
   /// (used by tests); omit it for a fresh maze on each run.
-  const GeneracionAleatoriaNivel({int? semilla}) : _semilla = semilla;
+  GeneracionAleatoriaNivel({int? semilla}) : _semilla = semilla;
 
   final int? _semilla;
+
+  /// Positions excluded from the playable region (shaped board).
+  Set<Posicion> _ausentes = const <Posicion>{};
 
   /// How many full-board carves to attempt before the snake fallback.
   static const _maxIntentos = 200;
@@ -67,6 +70,7 @@ class GeneracionAleatoriaNivel extends GeneradorNivelBase {
 
   @override
   void poblar(Tablero tablero, ConfiguracionGeneracion config) {
+    _ausentes = config.ausentes;
     final grafo = tablero as GrafoTablero;
     final rng = Random(_semilla);
     final filas = config.filas;
@@ -90,11 +94,16 @@ class GeneracionAleatoriaNivel extends GeneradorNivelBase {
 
   /// Attempts one full backward carve. Returns the arrows tail → head, or `null`
   /// if the walk stranded empty cells before filling the board (caller retries).
+  /// Absent positions are pre-marked as occupied so they are never carved.
   List<_Flecha>? _carvar(int filas, int columnas, Random rng) {
     final ocupado =
         List.generate(filas, (_) => List<bool>.filled(columnas, false));
     final maxLargo = max(3, (filas * columnas) ~/ 3);
-    var restantes = filas * columnas;
+    // Pre-mark absent positions as occupied.
+    for (final p in _ausentes) {
+      ocupado[p.fila][p.columna] = true;
+    }
+    var restantes = filas * columnas - _ausentes.length;
     final flechas = <_Flecha>[];
 
     while (restantes > 0) {
@@ -106,12 +115,15 @@ class GeneracionAleatoriaNivel extends GeneradorNivelBase {
       ocupado[cabeza.pos.fila][cabeza.pos.columna] = true;
       restantes--;
 
-      final objetivo = 1 + rng.nextInt(maxLargo);
+      // Every arrow must span at least minLongitudFlecha cells.
+      final minObj = minLongitudFlecha;
+      final rango = max(maxLargo - minObj + 1, 1);
+      final objetivo = minObj + rng.nextInt(rango);
       var actual = cabeza.pos;
       while (cuerpo.length < objetivo) {
         final vecinos =
             _vecinosLibres(actual, filas, columnas, ocupado, reservado);
-        if (vecinos.isEmpty) break;
+        if (vecinos.isEmpty) return null; // cannot reach target length
         final siguiente = _elegirVecino(vecinos, filas, columnas, ocupado, rng);
         cuerpo.add(siguiente);
         ocupado[siguiente.fila][siguiente.columna] = true;
@@ -243,7 +255,13 @@ class GeneracionAleatoriaNivel extends GeneradorNivelBase {
       p.fila >= 0 && p.fila < filas && p.columna >= 0 && p.columna < columnas;
 
   /// Guaranteed-complete safety net (essentially never reached): the whole board
-  /// as one boustrophedon snake whose head exits off the top edge.
+  /// as a boustrophedon snake, split into two arrows of different lengths.
+  ///
+  /// Arrow 1 covers most cells with its head at (0,0) pointing UP so the ray
+  /// exits immediately. Arrow 2 covers the last [minLongitudFlecha] cells with
+  /// its head at a bottom corner pointing outward so its ray also escapes —
+  /// CeldaFlecha blocks the detector (`bloqueaRayo == true`), so every arrow
+  /// must have its head at the board edge pointing off the grid.
   List<_Flecha> _snakeRespaldo(int filas, int columnas) {
     final orden = <Posicion>[];
     for (var f = 0; f < filas; f++) {
@@ -257,7 +275,24 @@ class GeneracionAleatoriaNivel extends GeneradorNivelBase {
         }
       }
     }
-    // Head at (0,0) pointing UP (ray leaves the board immediately → clear).
-    return [_Flecha(orden.reversed.toList(), Direccion.arriba)];
+
+    final n = orden.length;
+    if (n < minLongitudFlecha * 2) {
+      return [_Flecha(orden.reversed.toList(), Direccion.arriba)];
+    }
+
+    // Arrow 2 — last [minLongitudFlecha] cells; its head is the last cell of the
+    // snake (always a bottom corner) pointing outward so the detector exits
+    // immediately without hitting another CeldaFlecha (which blocks the ray).
+    // Keep the original order so segmentos.last is the outermost cell.
+    final tail = orden.sublist(n - minLongitudFlecha);
+    final dir2 = (filas - 1).isEven ? Direccion.derecha : Direccion.izquierda;
+
+    return [
+      _Flecha(
+          orden.sublist(0, n - minLongitudFlecha).reversed.toList(),
+          Direccion.arriba),
+      _Flecha(tail, dir2),
+    ];
   }
 }

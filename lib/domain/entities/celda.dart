@@ -98,3 +98,26 @@ final class Coleccionable extends Celda {
   @override
   bool get esColeccionable => true;
 }
+
+/// A grid position outside the playable region of a shaped board.
+///
+/// Absent cells are not part of the level's active area: the solver skips them,
+/// the renderer draws nothing, and hit-testing ignores them (the touch falls
+/// through to the backdrop). They are semantically void — the ray treats them
+/// like the board edge (no node in the graph → ray exits clear). This is
+/// distinct from [CeldaVacia] (a present-but-transparent playable cell) and from
+/// [CeldaPared] (a solid boundary inside the playable region).
+///
+/// [bloqueaRayo] is `false` because absent positions are never linked in the
+/// graph, so the collision walker never encounters them; the property exists
+/// for completeness of the sealed switch and is unused in practice.
+final class CeldaAusente extends Celda {
+  /// Marks [posicion] as absent (outside the playable region).
+  const CeldaAusente(super.posicion);
+
+  @override
+  bool get bloqueaRayo => false;
+
+  @override
+  bool get esColeccionable => false;
+}

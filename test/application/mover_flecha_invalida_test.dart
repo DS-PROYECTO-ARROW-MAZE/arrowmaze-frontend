@@ -28,6 +28,7 @@ void main() {
           CeldaPared() => 'P',
           CeldaVacia() => '.',
           Coleccionable() => 'C',
+          CeldaAusente() => 'X',
         };
         buffer.write('$marca|');
       }

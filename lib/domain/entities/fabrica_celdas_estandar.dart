@@ -38,6 +38,8 @@ class FabricaCeldasEstandar {
         return CeldaVacia(posicion);
       case 'collectible':
         return Coleccionable(posicion);
+      case 'absent':
+        return CeldaAusente(posicion);
       default:
         throw ArgumentError.value(tipo, 'type', 'Unknown fixed cell type');
     }

@@ -20,7 +20,8 @@ class CargadorNivelArchivo implements CargadorNivel {
       filas: json['rows'] as int,
       columnas: json['cols'] as int,
       trayectorias: _extraerTrayectorias(json),
-      celdas: _extraerCeldas(json),
+      celdas: _extraerCeldasFijas(json),
+      ausentes: _extraerAusentes(json),
     );
   }
 
@@ -54,12 +55,27 @@ class CargadorNivelArchivo implements CargadorNivel {
     return trayectorias;
   }
 
-  List<Map<String, dynamic>> _extraerCeldas(Map<String, dynamic> json) {
+  /// Extracts fixed cells (wall, empty, collectible) from the level JSON.
+  List<Map<String, dynamic>> _extraerCeldasFijas(Map<String, dynamic> json) {
     final celdas = json['cells'] as List<dynamic>;
-    const tiposValidos = {'wall', 'empty'};
+    const tiposValidos = {'wall', 'empty', 'collectible'};
     return celdas
         .cast<Map<String, dynamic>>()
         .where((c) => tiposValidos.contains(c['type'] as String?))
+        .map((c) => <String, dynamic>{
+              'row': c['row'],
+              'col': c['col'],
+              'type': c['type'],
+            })
+        .toList();
+  }
+
+  /// Extracts absent cells (outside the playable region of a shaped board).
+  List<Map<String, dynamic>> _extraerAusentes(Map<String, dynamic> json) {
+    final celdas = json['cells'] as List<dynamic>;
+    return celdas
+        .cast<Map<String, dynamic>>()
+        .where((c) => c['type'] == 'absent')
         .map((c) => <String, dynamic>{
               'row': c['row'],
               'col': c['col'],

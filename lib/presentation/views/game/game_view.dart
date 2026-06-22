@@ -581,6 +581,8 @@ class _TableroPainter extends CustomPainter {
     for (final celda in tablero.celdas) {
       final c = centro(celda.posicion);
       switch (celda.tipo) {
+        case TipoCeldaUI.ausente:
+          break; // Outside the playable region — draw nothing.
         case TipoCeldaUI.vacia:
           canvas.drawCircle(c, lado * 0.06, Paint()..color = game.emptyDot);
         case TipoCeldaUI.pared:

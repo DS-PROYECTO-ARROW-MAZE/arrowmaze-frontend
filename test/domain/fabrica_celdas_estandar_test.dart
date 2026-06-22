@@ -56,6 +56,11 @@ void main() {
     expect(celda.bloqueaRayo, isFalse);
   });
 
+  test('should_create_ausente_when_type_is_absent', () {
+    final celda = fabrica.crear({'row': 3, 'col': 3, 'type': 'absent'});
+    expect(celda, isA<CeldaAusente>());
+  });
+
   test('should_throw_when_fixed_cell_type_is_unknown', () {
     // Arrange / Act / Assert
     expect(

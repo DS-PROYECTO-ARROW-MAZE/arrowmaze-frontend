@@ -6,7 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('GeneracionAleatoriaNivel', () {
     test('should_generate_solvable_board', () {
-      final generador = const GeneracionAleatoriaNivel();
+      final generador = GeneracionAleatoriaNivel();
       final config = ConfiguracionGeneracion(filas: 4, columnas: 4);
 
       final resultado = generador.generar(config);

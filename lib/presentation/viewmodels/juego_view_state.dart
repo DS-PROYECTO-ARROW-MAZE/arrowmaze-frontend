@@ -15,6 +15,10 @@ enum TipoCeldaUI {
 
   /// A bonus collectible (transparent to rays, grants timer seconds).
   coleccionable,
+
+  /// An absent position — outside the playable region of a shaped board.
+  /// Not rendered and not hit-testable.
+  ausente,
 }
 
 /// An immutable UI snapshot of one cell.

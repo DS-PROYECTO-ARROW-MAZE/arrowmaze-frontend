@@ -10,17 +10,29 @@ class _CargadorFalsoSolvable implements CargadorNivel {
   Future<DefinicionNivelDto> cargar(int id) async {
     return DefinicionNivelDto(
       id: id,
+      filas: 4,
+      columnas: 4,
+      trayectorias: [
+        {'id': 1, 'head': 'UP', 'cells': [{'row': 1, 'col': 0}, {'row': 0, 'col': 0}]},
+        {'id': 2, 'head': 'UP', 'cells': [{'row': 1, 'col': 1}, {'row': 0, 'col': 1}]},
+        {'id': 3, 'head': 'DOWN', 'cells': [{'row': 2, 'col': 2}, {'row': 3, 'col': 2}]},
+        {'id': 4, 'head': 'DOWN', 'cells': [{'row': 2, 'col': 3}, {'row': 3, 'col': 3}]},
+      ],
+      celdas: const <Map<String, dynamic>>[],
+    );
+  }
+}
+
+/// A loader whose DTO contains a length-1 arrow (violates the ≥2 invariant).
+class _CargadorFalsoFlechaCorta implements CargadorNivel {
+  @override
+  Future<DefinicionNivelDto> cargar(int id) async {
+    return DefinicionNivelDto(
+      id: id,
       filas: 3,
       columnas: 3,
       trayectorias: [
-        {'id': 1, 'head': 'UP', 'cells': [{'row': 0, 'col': 0}]},
-        {'id': 2, 'head': 'UP', 'cells': [{'row': 0, 'col': 1}]},
-        {'id': 3, 'head': 'UP', 'cells': [{'row': 0, 'col': 2}]},
-        {'id': 4, 'head': 'LEFT', 'cells': [{'row': 1, 'col': 0}]},
-        {'id': 5, 'head': 'DOWN', 'cells': [{'row': 2, 'col': 0}]},
-        {'id': 6, 'head': 'DOWN', 'cells': [{'row': 2, 'col': 1}]},
-        {'id': 7, 'head': 'DOWN', 'cells': [{'row': 2, 'col': 2}]},
-        {'id': 8, 'head': 'RIGHT', 'cells': [{'row': 1, 'col': 2}]},
+        {'id': 1, 'head': 'UP', 'cells': [{'row': 1, 'col': 1}]},
       ],
       celdas: const <Map<String, dynamic>>[],
     );
@@ -58,6 +70,16 @@ void main() {
 
     test('should_return_null_when_loaded_level_is_unsolvable', () async {
       final cargador = _CargadorFalsoInsolvable();
+      final generador = GeneracionPorArchivoNivel(cargador: cargador);
+      final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
+
+      final resultado = await generador.generarAsync(config, idNivel: 1);
+
+      expect(resultado, isNull);
+    });
+
+    test('should_reject_loaded_board_with_length_one_arrow', () async {
+      final cargador = _CargadorFalsoFlechaCorta();
       final generador = GeneracionPorArchivoNivel(cargador: cargador);
       final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
 
