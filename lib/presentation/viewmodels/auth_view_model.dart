@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../application/ports/proveedor_sesion.dart';
+import '../../application/use_cases/cerrar_sesion_use_case.dart';
 import '../../application/use_cases/iniciar_sesion_use_case.dart';
 import '../../application/use_cases/registrar_usuario_use_case.dart';
 import '../../application/use_cases/resultado_inicio_sesion.dart';
@@ -15,15 +16,18 @@ import 'auth_view_state.dart';
 class AuthViewModel extends ChangeNotifier {
   AuthViewModel({
     required ProveedorSesion proveedorSesion,
+    required CerrarSesionUseCase cerrarSesion,
     RegistrarUsuarioUseCase? registrarUsuario,
     IniciarSesionUseCase? iniciarSesion,
   })  : _proveedorSesion = proveedorSesion,
+        _cerrarSesion = cerrarSesion,
         _registroUseCase = registrarUsuario,
         _loginUseCase = iniciarSesion {
     _verificarSesion();
   }
 
   final ProveedorSesion _proveedorSesion;
+  final CerrarSesionUseCase _cerrarSesion;
   final RegistrarUsuarioUseCase? _registroUseCase;
   final IniciarSesionUseCase? _loginUseCase;
 
@@ -80,8 +84,8 @@ class AuthViewModel extends ChangeNotifier {
 
   /// Clears the session and signs the user out.
   Future<void> cerrarSesion() async {
-    await _proveedorSesion.cerrarSesion();
-    _estado = const AuthViewState();
+    await _cerrarSesion.ejecutar();
+    _estado = const AuthViewState(sesionCerrada: true);
     notifyListeners();
   }
 

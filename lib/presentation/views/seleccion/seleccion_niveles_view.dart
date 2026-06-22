@@ -19,6 +19,7 @@ class SeleccionNivelesView extends StatefulWidget {
   const SeleccionNivelesView({
     required this.viewModel,
     required this.alSeleccionar,
+    this.onLogout,
     super.key,
   });
 
@@ -32,6 +33,10 @@ class SeleccionNivelesView extends StatefulWidget {
     int idNivel,
     List<int> idsOrdenados,
   ) alSeleccionar;
+
+  /// Called when the user taps the Logout button. The composition root wires
+  /// this to clear the session and navigate back to the auth screen.
+  final VoidCallback? onLogout;
 
   @override
   State<SeleccionNivelesView> createState() => _SeleccionNivelesViewState();
@@ -56,7 +61,17 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Select Level')),
+      appBar: AppBar(
+        title: const Text('Select Level'),
+        actions: [
+          if (widget.onLogout != null)
+            IconButton(
+              icon: const Icon(Icons.logout),
+              tooltip: 'Logout',
+              onPressed: widget.onLogout,
+            ),
+        ],
+      ),
       body: ListenableBuilder(
         listenable: widget.viewModel,
         builder: (context, _) {

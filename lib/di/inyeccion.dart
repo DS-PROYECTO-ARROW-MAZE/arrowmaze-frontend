@@ -17,6 +17,7 @@ import '../application/ports/i_registro.dart';
 import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
 import '../application/ports/fuente_niveles.dart';
+import '../application/use_cases/cerrar_sesion_use_case.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
 import '../application/use_cases/crear_nivel_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
@@ -255,10 +256,14 @@ abstract final class Inyeccion {
   static CrearNivelUseCase get crearNivelUseCase =>
       CrearNivelUseCase(fuenteNiveles: fuenteNiveles);
 
+  static CerrarSesionUseCase get cerrarSesionUseCase =>
+      CerrarSesionUseCase(proveedorSesion: proveedorSesion);
+
   /// Builds the [AuthViewModel] with all dependencies injected.
   static AuthViewModel construirAuthViewModel() {
     return AuthViewModel(
       proveedorSesion: proveedorSesion,
+      cerrarSesion: cerrarSesionUseCase,
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
     );
