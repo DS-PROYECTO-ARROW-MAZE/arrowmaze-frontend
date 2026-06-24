@@ -634,11 +634,25 @@ structure; difficulty subclasses.
 ### 12.2 Levels, Generation & Difficulty
 
 2. **Aggressive difficulty scaling** *(FE-23)* — a steep, monotonic `PerfilDificultad` (data, not
-   subclasses) grows grid size and arrow count sharply; late levels are large, dense, and complex.
-3. **Endless in-app level generation** *(FE-23)* — past the authored catalog the app procedurally
-   generates fresh, always-solvable levels indefinitely (offline-first), so difficulty scales
-   **without app-store updates**. The `validarSolvencia` template gate and arrow-length ≥ 2
-   invariant (FE-16) still cannot be bypassed.
+   subclasses) grows grid size, arrow count, and **move budget** (FE-30) sharply; late levels are
+   large, dense, and complex. **Raised baseline floor (2026-06-24):** the **minimum board size is
+   7×7 from Level 1** — no level is smaller. Rationale: 5×5 grids could not legibly render shape
+   masks (hearts, stars) and made early levels trivially easy; a 7×7 floor accommodates every shape
+   in the repertoire and lifts the baseline cognitive load. The authored bands are raised
+   accordingly (1–5 → 7×7, 6–10 → 8×8, 11–15 → 9×9; retrofit via FE-31), and the endless curve
+   climbs aggressively from that floor. The difficulty curve is **orthogonal to board shape**
+   (req 3): a given shape recurs at ever-higher difficulty.
+3. **Endless in-app level generation with shape rotation** *(FE-23)* — past the authored catalog the
+   app procedurally generates fresh, always-solvable levels indefinitely (offline-first), so
+   difficulty scales **without app-store updates**. Generated levels are **never square-only**: a
+   **fixed, ordered shape repertoire** — `Cuadrado, Corazón, Triángulo, Cruz, Estrella` — is applied
+   as a board mask, selected **deterministically by rotating on the level index**
+   (1→Cuadrado, 2→Corazón, 3→Triángulo, 4→Cruz, 5→Estrella, 6→Cuadrado, wrapping…). Shape
+   (`RepertorioFormas.formaParaIndice`) and difficulty (`PerfilDificultad`) are **orthogonal axes**:
+   shapes **repeat** as the player advances, but each recurrence sits at **strictly higher
+   complexity** (grid, arrows, move budget) — complexity climbs *inside* the shape. The generator
+   populates only in-mask cells (reusing FE-16's *absent* concept, no geometry re-derivation); the
+   `validarSolvencia` template gate and arrow-length ≥ 2 invariant (FE-16) still cannot be bypassed.
 6. **Irregular board shape rendering** *(FE-26 / FE-16, §1.4 rule 7)* — the Flutter UI renders
    non-rectangular (masked) boards the backend already serves: only playable cells are drawn and
    hit-tested; *absent* ≠ `CeldaVacia`.
@@ -678,7 +692,7 @@ structure; difficulty subclasses.
 |---|---|---|
 | 1  | Path-following snake-like exit animation | FE-22 |
 | 2  | Aggressive difficulty scaling | FE-23 |
-| 3  | Endless in-app level generation | FE-23 |
+| 3  | Endless in-app level generation + shape rotation | FE-23 (authored-catalog retrofit: FE-31) |
 | 4  | Progress sync (back-nav refresh + login restore) | FE-24, BE-18 |
 | 5  | Softer SFX | FE-25 |
 | 6  | Irregular board shape rendering | FE-26 (FE-16, BE-14) |
