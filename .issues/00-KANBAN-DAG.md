@@ -82,3 +82,26 @@ Story→module→test traceability mirrors PRD §11 / §7.
   16 + ticket 13; 18 needs 17; 19 needs 18.
 - **Cross-repo agreement:** 16 (shaped golden boards), 17 (`PerfilDificultad`), 19 (golden scores)
   stay in lockstep with their backend twins.
+
+## Phase 6 — Enhancement batch 2 (tickets 22–30)
+
+> Added 2026-06-24 from the second requirements batch (PRD §12). Ticket **24 is Priority 1**
+> (progress-sync regression) and pairs with backend ticket 18.
+
+| Ticket | Phase | Blocked by | Backend twin | Priority |
+|---|---|---|---|---|
+| 22 path-following (snake-like) exit animation | 6 | 01, 16 | — | — |
+| 23 endless generation + aggressive difficulty scaling | 6 | 05, 16, 17 | (PerfilDificultad ~ BE 14/16) | — |
+| 24 restore unlocked levels on login & refresh on back-nav | Hotfix | 08, 13, 14 | backend 18 | **1** |
+| 25 softer sound effects | 6 | 21 | — | — |
+| 26 render irregular board shapes | 6 | 16 | backend 14 | — |
+| 27 settings menu — sound toggle + EN/ES i18n | 6 | 08, 21 | — | — |
+| 28 invalid-move single alert + haptics | 6 | 01, 02 | — | — |
+| 29 timer 15s warning (visual + audio) | 6 | 04, 18, 21 | — | — |
+| 30 move countdown + Game Over + undo cap (3) | 6 | 01, 04, 09, 13 | — | — |
+
+- **Grab first:** 24 (P1, with backend 18). 22/25/26/28 are independent off their parents.
+  23 needs 16+17; 27 needs 08+21; 29 needs 18; 30 needs 09+13.
+- **Invariant change (ticket 30):** untimed levels **can now lose** via move-budget exhaustion —
+  the §7.3 "untimed never reaches `EstadoDerrota`" test is superseded (PRD §12). Update, don't
+  work around.
