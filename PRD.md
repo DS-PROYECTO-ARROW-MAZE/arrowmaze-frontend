@@ -33,11 +33,14 @@ levels — especially dangerous because levels can be authored/served from the b
 
 ### 1.2 Solution
 
-ArrowMaze is a tap-to-shoot grid puzzle. Tapping an arrow shoots it in its `Direccion`
-toward the board edge; if the ray to the edge is clear the arrow **exits** (cell becomes
-empty), otherwise it **retreats unchanged** and the tap is an *invalid move* — still counted,
-deliberately penalized. **Victory** is emptying the board; **defeat** exists only on timed
-levels when `limiteTiempo` runs out.
+ArrowMaze is a tap-to-clear grid puzzle. The board starts **fully covered** by arrows,
+where each arrow is a **continuous, possibly bending path** (`Trayectoria`) of one or more
+cells with a single arrowhead at its head. Tapping any segment of a path makes the **whole
+path** try to exit in the head's `Direccion`; if the head's ray to the board edge is clear
+the entire path **disappears** (its cells become empty, drawn as subtle dots), otherwise it
+**retreats unchanged** and the tap is an *invalid move* — still counted, deliberately
+penalized. **Victory** is emptying the board; **defeat** exists only on timed levels when
+`limiteTiempo` runs out.
 
 The solution is delivered as **two cooperating applications sharing one ubiquitous language**:
 
@@ -59,13 +62,43 @@ Both sides enforce two non-negotiable invariants:
 
 | Goals | Non-Goals (explicitly out of scope) |
 |---|---|
-| Instant, all-or-nothing arrow exit; tap any order | Traveling token / "stop in the middle" movement |
-| Solvable-by-construction levels (client + server) | Arrow rotation; player position / reachability |
-| Deterministic, data-driven scoring + 1–3 stars | Deadlock-based defeat ("game over by blockage") |
-| Offline play with progress sync + leaderboard | Real-time multiplayer / live PvP |
+| Instant, all-or-nothing **whole-path** exit; tap any order | Traveling token / "stop in the middle" / cell-by-cell sliding |
+| Continuous, bending multi-cell arrow paths; full initial coverage | Discrete 1×1 background tiles; arrow rotation; player position / reachability |
+| Solvable-by-construction levels (client + server) | Deadlock-based defeat ("game over by blockage") |
+| Deterministic, data-driven scoring + 1–3 stars | Real-time multiplayer / live PvP |
 | Framework-free, pattern-showcasing domain | Exit/target tile ("maze-escape") interpretation |
 
-### 1.4 Success Metrics
+### 1.4 Visual & Interaction Model (continuous paths)
+
+The board is **not** a grid of discrete square tiles. It renders as a plain dark surface;
+empty grid spaces show only a **subtle dot**. These rules are normative for the UI:
+
+1. **No discrete background blocks.** There are no rounded square tiles behind cells — only
+   the dark backdrop and dots for empty space.
+2. **Continuous paths, not single blocks.** An arrow is a colored line/path spanning multiple
+   cells, drawn as one continuous stroke through the cell centers it covers.
+3. **Paths can bend.** A path may turn at 90° corners to snake around the board, and carries
+   exactly **one** arrowhead, at its tip (head).
+4. **Full initial coverage.** At level start every cell is covered by some path segment —
+   there are **zero** empty cells until the player resolves paths.
+5. **Gameplay reveal.** Resolving a path removes its **entire** length at once, leaving empty
+   space (dots) behind, which in turn opens exit rays for the remaining paths.
+6. **Path-following exit animation.** A resolving path animates out **snake-like** — the head
+   travels along the path's own multi-cell trajectory to the exit edge and each tail segment
+   follows the **exact same curve** (including bends), driven by Flutter animation controllers.
+   It is **never** a rigid whole-shape slide. The animation is purely presentational and
+   decoupled from the rule (the domain has already removed the path). See §12 (req 1) / FE-22.
+7. **Irregular board shapes render faithfully.** Boards may be non-rectangular (heart, triangle,
+   star…). The UI draws **only** playable cells; *absent* positions paint nothing and are not
+   hit-testable, distinct from a transparent `CeldaVacia` (which still shows a dot). See §12
+   (req 6) / FE-16 / FE-26.
+
+> **Resolve rule (assumption, faithful to the source game):** a path resolves when its
+> **head** has a clear straight ray to the board edge in the head's direction; the whole path
+> then disappears. This reuses the existing `raycast`/`Tablero` machinery and keeps the
+> order-independent solvability theory (`Solvencia`) intact — removals only ever clear cells.
+
+### 1.5 Success Metrics
 
 - **Correctness:** 100% of generated/served boards pass the solvability gate; 0 soft-locks.
 - **Agreement:** client and backend produce identical `Puntaje`/`Estrellas` for the same
@@ -94,27 +127,27 @@ these map directly to the automated tests in §7.
 
 ### Epic A — Core Move Mechanic
 
-**A1 — Valid move (arrow exits).**
-*As a player, when I tap an arrow whose path to the edge is clear, I want it to leave the
-board so I make progress.*
-- **Given** an arrow with a clear ray to the board edge,
-  **When** I tap it,
-  **Then** the arrow's cell becomes `CeldaVacia`, the move is *valid*, `movimientos` += 1,
+**A1 — Valid move (whole path exits).**
+*As a player, when I tap an arrow path whose head can reach the edge, I want the entire path
+to leave the board so I make progress.*
+- **Given** an arrow `Trayectoria` whose head has a clear ray to the board edge,
+  **When** I tap **any** of its segments,
+  **Then** every cell of the path becomes `CeldaVacia`, the move is *valid*, `movimientos` += 1,
   and a `ResultadoMovimiento` with `FlechaEliminada` (and `MovimientoRealizado`) events is produced.
 
 **A2 — Invalid move (penalized, board unchanged).**
-*As a player, when I tap an arrow whose path is blocked, I want clear, fair feedback without
+*As a player, when I tap a path whose head ray is blocked, I want clear, fair feedback without
 being able to "cheat" the move count.*
-- **Given** an arrow whose ray hits a `CeldaPared` or another `CeldaFlecha`,
+- **Given** a path whose head ray hits a `CeldaPared` or another path's segment,
   **When** I tap it,
-  **Then** the board is unchanged, the arrow is **not** consumed, `movimientos` **still** += 1,
+  **Then** the board is unchanged, the path is **not** consumed, `movimientos` **still** += 1,
   a `ResultadoMovimiento` (no board delta) is produced, and a no-delta `+1` command is pushed
   to `CommandHistory`.
 
 **A3 — Tap any order.**
-*As a player, I want to tap any arrow at any time.*
-- **Given** any non-empty board, **When** I tap any `CeldaFlecha`,
-  **Then** the move resolves with no player-position or reachability constraint.
+*As a player, I want to tap any path at any time, on any of its segments.*
+- **Given** any non-empty board, **When** I tap any `CeldaFlecha` segment,
+  **Then** the owning path resolves with no player-position or reachability constraint.
 
 **A4 — Collectible pass-through.**
 *As a player, when a valid move's ray crosses a collectible, I want bonus time.*
@@ -129,19 +162,35 @@ being able to "cheat" the move count.*
 - **Given** the last arrow exits, **Then** the session transitions to `EstadoVictoria`, a
   `Victoria` event fires, and the final `Puntaje`/`Estrellas` are computed.
 
-**B2 — Defeat (timed only).** *As a player on a timed level, I lose if time runs out.*
+**B2 — Defeat (out of time *or* out of moves).** *As a player, I lose if time runs out on a
+timed level **or** if I exhaust my move budget before clearing the board.*
 - **Given** a level with `limiteTiempo`, **When** the timer reaches 0 before victory,
-  **Then** the session transitions to `EstadoDerrota`. **And** an untimed level can never
-  enter `EstadoDerrota`.
+  **Then** the session transitions to `EstadoDerrota`.
+- **Given** a level's move budget (`presupuestoMovimientos = nFlechas + margen`), **When** the
+  budget reaches 0 while the board is non-empty, **Then** the session transitions to
+  `EstadoDerrota` (Game Over) — **on timed *and* untimed levels**. Clearing the board on the
+  last allowed move is a **victory** (victory wins ties). See §12 (req 12) / FE-30.
+- **Note (superseded invariant):** the move-budget rule introduces a **timer-independent**
+  defeat trigger, so the former "an untimed level can never enter `EstadoDerrota`" invariant is
+  **deliberately retired** as of 2026-06-24 (§12). Deadlock-based defeat (§1.3 / §10) remains
+  out of scope — defeat comes only from time or move-budget exhaustion.
+
+**B5 — Move countdown HUD.** *As a player, my moves count **down** from a per-level budget.*
+- **Given** a started level, **Then** the HUD shows `presupuestoMovimientos` decrementing on
+  every tap (valid **or** invalid, consistent with A2) rather than a from-zero up-counter. FE-30.
 
 **B3 — Pause/Resume.** *As a player, I can pause and resume.*
 - **Given** `EstadoJugando`, **When** I pause, **Then** state is `EstadoPausado` and taps are
   rejected until I resume (`EstadoJugando`). The timer does not advance while paused.
 
-**B4 — Undo.** *As a player, I can undo my last move (valid or invalid).*
+**B4 — Undo (capped at 3 per level).** *As a player, I can undo my last move (valid or invalid),
+up to a strict maximum of **3 uses per level**.*
 - **Given** a recorded move in `CommandHistory`, **When** I undo,
   **Then** the board delta is reversed (or the no-delta +1 is rolled back), `movimientos`
-  decrements, and counters stay consistent.
+  decrements, the **move budget is restored by one** (§B2/FE-30), and counters stay consistent.
+- **Given** I have already undone **3** times this level, **When** I attempt a 4th undo,
+  **Then** it is a no-op and the control is disabled; the undo counter **resets** on level
+  restart / new level. See §12 (req 8) / FE-30.
 
 ### Epic C — Levels & Generation
 
@@ -209,11 +258,15 @@ being able to "cheat" the move count.*
 The terms below are normative (full definitions in `CONTEXT.md`). Code, tests, and APIs MUST
 use these names.
 
-- **Movimiento / ResultadoMovimiento** — one tap → exactly one result; exit is all-or-nothing.
-- **Flecha, CeldaPared, CeldaVacia, Coleccionable** — the **four** `Celda` kinds, produced by
+- **Movimiento / ResultadoMovimiento** — one tap → exactly one result; exit is all-or-nothing
+  and resolves the **whole path**, never a single cell.
+- **Flecha / Trayectoria** — an arrow is a continuous, possibly bending multi-cell path with one
+  arrowhead at its head; each covered cell is a `CeldaFlecha` segment sharing the path's `idFlecha`.
+- **CeldaFlecha, CeldaPared, CeldaVacia, Coleccionable** — the **four** `Celda` kinds, produced by
   `FabricaCeldasEstandar`. **No** `CeldaSalida`, **no** cell decorators, **no** Composite.
-- **Tablero** — a **port** (`celdaEn`, `raycast`); `GrafoTablero` is the incremental
-  implementation detail (removed arrow unlinks its node; never a full rebuild).
+- **Tablero** — a **port** (`celdaEn`, `trayectoriaEn`, `raycast`, `eliminarTrayectoria`);
+  `GrafoTablero` is the incremental implementation detail (removing a path unlinks each of its
+  nodes; never a full rebuild).
 - **Posicion / Vector3 / Direccion** — dimension-agnostic; 2D = 4 dirs, future 3D = 6, same contract.
 - **Nivel / DefinicionNivel / Dificultad** — difficulty is **data** (enum + definition), never
   a subtype. No `NivelFacil/Medio/Dificil`.
@@ -270,20 +323,25 @@ substitutable implementation*. Below, each module is specified as **Interface (s
 ### 6.1 Frontend Deep Modules (Flutter / MVVM)
 
 #### DM-F1 · `Tablero` (board port) — `lib/domain/...`
-- **Interface:** `Celda celdaEn(Posicion p)`, `ResultadoRaycast raycast(Posicion origen, Direccion dir)`.
-- **Hidden:** `GrafoTablero` graph + `Nodo` links, **incremental** mutation (a removed arrow
-  unlinks its node — never a full rebuild), neighbor wiring, edge detection.
-- **Why deep / OCP seam:** callers (use cases, solver, collision detector) never see the graph.
-  A future **3D board** is a new `Tablero` implementation with 6-direction `Vector3` — *zero*
-  caller changes. `DetectorColisiones.detectar(...)` delegates to `raycast(...)`.
+- **Interface:** `Celda celdaEn(Posicion p)`, `Trayectoria? trayectoriaEn(Posicion p)`,
+  `ResultadoRaycast raycast(Posicion origen, Direccion dir)`, `void eliminarTrayectoria(int id)`.
+- **Hidden:** `GrafoTablero` graph + `Nodo` links, the `idFlecha → Trayectoria` index,
+  **incremental** mutation (removing a path unlinks each of its nodes — never a full rebuild),
+  neighbor wiring, edge detection.
+- **Why deep / OCP seam:** callers (use cases, solver, collision detector) never see the graph
+  or how a path is stored. A future **3D board** is a new `Tablero` implementation with
+  6-direction `Vector3` — *zero* caller changes. `DetectorColisiones.detectar(...)` delegates to
+  `raycast(...)`.
 
 #### DM-F2 · `MoverFlechaUseCase` (move resolution) — `lib/application/use_cases`
 - **Interface:** `ResultadoMovimiento ejecutar(Posicion celda)`.
-- **Hidden:** ray clear/blocked decision, valid-exit removal vs invalid retreat, `movimientos`
-  increment for **both** outcomes, `EventoJuego` list assembly, `CommandHistory` push (real delta
-  *or* no-delta +1), victory check, scoring trigger.
-- **Why deep:** a one-call surface hides the entire rule engine. The penalize-invalid-taps rule
-  and the all-or-nothing exit live here only — UI and persistence stay ignorant of them.
+- **Hidden:** path lookup from the tapped segment (`trayectoriaEn`), head-ray clear/blocked
+  decision, valid-exit **whole-path** removal vs invalid retreat, `movimientos` increment for
+  **both** outcomes, `EventoJuego` list assembly, `CommandHistory` push (real delta *or* no-delta
+  +1), victory check, scoring trigger.
+- **Why deep:** a one-call surface hides the entire rule engine. The tap-any-segment resolution,
+  the penalize-invalid-taps rule and the all-or-nothing whole-path exit live here only — UI and
+  persistence stay ignorant of them.
 
 #### DM-F3 · `EstrategiaGeneracionNivel` + `GeneradorNivelBase` (level generation) — Strategy + Template Method
 - **Interface:** `DefinicionNivel generar(ConfigGeneracion config)` (template, **final**).
@@ -324,7 +382,10 @@ substitutable implementation*. Below, each module is specified as **Interface (s
 - **Interface:** ViewModels expose immutable `JuegoViewState` / `VictoriaViewState` /
   `SeleccionNivelViewState` (with `TableroUI`, `CeldaUI`, `NivelResumenUI`) via `copyWith`;
   Views bind via `notifyListeners()`.
-- **Hidden:** mapping domain → UI snapshots; orchestration of use cases.
+- **Hidden:** mapping domain → UI snapshots, including per-segment **path geometry** for the
+  board (`CeldaUI.conexiones`/`esCabeza`/`idFlecha`) read off each `Trayectoria`; a `CustomPainter`
+  draws continuous bending paths + arrowheads and dots for empties (no discrete tiles);
+  orchestration of use cases.
 - **Why deep / guardrail:** UI churn never reaches the domain. `VictoriaViewState` (UI) is **not**
   `EstadoVictoria` (session state) — naming enforced to keep the State pattern unambiguous.
 
@@ -414,20 +475,31 @@ Domain + application layers target **≥ 90% line coverage**.
 
 ### 7.2 Move mechanic (DM-F2 / DM-F1)
 
-- ✅ Clear ray → arrow removed, cell `CeldaVacia`, `movimientos == 1`, events include `FlechaEliminada`.
-- ✅ Ray blocked by wall **and** ray blocked by another arrow (two cases) → board byte-identical,
-  arrow present, `movimientos == 1`, `ResultadoMovimiento` has **no** board delta, history holds a no-delta +1.
+- ✅ Clear head ray → **whole path** removed (every segment `CeldaVacia`), `movimientos == 1`,
+  events include `FlechaEliminada`. Tapping any segment of the path resolves it.
+- ✅ Head ray blocked by wall **and** blocked by another path's segment (two cases) → board
+  byte-identical, path present, `movimientos == 1`, `ResultadoMovimiento` has **no** board delta,
+  history holds a no-delta +1.
 - ✅ `CeldaVacia` is transparent: ray flies over it without interacting.
 - ✅ `Coleccionable` on a clear ray → not blocked, `ColeccionableRecogido` adds seconds; victory
   never requires it.
-- ✅ Tap-any-order: tapping arrows in arbitrary sequences resolves with no reachability error.
-- ✅ Edge case: arrow already adjacent to the edge with clear ray → exits in one tap.
+- ✅ Tap-any-order: tapping paths in arbitrary sequences resolves with no reachability error.
+- ✅ Edge case: a path whose head is already adjacent to the edge with a clear ray → exits in one tap.
+- ✅ Geometry: `Trayectoria` reports straight vs corner connections and the single head; a path
+  segment chain is validated as contiguous (non-contiguous data fails loudly).
+- ✅ Full coverage + solvability: the demo board covers every cell at start and a greedy sequence
+  of valid moves empties it.
 
 ### 7.3 Win / lose / session (DM-F5)
 
 - ✅ Last arrow exits → `EstadoVictoria`, `Victoria` event, final `Puntaje`/`Estrellas` computed.
 - ✅ Timed level: timer to 0 before clear → `EstadoDerrota`.
-- ✅ **Untimed level can never reach `EstadoDerrota`** (property/negative test).
+- ✅ Move-budget defeat: budget (`nFlechas + margen`) reaching 0 before clear → `EstadoDerrota`
+  on **both** timed and untimed levels; clearing on the last allowed move → victory (victory
+  wins ties). *(Supersedes the former "untimed level can never reach `EstadoDerrota`" test as of
+  §12 / 2026-06-24.)*
+- ✅ Undo cap: at most **3** undos per level; a 4th is a no-op; the counter resets per level; an
+  undo restores one move-budget unit (counters never drift).
 - ✅ `EstadoPausado`: taps rejected; timer frozen; resume returns to `EstadoJugando`.
 - ✅ Undo reverses delta (or no-delta +1), decrements `movimientos`, keeps counters consistent.
 
@@ -534,6 +606,88 @@ structure; difficulty subclasses.
 | E3 | DM-B5 | §7.7 |
 | F1 | DM-F7, DM-F9, DM-B4 | §7.6 |
 | (all) | DM-B6, DM-F8 | §7.8 |
+
+---
+
+## 12. Enhancement Batch 2 — New Requirements (2026-06-24)
+
+> A second batch of product requirements, integrated into the sections above and decomposed into
+> tickets (`arrowmaze-frontend/.issues/22…30`, `arrowmaze-backend/.issues/18`). Each item keeps
+> the project's non-negotiables: **strict TDD** (§7), **Clean Architecture / MVVM** (§5,
+> CLAUDE.md), the **ubiquitous language** (§4), and **solvability-before-render** (§1.4).
+
+### 12.1 Gameplay & Session rules
+
+1. **Path-following (snake-like) exit animation** *(FE-22, §1.4 rule 6)* — a resolving
+   `Trayectoria` animates head-first along its own multi-cell path to the edge; tail segments
+   follow the identical curve via Flutter animation controllers (arc-length tween). **Never** a
+   rigid whole-shape slide. Purely presentational; decoupled from the (already atomic) rule.
+12. **Move countdown & Game Over** *(FE-30, §3 B2/B5)* — the counter **counts down** from
+    `presupuestoMovimientos = nFlechas + margen`; each tap (valid or invalid) decrements it;
+    hitting 0 before clearing → **Game Over** (`EstadoDerrota`) on timed **and** untimed levels.
+    **Deliberate invariant change:** the prior "untimed levels can never lose" rule (§3 B2, §7.3)
+    is retired. Game Over reuses the GoF **State** `EstadoDerrota` — no ad-hoc state.
+8.  **Undo cap = 3 per level** *(FE-30, §3 B4)* — undo is no longer unlimited; max 3 uses per
+    level, control disabled afterwards, counter resets per level, each undo restores one
+    move-budget unit.
+
+### 12.2 Levels, Generation & Difficulty
+
+2. **Aggressive difficulty scaling** *(FE-23)* — a steep, monotonic `PerfilDificultad` (data, not
+   subclasses) grows grid size and arrow count sharply; late levels are large, dense, and complex.
+3. **Endless in-app level generation** *(FE-23)* — past the authored catalog the app procedurally
+   generates fresh, always-solvable levels indefinitely (offline-first), so difficulty scales
+   **without app-store updates**. The `validarSolvencia` template gate and arrow-length ≥ 2
+   invariant (FE-16) still cannot be bypassed.
+6. **Irregular board shape rendering** *(FE-26 / FE-16, §1.4 rule 7)* — the Flutter UI renders
+   non-rectangular (masked) boards the backend already serves: only playable cells are drawn and
+   hit-tested; *absent* ≠ `CeldaVacia`.
+
+### 12.3 Frontend UI / UX & Feedback
+
+5.  **Softer SFX** *(FE-25)* — replace/retune sound effects to be softer and more pleasant; same
+    Observer wiring (`TipoEvento → AudioServiceImp`); bounded polyphony so rapid repeats don't spam.
+10. **Invalid-move feedback** *(FE-28, §3 A2)* — on tapping a blocked arrow the red alert fires
+    **once per interaction** (debounced, no visual spam under rapid taps) **and** the device emits
+    **haptic** vibration via an injected port (graceful where unavailable). Rule unchanged.
+11. **15-second timer warning** *(FE-29)* — on timed levels, a distinct **visual + audio** warning
+    fires **once** as the countdown crosses exactly 15 s (Observer-driven `AvisoTiempo`); never on
+    untimed/bonus levels; resets per run.
+9.  **Settings menu (post-login) + i18n** *(FE-27)* — a Settings button after login with **Sound
+    (On/Off)** (mutes `AudioServiceImp`, no game-logic change) and **Language (English/Spanish)**
+    via a real i18n implementation (no hard-coded UI strings). Both persist (`shared_preferences`,
+    `ConfiguracionManager` DI-lifetime — ADR-0002) and apply on startup.
+
+### 12.4 Backend & Cross-repo
+
+4. **Progress state sync** *(FE-24 + BE-18)* —
+   - *Back-navigation:* Level Select **re-reads progression on every appearance** (not only via
+     "Next Level" after a win), so locks/stars are never stale.
+   - *Login restore:* a new **`GET /progress`** endpoint (BE-18, JWT-guarded, read-only) returns
+     the player's **best result per level**; the client calls it on login (FE-24), hydrates local
+     progression (merge keeps the best), and restores previously unlocked levels instead of
+     starting from scratch. The read path stays separate from the offline upload queue.
+7. **High-score persistence (validated)** *(BE-18 + BE-13)* — the DB keeps only the player's
+   **strictly-higher** score per `(jugador, nivel)` (BE-13's upsert + `@@unique`); BE-18 validates
+   this **from the read side** (`GET /progress`/leaderboard surface only the single best row), and
+   re-confirms server-side score recomputation (BE-05) agreement.
+
+### 12.5 Traceability (req → ticket)
+
+| Req | Summary | Ticket(s) |
+|---|---|---|
+| 1  | Path-following snake-like exit animation | FE-22 |
+| 2  | Aggressive difficulty scaling | FE-23 |
+| 3  | Endless in-app level generation | FE-23 |
+| 4  | Progress sync (back-nav refresh + login restore) | FE-24, BE-18 |
+| 5  | Softer SFX | FE-25 |
+| 6  | Irregular board shape rendering | FE-26 (FE-16, BE-14) |
+| 7  | High-score rule (validated) | BE-18, BE-13 |
+| 8  | Undo cap (3/level) | FE-30 |
+| 9  | Settings menu (sound + EN/ES i18n) | FE-27 |
+| 10 | Invalid-move single alert + haptics | FE-28 |
+| 11 | 15-second timer warning | FE-29 |
+| 12 | Move countdown + Game Over | FE-30 |
 
 ---
 

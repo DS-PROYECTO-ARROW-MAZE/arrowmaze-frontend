@@ -1,0 +1,192 @@
+{
+  "id": 5,
+  "name": "Zephyr",
+  "difficulty": "easy",
+  "rows": 5,
+  "cols": 5,
+  "player_start": {
+    "row": 0,
+    "col": 0
+  },
+  "exit": {
+    "row": 4,
+    "col": 4
+  },
+  "cells": [
+    {
+      "row": 2,
+      "col": 1,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 0,
+      "col": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 0,
+      "col": 4,
+      "type": "arrow",
+      "id": 2,
+      "direction": "DOWN"
+    },
+    {
+      "row": 1,
+      "col": 4,
+      "type": "arrow",
+      "id": 2,
+      "direction": "DOWN"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 0,
+      "col": 3,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 1,
+      "col": 3,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 2,
+      "col": 3,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 2,
+      "col": 4,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 3,
+      "col": 4,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 4,
+      "col": 4,
+      "type": "arrow",
+      "id": 3,
+      "direction": "DOWN"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 3,
+      "col": 3,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 4,
+      "col": 3,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "type": "arrow",
+      "id": 4,
+      "direction": "DOWN"
+    }
+  ]
+}

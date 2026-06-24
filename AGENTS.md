@@ -1,118 +1,143 @@
 # AGENTS.md — ArrowMaze Frontend
-# Este archivo es leído automáticamente por OpenCode y agentes de IA compatibles.
-# Si usas Gemini, pega este contenido completo al inicio de cada conversación.
+
+Leído automáticamente por OpenCode. Respeta todas las secciones.
 
 ## Proyecto
-Clon del juego Arrow Maze - Escape Puzzle (SayGames Ltd.).
-Juego de cuadrícula: el jugador sigue una cadena de flechas hasta llegar a la celda de salida.
-Proyecto universitario NRC 25783 — Desarrollo de Software.
 
-## Arquitectura: MVVM + Clean Architecture (ESTRICTO)
+Clon Flutter del juego Arrow Maze - Escape Puzzle (SayGames Ltd.).
+Cuadrícula: el jugador toca flechas, el rayo recorre la cadena hasta destino
+o pared. Proyecto universitario NRC 25783.
 
-lib/domain/         → Capa 1. Dart puro. CERO imports de Flutter.
-lib/application/    → Capa 2. Casos de uso. Solo depende de interfaces de domain/.
-lib/presentation/   → Capa 3. MVVM: Views + ViewModels.
-lib/infrastructure/ → Capa 4. Flutter, SQLite, HTTP.
-lib/core/           → Utilidades compartidas.
+## Comandos exactos
 
-REGLA ABSOLUTA: domain/ y application/ nunca importan Flutter.
-REGLA ABSOLUTA: Las Views nunca llaman casos de uso directamente, todo pasa por el ViewModel.
-REGLA ABSOLUTA: Los ViewModels nunca importan infrastructure/ directamente.
+```sh
+flutter test                          # suite completa (226 tests)
+flutter test test/presentation/juego_viewmodel_sync_test.dart  # un archivo
+flutter analyze                       # linter — 0 errors / 0 warnings esperado
+flutter build web                     # build producción
+flutter pub outdated                  # revisar compatibilidades
+```
 
-## MVVM en este proyecto
+`flutter analyze` **siempre** después de tocar código nuevo; el proyecto
+tolera 0 errores. Correr antes del commit.
 
-View      → Widget Flutter en presentation/views/. Solo dibuja, cero lógica.
-ViewModel → Clase en presentation/viewmodels/. Llama casos de uso, expone estado.
-Model     → Entidades en domain/entities/. Dart puro.
+## Arquitectura: MVVM + Clean Architecture estricta
 
-Flujo correcto:
-GameView → observa GameViewModel → llama MovePlayerUseCase → usa ILevelRepository
-→ InfrastructureRepository implementa ILevelRepository
+`lib/domain/`         → Dart puro. CERO imports de Flutter.
+`lib/application/`    → Casos de uso. Solo depende de interfaces de `domain/`.
+`lib/presentation/`   → MVVM: Views + ViewModels (usa Flutter).
+`lib/infrastructure/` → Flutter, HTTP, audio, persistencia.
+`lib/core/`           → Tema, configuración de API, utilidades.
+`lib/di/`             → `Inyeccion` — composition root único.
 
-## Principios SOLID
+Reglas absolutas:
+- domain/ y application/ **nunca** importan Flutter
+- Views nunca llaman casos de uso — todo pasa por el ViewModel
+- ViewModels nunca importan infrastructure/ directamente
 
-SRP: una clase, una razón de cambio.
-OCP: nuevas funciones via nuevas clases que implementan interfaces, nunca modificar las existentes.
-LSP: ArrowCell, WallCell, EmptyCell, ExitCell son intercambiables donde se use ICell.
-ISP: interfaces pequeñas (IRenderable, ICollidable separadas).
-DIP: casos de uso reciben ILevelRepository por constructor, nunca instancian la clase concreta.
+Tests espejan la estructura: `test/domain/`, `test/application/`,
+`test/infrastructure/`, `test/presentation/`, `test/architecture/`.
 
-## Patrones de diseño en uso
+## Entidades del dominio (domain/entities/)
 
-Factory Method → CellFactory.create(json) retorna el ICell correcto
-State          → GameStateMachine (MenuState, PlayingState, PausedState, VictoryState, GameOverState)
-Command        → PlayerMoveCommand para undo/redo
-Observer       → ViewModel con ChangeNotifier notifica a las Views
-Builder        → LevelBuilder construye Board desde JSON
-Strategy       → ILevelGenerationStrategy (FileBasedLevelStrategy, RandomLevelStrategy)
-Singleton      → AudioManager, una sola instancia
-Decorator      → LockedCellDecorator, CollectableCellDecorator
+`Celda` — sealed class, 4 variantes:
+- `CeldaFlecha` — segmento de trayectoria, `bloqueaRayo: true`
+- `CeldaPared` — bloquea el rayo
+- `CeldaVacia` — transparente
+- `Coleccionable` — transparente, `esColeccionable: true`, otorga bonus
 
-## Entidades del dominio (lib/domain/entities/)
+Las celdas se crean con `FabricaCeldasEstandar`. **No hay decoradores de celdas**
+— el type system sealed + propiedades polimórficas reemplaza al Decorator.
 
-ICell       → interfaz base: position(row, col), cellType
-ArrowCell   → implementa ICell, Direction (UP/DOWN/LEFT/RIGHT), rotate()
-WallCell    → implementa ICell, bloquea movimiento
-EmptyCell   → implementa ICell, pasable sin flecha
-ExitCell    → implementa ICell, condición de victoria
-Board       → cuadrícula rows x cols, List<List<ICell>>
-Player      → posición actual (row, col)
-Level       → Board + playerStart + exitPosition + metadata
+## Puertos/interfaces clave (application/ports/)
 
-## Casos de uso (lib/application/use_cases/)
+| Puerto | Método(s) | Propósito |
+|---|---|---|
+| `Tablero` (domain/) | `celdaEn`, `trayectoriaEn`, `raycast`, `eliminarTrayectoria`, `restaurarTrayectoria`, `estaVacio` | Board port — OCP |
+| `Reloj` | `iniciar(intervalo, tic)`, `detener()` | Timer abstraction |
+| `ProveedorSesion` | `obtenerToken`, `guardarToken`, `cerrarSesion` | JWT session |
+| `FuenteAutenticacion` | `registrar`, `iniciarSesion`, `obtenerPerfil` | Auth API |
+| `IColaSincronizacion` | `encolar`, `obtenerPendientes`, `vaciar`, `cantidadPendientes` | Cola offline |
+| `IRepositorioProgreso` | `guardarLote` | Batch upload |
+| `IConsultaRanking` | `obtenerTop(nivelId, limite)` | Read-only |
+| `ConsultaProgresoLocal` | `nivelesCompletados`, `mejorEstrellas`, `registrarCompletado` | Persistencia local |
+| `CatalogoNiveles` | `obtenerIds`, `obtenerNivel` | Catálogo desde assets |
+| `IControlAudio` | `muted`, `toggleMute()` | Audio control |
+| `CargadorNivel` (deprecated) | `cargar(idNivel)` → `DefinicionNivelDto` | Niveles por archivo |
 
-MovePlayerUseCase     → sigue cadena de flechas desde posición del jugador
-RotateArrowUseCase    → rota ArrowCell en posición (row, col)
-LoadLevelUseCase      → carga Level desde ILevelRepository
-SaveProgressUseCase   → persiste nivel completado y puntuación
-GetLeaderboardUseCase → obtiene top scores desde API remota
+## Casos de uso (application/use_cases/)
 
-## Interfaces del dominio (lib/domain/repositories/)
+`MoverFlechaUseCase` — central: recibe `Tablero`, `SesionJuego`,
+`CommandHistory`, emite eventos vía `PublicadorEventosJuego`.
 
-ILevelRepository    → getLevelById(int id), getAllLevels()
-IProgressRepository → getCompletedLevels(), saveScore(int levelId, int score)
+Otros: `DeshacerMovimientoUseCase` (undo vía Command), `CalcularPuntuacionUseCase`
+(Strategy de puntuación), `RegistrarUsuarioUseCase`, `IniciarSesionUseCase`,
+`CerrarSesionUseCase`, `SincronizarProgresoUseCase` (offline→batch→flush),
+`ConsultarRankingUseCase` (solo lectura), `CrearNivelUseCase`, `ObtenerNivelesUseCase`,
+`ObtenerPerfilUseCase`.
 
-## Formato JSON de niveles (assets/levels/level_XX.json)
+## Decorate stack (application/decoradores/)
 
-{
-  "id": 1,
-  "name": "Level 1",
-  "difficulty": "easy",
-  "rows": 5,
-  "cols": 5,
-  "player_start": {"row": 0, "col": 0},
-  "exit": {"row": 4, "col": 4},
-  "cells": [
-    {"row": 0, "col": 0, "type": "arrow", "direction": "RIGHT"},
-    {"row": 0, "col": 1, "type": "arrow", "direction": "DOWN"},
-    {"row": 1, "col": 1, "type": "wall"},
-    {"row": 4, "col": 4, "type": "exit"}
-  ]
-}
+GoF Decorator via `DecoradorCasoDeUso` base:
+`DecoradorSeguridad → DecoradorRegistro → DecoradorMetricas → caso real`.
+Compuesto en `Inyeccion` para `consultarRankingDecorado`. **Cero** imports de
+librerías de logging/metrics dentro de los decoradores (solo puertos).
 
-## Reglas de código
+## Sesión (domain/sesion/)
 
-- Dart null safety obligatorio. No usar late sin justificación.
-- Preferir final y const siempre que sea posible.
-- dartdoc en todas las clases y métodos públicos.
-- Tests nombrados: should_[resultado_esperado]_when_[condicion]
-- Patrón AAA en todos los tests: Arrange / Act / Assert
-- Usar mocktail para mocks, nunca mockito.
-- No usar dynamic en ningún lado.
+GoF State: `EstadoSesion` sealed con `EstadoJugando`, `EstadoPausado`,
+`EstadoVictoria`, `EstadoDerrota`. `ContextoSesion` interface rompe el ciclo
+circular con `SesionJuego`.
 
-## Convención de commits (Conventional Commits)
+## Patrones de diseño verificados en código
 
-feat(domain): add ArrowCell entity
-fix(player): correct movement when hitting wall
-test(use-case): add unit tests for MovePlayerUseCase
-docs(readme): update architecture diagram
-chore(config): add commitlint setup
-refactor(board): apply Factory Method to cell creation
+- **Factory Method**: `FabricaCeldasEstandar` crea celdas desde JSON
+- **State**: `EstadoSesion` + `SesionJuego`
+- **Command**: `PlayerMoveCommand` + `CommandHistory` (undo)
+- **Observer**: `PublicadorEventosJuego` + `ObservadorJuego` (desacopla reglas de audio/UI)
+- **Strategy**: `ILevelGenerationStrategy` (random/file), `EstrategiaPuntuacion` (movimientos/mixta)
+- **Singleton**: `AudioServiceImp.instance`
+- **Decorator**: `DecoradorCasoDeUso` para metrics/logging/security (NO decoradores de celdas)
+- **Template Method**: `GeneradorNivelBase` con `validarSolvencia`
 
-## Nunca hacer
+## Convenciones de código
 
-- Importar flutter/material.dart dentro de domain/ o application/
-- Usar BuildContext fuera de presentation/views/
-- Mezclar UI + lógica + persistencia en una misma clase
-- Hacer que una View llame directamente a un caso de uso
-- Escribir tests que prueben detalles de implementación
+- Dart null safety obligatorio; preferir `final` y `const`
+- Tests: `should_[resultado]_when_[condicion]`, patrón AAA
+- Tests usan **inline fakes** (clases `_FooFake`) o `mocktail` para spies (5 archivos en `test/application/`)
+- **No usar `dynamic`** en ningún lado
+- **Nunca importar** `flutter/material.dart` en `domain/` o `application/`
+- **Nunca usar** `BuildContext` fuera de `presentation/views/`
+- **Nunca** hacer que una View llame un caso de uso directamente
+
+## Architecture tests (test/architecture/)
+
+3 tests que fallan si se violan reglas:
+- `dependency_direction_test` — domain/application sin Flutter, decoradores sin logging libs
+- `ubiquitous_language_test` — prohíbe identificadores del avoid-list (`CeldaSalida`, `*Decorator` celdas, `Composite`, `NivelFacil/Medio/Dificil`, `PuntuacionPorTiempo`, `CargadorNiveles` plural)
+- `ranking_is_read_only_test` — `IConsultaRanking` no tiene método `publicar`
+
+Ejecutar con `flutter test`.
+
+## Nombres reales vs. documentación obsoleta
+
+El código usa español para todo el dominio (`MoverFlechaUseCase`, `FabricaCeldasEstandar`,
+`GrafoTablero`, `SesionJuego`, etc.). Los commits siguen Conventional Commits en inglés.
+**NO existen** en el código: `ICell`, `ArrowCell`/`WallCell`/`ExitCell`/`EmptyCell`/`Board`/`Player`/`Level`,
+`MovePlayerUseCase`, `RotateArrowUseCase`, `LoadLevelUseCase`, `SaveProgressUseCase`,
+`ILevelRepository`, `LockedCellDecorator`, `CollectableCellDecorator`,
+`GameStateMachine`, `AudioManager`, `CellFactory`.
+
+## Assets
+
+- `assets/levels/level_XX.json` — niveles precargados
+- `assets/sounds/*.wav` — efectos de sonido (move, invalid, collect, victory, defeat)
+
+## API / Backend
+
+- Base URL configurable vía `--dart-define=API_BASE_URL=...` (default localhost:3000)
+- Token JWT persiste en `shared_preferences`, adjuntado automáticamente a requests
+  protegidos via `ClienteHttpAutenticado` (subclase de `http.BaseClient`)
+- Niveles locales usan `int` como id; la API usa `String` (UUID). Conversión en `main.dart`
+- Endpoints: `/auth/register`, `/auth/login`, `/auth/me`, `/progress/sync`,
+  `/leaderboard?nivelId=...&limite=...`

@@ -19,6 +19,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
   const GameTheme({
     required this.boardBackground,
     required this.boardGridLine,
+    required this.emptyDot,
+    required this.arrowPalette,
     required this.cellArrow,
     required this.cellArrowGlow,
     required this.cellWall,
@@ -29,6 +31,11 @@ class GameTheme extends ThemeExtension<GameTheme> {
     required this.invalidMoveFlash,
     required this.starActive,
     required this.starInactive,
+    required this.scoreColor,
+    required this.syncQueued,
+    required this.syncActive,
+    required this.syncDone,
+    required this.syncError,
   });
 
   /// Backdrop behind the grid.
@@ -36,6 +43,13 @@ class GameTheme extends ThemeExtension<GameTheme> {
 
   /// Thin lines separating cells.
   final Color boardGridLine;
+
+  /// The subtle dot marking an empty grid space (no background tile).
+  final Color emptyDot;
+
+  /// The cycle of neon colours assigned to distinct arrow paths, so adjacent
+  /// continuous paths read as separate arrows. Indexed by `idFlecha % length`.
+  final List<Color> arrowPalette;
 
   /// Fill/tint of an interactive `Flecha` cell.
   final Color cellArrow;
@@ -67,10 +81,37 @@ class GameTheme extends ThemeExtension<GameTheme> {
   /// An unfilled star slot.
   final Color starInactive;
 
+  /// The colour for the score number on the victory overlay.
+  final Color scoreColor;
+
+  /// Badge / icon colour when runs are queued offline (waiting to sync).
+  final Color syncQueued;
+
+  /// Badge / icon colour while a batch sync is in progress.
+  final Color syncActive;
+
+  /// Badge / icon colour after a successful sync.
+  final Color syncDone;
+
+  /// Badge / icon colour when the sync failed (retry available).
+  final Color syncError;
+
+  /// A colour for the path with [idFlecha], cycling through [arrowPalette].
+  Color colorFlecha(int idFlecha) =>
+      arrowPalette[idFlecha % arrowPalette.length];
+
   /// The default game palette for the dark theme.
   static const GameTheme dark = GameTheme(
     boardBackground: AppColors.background,
     boardGridLine: AppColors.surfaceVariant,
+    emptyDot: AppColors.surfaceVariant,
+    arrowPalette: <Color>[
+      AppColors.accentNeon,
+      AppColors.primaryNeon,
+      AppColors.purpleNeon,
+      AppColors.warningNeon,
+      AppColors.errorNeon,
+    ],
     cellArrow: AppColors.accentNeon,
     cellArrowGlow: AppColors.accentNeon,
     cellWall: AppColors.surfaceVariant,
@@ -81,12 +122,19 @@ class GameTheme extends ThemeExtension<GameTheme> {
     invalidMoveFlash: AppColors.errorNeon,
     starActive: AppColors.warningNeon,
     starInactive: AppColors.surfaceVariant,
+    scoreColor: AppColors.primaryNeon,
+    syncQueued: AppColors.warningNeon,
+    syncActive: AppColors.accentNeon,
+    syncDone: AppColors.primaryNeon,
+    syncError: AppColors.errorNeon,
   );
 
   @override
   GameTheme copyWith({
     Color? boardBackground,
     Color? boardGridLine,
+    Color? emptyDot,
+    List<Color>? arrowPalette,
     Color? cellArrow,
     Color? cellArrowGlow,
     Color? cellWall,
@@ -97,10 +145,17 @@ class GameTheme extends ThemeExtension<GameTheme> {
     Color? invalidMoveFlash,
     Color? starActive,
     Color? starInactive,
+    Color? scoreColor,
+    Color? syncQueued,
+    Color? syncActive,
+    Color? syncDone,
+    Color? syncError,
   }) {
     return GameTheme(
       boardBackground: boardBackground ?? this.boardBackground,
       boardGridLine: boardGridLine ?? this.boardGridLine,
+      emptyDot: emptyDot ?? this.emptyDot,
+      arrowPalette: arrowPalette ?? this.arrowPalette,
       cellArrow: cellArrow ?? this.cellArrow,
       cellArrowGlow: cellArrowGlow ?? this.cellArrowGlow,
       cellWall: cellWall ?? this.cellWall,
@@ -111,6 +166,11 @@ class GameTheme extends ThemeExtension<GameTheme> {
       invalidMoveFlash: invalidMoveFlash ?? this.invalidMoveFlash,
       starActive: starActive ?? this.starActive,
       starInactive: starInactive ?? this.starInactive,
+      scoreColor: scoreColor ?? this.scoreColor,
+      syncQueued: syncQueued ?? this.syncQueued,
+      syncActive: syncActive ?? this.syncActive,
+      syncDone: syncDone ?? this.syncDone,
+      syncError: syncError ?? this.syncError,
     );
   }
 
@@ -120,6 +180,8 @@ class GameTheme extends ThemeExtension<GameTheme> {
     return GameTheme(
       boardBackground: Color.lerp(boardBackground, other.boardBackground, t)!,
       boardGridLine: Color.lerp(boardGridLine, other.boardGridLine, t)!,
+      emptyDot: Color.lerp(emptyDot, other.emptyDot, t)!,
+      arrowPalette: t < 0.5 ? arrowPalette : other.arrowPalette,
       cellArrow: Color.lerp(cellArrow, other.cellArrow, t)!,
       cellArrowGlow: Color.lerp(cellArrowGlow, other.cellArrowGlow, t)!,
       cellWall: Color.lerp(cellWall, other.cellWall, t)!,
@@ -130,6 +192,11 @@ class GameTheme extends ThemeExtension<GameTheme> {
       invalidMoveFlash: Color.lerp(invalidMoveFlash, other.invalidMoveFlash, t)!,
       starActive: Color.lerp(starActive, other.starActive, t)!,
       starInactive: Color.lerp(starInactive, other.starInactive, t)!,
+      scoreColor: Color.lerp(scoreColor, other.scoreColor, t)!,
+      syncQueued: Color.lerp(syncQueued, other.syncQueued, t)!,
+      syncActive: Color.lerp(syncActive, other.syncActive, t)!,
+      syncDone: Color.lerp(syncDone, other.syncDone, t)!,
+      syncError: Color.lerp(syncError, other.syncError, t)!,
     );
   }
 }

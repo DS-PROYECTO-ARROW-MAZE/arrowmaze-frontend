@@ -1,107 +1,203 @@
 import 'package:flutter/material.dart';
 
 import 'core/theme/app_theme.dart';
+import 'di/inyeccion.dart';
+import 'presentation/viewmodels/juego_view_model.dart';
+import 'presentation/views/auth/auth_view.dart';
+import 'presentation/views/game/game_view.dart';
+import 'presentation/viewmodels/seleccion_niveles_view_state.dart';
+import 'presentation/views/ranking/ranking_view.dart';
+import 'presentation/views/seleccion/seleccion_niveles_view.dart';
 
 void main() {
   runApp(const MyApp());
 }
 
+/// Root of the ArrowMaze app.
 class MyApp extends StatelessWidget {
+  /// Creates the app shell.
   const MyApp({super.key});
 
-  // This widget is the root of your application.
   @override
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'ArrowMaze',
       theme: AppTheme.darkTheme,
-      home: const MyHomePage(title: 'ArrowMaze'),
+      debugShowCheckedModeBanner: false,
+      // Meta-game loop (Ticket 13): Auth → Level Select → Game → (Next/Retry/
+      // Menu). Each builder below is the composition root for its route — it asks
+      // [Inyeccion] for fresh ViewModels so the Views never touch the DI graph.
+      home: AuthView(
+        viewModel: Inyeccion.construirAuthViewModel(),
+        construirInicio: _construirSeleccion,
+      ),
     );
   }
 }
 
-class MyHomePage extends StatefulWidget {
-  const MyHomePage({super.key, required this.title});
-
-  // This widget is the home page of your application. It is stateful, meaning
-  // that it has a State object (defined below) that contains fields that affect
-  // how it looks.
-
-  // This class is the configuration for the state. It holds the values (in this
-  // case the title) provided by the parent (in this case the App widget) and
-  // used by the build method of the State. Fields in a Widget subclass are
-  // always marked "final".
-
-  final String title;
-
-  @override
-  State<MyHomePage> createState() => _MyHomePageState();
+/// Builds the Level Selection menu and kicks off the catalog load (with locks
+/// and stars). Tapping an unlocked level opens it via [_abrirNivel].
+Widget _construirSeleccion(BuildContext context) {
+  final viewModel = Inyeccion.construirSeleccionNivelesViewModel();
+  viewModel.cargar();
+  return SeleccionNivelesView(
+    viewModel: viewModel,
+    alSeleccionar: _abrirNivel,
+    onLogout: () => _cerrarSesionYVolverALogin(context),
+  );
 }
 
-class _MyHomePageState extends State<MyHomePage> {
-  int _counter = 0;
+/// Clears the session token and replaces the entire stack with a fresh login
+/// screen (AC2, AC3).
+void _cerrarSesionYVolverALogin(BuildContext context) {
+  final navigator = Navigator.of(context);
+  Inyeccion.cerrarSesionUseCase.ejecutar().then((_) {
+    navigator.pushAndRemoveUntil(
+      MaterialPageRoute(
+        builder: (_) => AuthView(
+          viewModel: Inyeccion.construirAuthViewModel(),
+          construirInicio: _construirSeleccion,
+        ),
+      ),
+      (_) => false,
+    );
+  });
+}
 
-  void _incrementCounter() {
-    setState(() {
-      // This call to setState tells the Flutter framework that something has
-      // changed in this State, which causes it to rerun the build method below
-      // so that the display can reflect the updated values. If we changed
-      // _counter without calling setState(), then the build method would not be
-      // called again, and so nothing would appear to happen.
-      _counter++;
-    });
+/// Pushes the game host for [nivel]; [nivelesOrdenados] lets the host offer
+/// "Next" and carries each level's backend UUID for sync/leaderboard.
+void _abrirNivel(
+  BuildContext context,
+  NivelResumenUI nivel,
+  List<NivelResumenUI> nivelesOrdenados,
+) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) =>
+          _JuegoHost(nivel: nivel, nivelesOrdenados: nivelesOrdenados),
+    ),
+  );
+}
+
+/// Loads the board for one level and hosts the [GameView], wiring the post-game
+/// Next / Retry / Level-Select navigation.
+///
+/// Lives in the composition root (not `presentation/`) so the Views stay free of
+/// the DI graph. The board load is asynchronous (file-backed level), so this is
+/// the `FutureBuilder` loading shell promised in DIAGRAM-RECONCILIATION.md §9.1.
+class _JuegoHost extends StatefulWidget {
+  const _JuegoHost({required this.nivel, required this.nivelesOrdenados});
+
+  final NivelResumenUI nivel;
+  final List<NivelResumenUI> nivelesOrdenados;
+
+  @override
+  State<_JuegoHost> createState() => _JuegoHostState();
+}
+
+class _JuegoHostState extends State<_JuegoHost> {
+  late final Future<JuegoViewModel> _viewModel;
+
+  /// The resolved game ViewModel, captured once the board finishes loading so
+  /// the leaderboard builder can await its in-flight progress sync.
+  JuegoViewModel? _juego;
+
+  @override
+  void initState() {
+    super.initState();
+    // The board is loaded from the bundled asset by ordinal (`id`); the backend
+    // UUID (`idRemoto`) is forwarded so a victory syncs against the right level.
+    _viewModel = Inyeccion.construirJuegoViewModelDesdeArchivo(
+      widget.nivel.id,
+      nivelIdRemoto: widget.nivel.idRemoto,
+    );
+    _viewModel.then((vm) => _juego = vm);
+  }
+
+  /// The next level in catalog order, or `null` when this is the last one.
+  NivelResumenUI? get _siguienteNivel {
+    final i = widget.nivelesOrdenados.indexWhere((n) => n.id == widget.nivel.id);
+    if (i < 0 || i + 1 >= widget.nivelesOrdenados.length) return null;
+    return widget.nivelesOrdenados[i + 1];
+  }
+
+  void _reintentar() => _reemplazarCon(widget.nivel);
+
+  void _siguiente() {
+    final next = _siguienteNivel;
+    if (next != null) _reemplazarCon(next);
+  }
+
+  void _reemplazarCon(NivelResumenUI nivel) {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(
+        builder: (_) => _JuegoHost(
+          nivel: nivel,
+          nivelesOrdenados: widget.nivelesOrdenados,
+        ),
+      ),
+    );
+  }
+
+  /// Returns to a freshly-loaded Level Selection (so unlocks/stars reflect the
+  /// run that just ended).
+  void _menu() {
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: _construirSeleccion),
+    );
+  }
+
+  /// Builds the leaderboard for *this* level and starts its load.
+  Widget _construirRanking(BuildContext context) {
+    final viewModel = Inyeccion.construirRankingViewModel();
+    // The leaderboard API keys by the backend level UUID. It is available only
+    // when the catalog was served by the backend; offline (bundled catalog) it
+    // is null, and the read surfaces an empty/error state gracefully.
+    //
+    // Pass the in-flight victory sync so the read waits for the
+    // `POST /progress/sync` write to resolve before fetching — the score just
+    // earned is reflected and the GET never races the POST. `null` when no run
+    // is syncing (e.g. opening the board before winning).
+    viewModel.cargarRanking(
+      nivelId: widget.nivel.idRemoto ?? '',
+      limite: 10,
+      sincronizacionPendiente: _juego?.sincronizacionEnCurso,
+    );
+    return RankingView(viewModel: viewModel);
   }
 
   @override
   Widget build(BuildContext context) {
-    // This method is rerun every time setState is called, for instance as done
-    // by the _incrementCounter method above.
-    //
-    // The Flutter framework has been optimized to make rerunning build methods
-    // fast, so that you can just rebuild anything that needs updating rather
-    // than having to individually change instances of widgets.
-    return Scaffold(
-      appBar: AppBar(
-        // TRY THIS: Try changing the color here to a specific color (to
-        // Colors.amber, perhaps?) and trigger a hot reload to see the AppBar
-        // change color while the other colors stay the same.
-        backgroundColor: Theme.of(context).colorScheme.inversePrimary,
-        // Here we take the value from the MyHomePage object that was created by
-        // the App.build method, and use it to set our appbar title.
-        title: Text(widget.title),
-      ),
-      body: Center(
-        // Center is a layout widget. It takes a single child and positions it
-        // in the middle of the parent.
-        child: Column(
-          // Column is also a layout widget. It takes a list of children and
-          // arranges them vertically. By default, it sizes itself to fit its
-          // children horizontally, and tries to be as tall as its parent.
-          //
-          // Column has various properties to control how it sizes itself and
-          // how it positions its children. Here we use mainAxisAlignment to
-          // center the children vertically; the main axis here is the vertical
-          // axis because Columns are vertical (the cross axis would be
-          // horizontal).
-          //
-          // TRY THIS: Invoke "debug painting" (choose the "Toggle Debug Paint"
-          // action in the IDE, or press "p" in the console), to see the
-          // wireframe for each widget.
-          mainAxisAlignment: .center,
-          children: [
-            const Text('You have pushed the button this many times:'),
-            Text(
-              '$_counter',
-              style: Theme.of(context).textTheme.headlineMedium,
+    return FutureBuilder<JuegoViewModel>(
+      future: _viewModel,
+      builder: (context, snapshot) {
+        if (snapshot.hasError) {
+          return Scaffold(
+            appBar: AppBar(title: const Text('ArrowMaze')),
+            body: Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  'Could not load level ${widget.nivel.id}.',
+                  textAlign: TextAlign.center,
+                ),
+              ),
             ),
-          ],
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _incrementCounter,
-        tooltip: 'Increment',
-        child: const Icon(Icons.add),
-      ),
+          );
+        }
+        if (!snapshot.hasData) {
+          return const Scaffold(
+            body: Center(child: CircularProgressIndicator()),
+          );
+        }
+        return GameView(
+          viewModel: snapshot.data!,
+          construirRanking: _construirRanking,
+          onReintentar: _reintentar,
+          onSiguiente: _siguienteNivel == null ? null : _siguiente,
+          onMenu: _menu,
+        );
+      },
     );
   }
 }
