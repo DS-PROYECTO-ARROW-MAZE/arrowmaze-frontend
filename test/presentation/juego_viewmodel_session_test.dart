@@ -66,5 +66,6 @@ void main() {
     expect(victoria, isA<VictoriaViewState>());
     expect(victoria, isNot(isA<EstadoVictoria>()));
     expect(victoria!.movimientos, 1);
+    expect(victoria.mostrarPuntuacion, isTrue);
   });
 }

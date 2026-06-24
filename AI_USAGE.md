@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-019 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-24 (T-020 appended)
 
 ## 1. Tools Used
 
@@ -1288,11 +1288,101 @@ eloj:
   list. The `celda_type` map for difficulty colours follows the same pattern as
   the existing `_etiquetaDificultad` helper but returns colour tokens instead
   of strings, keeping presentation logic in the View.
-  (5) Content debt from ticket 13 is resolved: level_01…level_15 now exist with
-  genuinely distinct grid sizes and scaling complexity. Per-level scoring
-  (`DefinicionNivel` with tier-specific thresholds) still uses the single
-  `definicionNivelInicial` default — a future ticket could read star thresholds
-  from the level JSON or the backend profile.
+   (5) Content debt from ticket 13 is resolved: level_01…level_15 now exist with
+   genuinely distinct grid sizes and scaling complexity. Per-level scoring
+   (`DefinicionNivel` with tier-specific thresholds) still uses the single
+   `definicionNivelInicial` default — a future ticket could read star thresholds
+   from the level JSON or the backend profile.
+
+### T-020 — Ticket 18 · Timed Level Rules (timer + bonus exemption)
+
+- **Task / problem addressed:** Implement timed level rules: levels 1–9 untimed,
+  levels ≥10 timed with countdown timer, bonus levels exempt from both timer and
+  scoring. Add timer urgency visual styling (3 tiers) and hide score/stars overlay
+  on bonus-level victories. Scope captured in
+  `.issues/18-feat-frontend-timer-rules-timed-bonus.md`.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session spanned multiple
+  Red→Green→Refactor cycles. Core prompts included:
+  (1) "Implementa el ticket `.issues\18-feat-frontend-timer-rules-timed-bonus.md`.
+  Es OBLIGATORIO que apliques estrictamente las reglas de las skills 'tdd-strict'
+  y 'clean-architecture'. El diseño visual lo defines tú usando 'lib/core/theme'."
+  (2) "Continua" after each green cycle.
+  (3) "Corrige el test para que pase — el viewmodel espera `_definicionNivel` no
+  `_sesion` en el timer."
+  (4) "Actualiza también los goldens de `calcular_puntuacion_use_case_test` — las
+  entradas timed necesitan `numero: 10`."
+  (5) "Añade un campo `mostrarPuntuacion: false` a `VictoriaViewState` en el bonus
+  y actualiza `_VictoriaOverlay` para condicionar la sección de puntuación/estrellas."
+  (6) "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el
+  trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  **Domain:**
+  `lib/domain/puntuacion/definicion_nivel.dart` — extended with `numero` (int,
+  default 0), `esBonus` (bool, default false), rule-based `esCronometrado` getter
+  (`!esBonus && numero >= 10 && _limiteTiempo != null`), `limiteTiempo` getter
+  returns `null` when `esBonus` even if a value was provided; boundary constant
+  `_umbralCronometrado = 10`.
+  **Application:**
+  `lib/application/use_cases/calcular_puntuacion_use_case.dart` — early return of
+  `ResultadoPuntaje(0, 0)` when `definicion.esBonus` (no scoring, no stars).
+  **Presentation:**
+  `lib/presentation/viewmodels/juego_view_model.dart` — `_iniciarReloj` checks
+  `_definicionNivel.esCronometrado` instead of `_sesion.esCronometrado`; bonus
+  victory path bypasses scoring, progress recording, and sync, producing
+  `VictoriaViewState(mostrarPuntuacion: false)`; victory path for non-bonus levels
+  sets `mostrarPuntuacion: true`.
+  `lib/presentation/viewmodels/juego_view_state.dart` — added `mostrarPuntuacion`
+  flag to `VictoriaViewState` (bool, default `true`).
+  `lib/presentation/views/game/game_view.dart` — `_Hud` timer with 3-tier urgency
+  styling: >30s white (`textPrimary`), 11–30s yellow (`game.starActive`), ≤10s red
+  (`game.invalidMoveFlash`); `_VictoriaOverlay` conditionally renders score/stars
+  section when `mostrarPuntuacion`.
+  **DI:**
+  `lib/di/inyeccion.dart` — `definicionNivelInicial` updated with `esBonus: false`.
+  **New tests (3 files, 15 tests):**
+  `test/domain/definicion_nivel_test.dart` (9 — esCronometrado boundaries at
+  level 9/10, bonus overrides timer, bonus nullifies limiteTiempo, default values);
+  `test/presentation/juego_viewmodel_timer_test.dart` (5 — no timer <10, timer
+  starts ≥10, timeout→defeat, bonus skips timer+score, timer visible in HUD);
+  `test/application/calcular_puntuacion_bonus_test.dart` (1 — bonus returns 0).
+  Existing golden fixtures in `calcular_puntuacion_use_case_test.dart` updated
+  (timed entries given `numero: 10`).
+  Verified: **`flutter test` 271/271 green** (247 prior + 15 new + 9 existing
+  fixture updates);
+  **`flutter analyze` 0 errors, 0 warnings** (42 info-level only — all pre-existing
+  style preferences, none from new code).
+- **Modifications made by the team:** (a) Initial timer logic used `_sesion.esCronometrado`
+  which no longer exists — the ViewModel needed `_definicionNivel.esCronometrado`; fixed
+  after the first test failure. (b) Golden fixtures in `calcular_puntuacion_use_case_test.dart`
+  lacked `numero: 10` on timed entries, so `esCronometrado` defaulted to `false`;
+  fixed by adding the field. (c) The `mostrarPuntuacion` flag was added after the first
+  green pass (not in the initial plan) to prevent the View from branching on domain
+  entities; this required updating `_VictoriaOverlay` to conditionally render the
+  score/stars section. (d) Assertions for `mostrarPuntuacion` were missing in both
+  `juego_viewmodel_timer_test.dart` (bonus path) and `juego_viewmodel_session_test.dart`
+  (non-bonus path) — added to lock in the behaviour. `flutter test` / `flutter analyze`
+  served as guardrails throughout.
+- **Lessons learned / limitations identified:**
+  (1) The rule-based `esCronometrado` getter (`!esBonus && numero >= 10 && _limiteTiempo != null`)
+  proved a clean single source of truth — no caller branches on `numero` or compares
+  against 9/10. The boundary constant `_umbralCronometrado = 10` is centralized in
+  `DefinicionNivel` and can be shared with external systems (backend ticket 15).
+  (2) Adding `numero` and `esBonus` fields with defaults (0 and `false`) preserved
+  backward compatibility for all existing callers, but golden fixtures in
+  `calcular_puntuacion_use_case_test.dart` for timed levels needed explicit `numero: 10`
+  — a test-design lesson: golden data must match production semantics when entity
+  fields affect rule evaluation.
+  (3) The `mostrarPuntuacion` flag on `VictoriaViewState` kept the View free of domain-
+  entity branching (no `if (definicion.esBonus)` in widget code), maintaining Clean
+  Architecture compliance. The flag defaults to `true`, so existing callers unchanged.
+  (4) Timer urgency thresholds (30s / 10s) live as widget constants in `_Hud` rather
+  than in `GameTheme` — an acceptable scope choice for ticket 18, but worth extracting
+  if reused across screens.
+  (5) The `_iniciarReloj` method originally checked `_sesion.esCronometrado`, but
+  `ContextoSesion`/`SesionJuego` no longer expose that property — the definitive
+  source of timer configuration is `DefinicionNivel`, keeping the rule in domain and
+  the ViewModel a pure consumer.
 
 ## 3. Critical Evaluation
 
@@ -1300,11 +1390,11 @@ eloj:
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 20, and 21 were AI-generated
+   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, and 21 were AI-generated
   then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
   (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (226 passing tests, all source in `lib/domain/`,
+  files added across the slices (271 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
@@ -1494,10 +1584,25 @@ eloj:
   - **How it was corrected:** Adjusted the segment count flooring formula and added
     an explicit early fall-through to `_snakeRespaldo` when `n < 4` (too few cells
     for 2 arrows of ≥2 cells each).
+- **Case:** Timer logic initially used `_sesion.esCronometrado` which no longer
+  exists on `ContextoSesion`/`SesionJuego` — the ViewModel referenced a removed
+  property (ticket 18).
+  - **How it was detected:** `flutter test` — the test for `should_start_countdown_when_level_numero_10_or_above`
+    failed with a compile error (undefined getter).
+  - **How it was corrected:** Changed to `_definicionNivel.esCronometrado` which is
+    the correct single source of truth for timer configuration.
+- **Case:** Golden fixtures in `calcular_puntuacion_use_case_test.dart` lacked
+  `numero: 10` on timed-level entries, so `esCronometrado` defaulted to `false`
+  and the rule-based test assertion failed (ticket 18).
+  - **How it was detected:** `flutter test` — the existing `calcular_puntuacion`
+    tests for timed levels failed because the fixture's `esCronometrado` getter
+    returned `false` without an explicit `numero >= 10`.
+  - **How it was corrected:** Added `numero: 10` to each golden fixture entry that
+    represents a timed level; this aligns test data with production semantics.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all sixteen tasks. The predefined
+- **Impact on productivity:** Very high across all nineteen tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -1513,10 +1618,10 @@ eloj:
   T-016 (dynamic board shapes) was the most iteration-intensive slice: the
   `_snakeRespaldo` fix went through 3 failed strategies (reversed tail, inward head,
   wrong segment arithmetic) before converging on the correct edge-head, tail-order
-  solution — each caught and corrected within the same TDD session by the proper
-  test suite.
+   solution — each caught and corrected within the same TDD session by the proper
+   test suite.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (236/236 tests, 0 errors, 0 warnings from
+   kept output consistent and well-tested (271/271 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
@@ -1555,5 +1660,13 @@ eloj:
    consumed interfaces when changing provider code. (7) Property-style tests
    (48 permutations) proved far more effective at catching generator bugs than
    unit tests alone; for any generator with a random component, a combinatorial
-   test matrix across sizes and seeds should be the norm, not an afterthought.
+    test matrix across sizes and seeds should be the norm, not an afterthought.
+    (8) Ticket 18 reinforced that adding fields with safe defaults (`numero: 0`,
+    `esBonus: false`) to an existing entity preserves backward compatibility, but
+    golden fixtures for dependent use cases must be updated in lockstep — a
+    reminder that test data must match production semantics when entity fields
+    affect rule evaluation. The rule-based `esCronometrado` getter pattern (logic
+    in domain, data in entity fields) kept all callers free of branching on level
+    number — a clean separation that should be replicated for future entity-level
+    rules.
 

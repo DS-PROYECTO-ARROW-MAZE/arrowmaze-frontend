@@ -91,14 +91,18 @@ class TableroUI {
 /// rules; this immutable snapshot is what the victory overlay renders, and it
 /// never leaks the domain type into the View (nor the reverse). It carries the
 /// final HUD figures plus the scoring result (`puntaje` and `estrellas`) from
-/// [CalcularPuntuacionUseCase] (ticket 06).
+/// [CalcularPuntuacionUseCase] (ticket 06). For bonus levels
+/// [mostrarPuntuacion] is `false`, so the overlay omits the score/stars section
+/// without the View branching on level type.
 class VictoriaViewState {
   /// Creates the victory snapshot with the final [movimientos] count and the
-  /// computed [puntaje] and [estrellas].
+  /// computed [puntaje] and [estrellas]. Set [mostrarPuntuacion] to `false`
+  /// for bonus-level clears where score/stars are suppressed.
   const VictoriaViewState({
     required this.movimientos,
     this.puntaje = 0,
     this.estrellas = 0,
+    this.mostrarPuntuacion = true,
   });
 
   /// The move count the level was cleared in.
@@ -109,6 +113,10 @@ class VictoriaViewState {
 
   /// The star rating: 0, 1, 2, or 3, determined by level thresholds.
   final int estrellas;
+
+  /// Whether the overlay should display the score and star rating.
+  /// `false` for bonus levels (Ticket 18), which carry no score/stars.
+  final bool mostrarPuntuacion;
 }
 
 /// The immutable state the `JuegoViewModel` exposes to its View.

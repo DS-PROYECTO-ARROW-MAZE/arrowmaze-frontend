@@ -272,19 +272,21 @@ class _VictoriaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Overlay(
       children: [
-        _Estrellas(estrellas: victoria.estrellas, game: game),
-        const SizedBox(height: AppSpacing.md),
         Text(
           'Victory!',
           style: AppTypography.titleLarge.copyWith(color: game.validMoveFlash),
         ),
-        const SizedBox(height: AppSpacing.sm),
-        Text(
-          '${victoria.puntaje}',
-          style: AppTypography.displayLarge.copyWith(
-            color: game.scoreColor,
+        if (victoria.mostrarPuntuacion) ...[
+          const SizedBox(height: AppSpacing.sm),
+          _Estrellas(estrellas: victoria.estrellas, game: game),
+          const SizedBox(height: AppSpacing.sm),
+          Text(
+            '${victoria.puntaje}',
+            style: AppTypography.displayLarge.copyWith(
+              color: game.scoreColor,
+            ),
           ),
-        ),
+        ],
         const SizedBox(height: AppSpacing.xs),
         Text(
           'Cleared in ${victoria.movimientos} moves',
@@ -458,6 +460,10 @@ class _FeedbackInvalido extends StatelessWidget {
 
 /// The moves counter strip, plus a countdown clock on timed levels and a tally
 /// of the collectibles picked up for bonus time.
+///
+/// The countdown clock shifts from neutral → warning → danger as the remaining
+/// time drops below 30 and 10 seconds respectively, using [GameTheme] tokens
+/// so the visual tuning stays in one place.
 class _Hud extends StatelessWidget {
   const _Hud({
     required this.movimientos,
@@ -465,6 +471,12 @@ class _Hud extends StatelessWidget {
     required this.game,
     this.tiempoRestante,
   });
+
+  /// Threshold at which the timer turns warning yellow (seconds).
+  static const _avisoSegundos = 30;
+
+  /// Threshold at which the timer turns danger red (seconds).
+  static const _peligroSegundos = 10;
 
   final int movimientos;
   final int coleccionables;
@@ -478,8 +490,16 @@ class _Hud extends StatelessWidget {
     return '$minutos:$segundos';
   }
 
+  Color _timerColor(Duration restante) {
+    if (restante.inSeconds <= _peligroSegundos) return game.invalidMoveFlash;
+    if (restante.inSeconds <= _avisoSegundos) return game.starActive;
+    return AppColors.textPrimary;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final timerColor =
+        tiempoRestante != null ? _timerColor(tiempoRestante!) : null;
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
@@ -489,9 +509,12 @@ class _Hud extends StatelessWidget {
           Text('$movimientos', style: AppTypography.hudNumber),
           if (tiempoRestante != null) ...[
             const SizedBox(width: AppSpacing.xl),
-            const Icon(Icons.timer_outlined, size: 18),
+            Icon(Icons.timer_outlined, size: 18, color: timerColor),
             const SizedBox(width: AppSpacing.xs),
-            Text(_formatear(tiempoRestante!), style: AppTypography.hudNumber),
+            Text(
+              _formatear(tiempoRestante!),
+              style: AppTypography.hudNumber.copyWith(color: timerColor),
+            ),
           ],
           // The bonus tally only appears once something has been collected.
           if (coleccionables > 0) ...[

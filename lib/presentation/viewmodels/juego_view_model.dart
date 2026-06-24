@@ -181,39 +181,40 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
 
     VictoriaViewState? victoriaState;
     if (_sesion.estado is EstadoVictoria) {
-      final segundosRestantes =
-          _sesion.tiempoRestante?.inSeconds ?? 0;
-      final puntuacion = _calcularPuntuacion.calcular(
-        definicion: _definicionNivel,
-        movimientos: resultado.movimientos,
-        segundosRestantes: segundosRestantes,
-      );
-      victoriaState = VictoriaViewState(
-        movimientos: resultado.movimientos,
-        puntaje: puntuacion.puntaje,
-        estrellas: puntuacion.estrellas,
-      );
-      // Record the clear so the next level unlocks (Ticket 13). Fire-and-forget:
-      // the local store persists in the background; the UI does not wait on it.
-      _progreso?.registrarCompletado(
-        idNivel: _idNivel,
-        estrellas: puntuacion.estrellas,
-      );
-
-      // Enqueue the run for sync and trigger an immediate flush (Ticket 15).
-      // Fire-and-forget: the sync pipeline runs in the background. The run is
-      // keyed by the backend level UUID; without it (offline/random board) there
-      // is no server level to attribute the run to, so sync is skipped. No
-      // client-side score travels — the backend recomputes it (ADR-0005).
-      final idRemoto = _nivelIdRemoto;
-      if (idRemoto != null) {
-        final run = RunCompletado(
-          nivelId: idRemoto,
+      if (_definicionNivel.esBonus) {
+        victoriaState = VictoriaViewState(
           movimientos: resultado.movimientos,
-          segundosRestantes: _sesion.tiempoRestante?.inSeconds,
-          completadoEn: DateTime.now(),
+          puntaje: 0,
+          estrellas: 0,
+          mostrarPuntuacion: false,
         );
-        _encolarYFlushear(run);
+      } else {
+        final segundosRestantes =
+            _sesion.tiempoRestante?.inSeconds ?? 0;
+        final puntuacion = _calcularPuntuacion.calcular(
+          definicion: _definicionNivel,
+          movimientos: resultado.movimientos,
+          segundosRestantes: segundosRestantes,
+        );
+        victoriaState = VictoriaViewState(
+          movimientos: resultado.movimientos,
+          puntaje: puntuacion.puntaje,
+          estrellas: puntuacion.estrellas,
+        );
+        _progreso?.registrarCompletado(
+          idNivel: _idNivel,
+          estrellas: puntuacion.estrellas,
+        );
+        final idRemoto = _nivelIdRemoto;
+        if (idRemoto != null) {
+          final run = RunCompletado(
+            nivelId: idRemoto,
+            movimientos: resultado.movimientos,
+            segundosRestantes: _sesion.tiempoRestante?.inSeconds,
+            completadoEn: DateTime.now(),
+          );
+          _encolarYFlushear(run);
+        }
       }
     }
 
@@ -280,7 +281,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// Starts the one-second tick that advances a timed level's clock; a no-op on
   /// an untimed level or once the session is finished.
   void _iniciarReloj() {
-    if (!_sesion.esCronometrado || _sesion.estaTerminada) return;
+    if (!_definicionNivel.esCronometrado || _sesion.estaTerminada) return;
     _reloj.detener();
     _reloj.iniciar(const Duration(seconds: 1), _tic);
   }

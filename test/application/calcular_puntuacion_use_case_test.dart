@@ -8,9 +8,10 @@ void main() {
   // --- AC3: Strategy selection -----------------------------------------------
 
   test('should_select_PuntuacionMixta_when_timed', () {
-    // Arrange — a timed level definition (limiteTiempo != null).
+    // Arrange — a timed level definition (limiteTiempo != null, numero >= 10).
     const definicion = DefinicionNivel(
       id: 1,
+      numero: 10,
       baseNivel: 1000,
       kmov: 10,
       ktiempo: 2,
@@ -140,6 +141,7 @@ void main() {
     const fixtures = <Map<String, dynamic>>[
       {
         'id': 1,
+        'numero': 10,
         'baseNivel': 1000,
         'kmov': 10,
         'ktiempo': 2,
@@ -164,6 +166,7 @@ void main() {
       },
       {
         'id': 3,
+        'numero': 10,
         'baseNivel': 800,
         'kmov': 15,
         'ktiempo': 3,
@@ -180,6 +183,7 @@ void main() {
     for (final fixture in fixtures) {
       final definicion = DefinicionNivel(
         id: fixture['id'] as int,
+        numero: (fixture['numero'] as int?) ?? 0,
         baseNivel: fixture['baseNivel'] as int,
         kmov: fixture['kmov'] as int,
         ktiempo: fixture['ktiempo'] as int,

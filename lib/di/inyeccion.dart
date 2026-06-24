@@ -178,11 +178,13 @@ abstract final class Inyeccion {
   /// level timed, driving the HUD clock and enabling the defeat transition.
   static const definicionNivelInicial = DefinicionNivel(
     id: 1,
+    numero: 1,
     baseNivel: 1000,
     kmov: 10,
     ktiempo: 2,
     umbralesEstrellas: [300, 600, 900],
     limiteTiempo: Duration(seconds: 90),
+    esBonus: false,
   );
 
   static GeneradorNivelBase get generadorAleatorio =>
