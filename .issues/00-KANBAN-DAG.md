@@ -99,9 +99,15 @@ Story→module→test traceability mirrors PRD §11 / §7.
 | 28 invalid-move single alert + haptics | 6 | 01, 02 | — | — |
 | 29 timer 15s warning (visual + audio) | 6 | 04, 18, 21 | — | — |
 | 30 move countdown + Game Over + undo cap (3) | 6 | 01, 04, 09, 13 | — | — |
+| 31 shape-mask rotation on authored catalog (retrofit) | 6 | 16, 23, 26 | — (frontend-only) | — |
 
 - **Grab first:** 24 (P1, with backend 18). 22/25/26/28 are independent off their parents.
-  23 needs 16+17; 27 needs 08+21; 29 needs 18; 30 needs 09+13.
+  23 needs 16+17; 27 needs 08+21; 29 needs 18; 30 needs 09+13; **31 needs 23** (consumes its
+  `RepertorioFormas`) + 16 + 26.
+- **Ticket 31 (retrofit):** tickets 17 / backend 16 are already done; 31 regenerates the 15 authored
+  `level_XX.json` assets via `tool/generar_niveles.dart` so the shape rotation starts at Level 1 and
+  is continuous into 23's endless tail. Frontend-only (boards are frontend assets; backend boards are
+  never rendered).
 - **Invariant change (ticket 30):** untimed levels **can now lose** via move-budget exhaustion —
   the §7.3 "untimed never reaches `EstadoDerrota`" test is superseded (PRD §12). Update, don't
   work around.
