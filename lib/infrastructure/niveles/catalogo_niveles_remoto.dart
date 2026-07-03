@@ -47,6 +47,21 @@ class CatalogoNivelesRemoto implements CatalogoNiveles {
     return _fallback.listar();
   }
 
+  @override
+  Future<int> obtenerCantidadTotal() async {
+    final niveles = await listar();
+    return niveles.length;
+  }
+
+  @override
+  Future<ResumenNivel> obtenerPorIndice(int indice) async {
+    final niveles = await listar();
+    if (indice <= niveles.length) {
+      return niveles.firstWhere((r) => r.id == indice);
+    }
+    return _fallback.obtenerPorIndice(indice);
+  }
+
   /// Maps one `GET /levels` item (the backend `NivelResumenDto`) to a
   /// [ResumenNivel].
   ///

@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-24 (T-020 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-021 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10, 21), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10, 15, 16, 17, 18, 20, 21, 23), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
 
@@ -1384,19 +1384,97 @@ eloj:
   source of timer configuration is `DefinicionNivel`, keeping the rule in domain and
   the ViewModel a pure consumer.
 
+### T-021 — Ticket 23 · Endless Level Generation + Aggressive Difficulty Scaling
+
+- **Task / problem addressed:** Implement endless in-app level generation with
+  aggressive difficulty scaling (`.issues/23-feat-frontend-endless-level-generation.md`).
+  Acceptance criteria: (AC1) shaped board generation with 5 fixed shapes rotated
+  deterministically; (AC2) steep monotonic difficulty curve with 7×7 minimum floor;
+  (AC3) `PerfilDificultad` uses formula-based unbounded scaling; (AC4)
+  `RepertorioFormas` with fixed repertoire and rotation; (AC5) `CatalogoNiveles`
+  extended to generate on demand past authored levels.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** The session spanned multiple Red→Green→Refactor cycles
+  across domain, application, and infrastructure layers. Key prompts included:
+  (1) "Implementa el ticket
+  `.issues\23-feat-frontend-endless-level-generation.md`. Es OBLIGATORIO que
+  apliques estrictamente las reglas de las skills 'tdd-strict' y
+  'clean-architecture'. El diseño visual lo defines tú usando 'lib/core/theme'."
+  (2) After each cycle the user ran `flutter test` and `flutter analyze`, reported
+  results, and instructed: "Continua." (3) After the first full green pass, the
+  user flagged a warning `unused_local_variable` for `catalogo` on line 61 of
+  `catalogo_niveles_endless_test.dart`, which was fixed by removing the unused
+  variable.
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+
+  **Domain (pure Dart, zero Flutter imports):**
+  `lib/domain/niveles/perfil_dificultad.dart` (rewritten with aggressive unbounded
+  formula — minimum 7×7 floor, `size = 7 + (nivel-1)~/5`, `trayectorias = size*2-2`,
+  `presupuestoMovimientos = totalFlechas + size*2`);
+  `lib/domain/niveles/mascara_forma.dart` (new — shape mask with predicate functions
+  for 5 shapes: Cuadrado, Corazón, Triángulo, Cruz, Estrella);
+  `lib/domain/niveles/repertorio_formas.dart` (new — fixed ordered repertoire
+  [Cuadrado, Corazón, Triángulo, Cruz, Estrella], deterministic rotation by
+  `(indice-1) % 5`).
+
+  **Application:**
+  `lib/application/ports/catalogo_niveles.dart` (extended with `obtenerCantidadTotal()`
+  + `obtenerPorIndice(int indice)`).
+
+  **Infrastructure:**
+  `lib/infrastructure/niveles/catalogo_niveles_archivo.dart` (endless tail —
+  generates `ResumenNivel` on demand for indices past authored count);
+  `lib/infrastructure/niveles/catalogo_niveles_remoto.dart` (delegates endless
+  generation to fallback).
+
+  **Tests (4 files, 43 new tests):**
+  `test/domain/perfil_dificultad_test.dart` (4 tests — AC2 monotonic scaling, 7×7
+  floor, move budget, large late board);
+  `test/domain/repertorio_formas_test.dart` (7 tests — AC4 rotation, wrap, cycle,
+  never square-only; mask generation);
+  `test/application/generacion_aleatoria_nivel_shaped_test.dart` (28 tests — AC1/AC5
+  solvable for 25 indices, in-mask population, same-shape complexity, gate intact);
+  `test/application/catalogo_niveles_endless_test.dart` (4 tests — AC1 endless tail,
+  shape rotation, unbounded supply, increasing difficulty).
+
+  Verified: **`flutter test` 309/309 green** (271 prior + 43 new − 5 refactored
+  existing tests); **`flutter analyze` 0 errors, 0 warnings** (42 info-level only —
+  all pre-existing style preferences); zero `package:flutter` imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** (a) After the first green pass, `flutter analyze`
+  flagged `unused_local_variable` for `catalogo` on line 61 of
+  `catalogo_niveles_endless_test.dart` — the test constructed a `_CatalogoConLimite`
+  variable that was never used (the test directly used `PerfilDificultad` and
+  `RepertorioFormas`). Fixed by removing the unused variable. No other manual code
+  edits were required.
+- **Lessons learned / limitations identified:** (1) `GeneracionAleatoriaNivel.poblar()`
+  already supported `ConfiguracionGeneracion.ausentes` from ticket 16 — adding shaped
+  boards required no generator changes, only the new `PerfilDificultad` +
+  `RepertorioFormas` consumers to build the config. (2) The formula-based
+  `PerfilDificultad` (`size = 7 + (nivel-1)~/5`) is a simpler and cleaner design than
+  the previous segment-based tiers (levels 1-5/6-10/11-15), and provides unbounded
+  scaling without any hard cap. (3) The two new catalog methods
+  (`obtenerCantidadTotal()` + `obtenerPorIndice(int)`) avoided the complexity of
+  making `listar()` return an infinite lazy list, keeping the existing `listar()`
+  contract unchanged. (4) Shape and difficulty are orthogonal axes — shape from
+  repertoire rotation, difficulty from profile — which allowed the same 25-index
+  test matrix to verify both independently. (5) An unused variable lingered in the
+  test file after refactoring, only caught by `flutter analyze` — a reminder to run
+  the full static analysis after every refactor cycle, not just the test suite.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, and 21 were AI-generated
-  then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
-  (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
-  authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (271 passing tests, all source in `lib/domain/`,
-  `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
-  `http` and `shared_preferences` added during tickets' web/persistence work).
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, and 23
+    were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    were pre-existing (not AI-authored in these tasks). Every ticket followed the
+    same pattern (full AI authoring + human review), so the share holds at ~90%.
+    Rough judgment over the files added across the slices (309 passing tests, all
+    source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
+    `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1599,10 +1677,16 @@ eloj:
     returned `false` without an explicit `numero >= 10`.
   - **How it was corrected:** Added `numero: 10` to each golden fixture entry that
     represents a timed level; this aligns test data with production semantics.
+- **Case:** Test file `catalogo_niveles_endless_test.dart` declared an unused
+  `_CatalogoConLimite` variable (`catalogo`) on line 61 after the test was
+  refactored to use `PerfilDificultad` and `RepertorioFormas` directly instead
+  of going through the catalog (ticket 23).
+  - **How it was detected:** `flutter analyze` — `unused_local_variable` warning.
+  - **How it was corrected:** Removed the unused variable declaration.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all nineteen tickets. The predefined
+- **Impact on productivity:** Very high across all twenty tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -1618,10 +1702,14 @@ eloj:
   T-016 (dynamic board shapes) was the most iteration-intensive slice: the
   `_snakeRespaldo` fix went through 3 failed strategies (reversed tail, inward head,
   wrong segment arithmetic) before converging on the correct edge-head, tail-order
-   solution — each caught and corrected within the same TDD session by the proper
-   test suite.
+  solution — each caught and corrected within the same TDD session by the proper
+  test suite. T-021 (endless level generation) was one of the fastest slices: the
+  shaped board infrastructure from ticket 16 (`ConfiguracionGeneracion.ausentes`)
+  meant the AI only needed to add `PerfilDificultad`, `MascaraForma`, and
+  `RepertorioFormas` — no generator rewrites were required, and the
+  `CatalogoNiveles` extension was trivial.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-   kept output consistent and well-tested (271/271 tests, 0 errors, 0 warnings from
+   kept output consistent and well-tested (309/309 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
@@ -1641,32 +1729,37 @@ eloj:
   necessary complement to unit tests for puzzle generators.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
-  established domain abstractions (like the `IColaSincronizacion` port interface)
-  makes subsequent tickets faster and less error-prone. (3) A few architectural
-  inconsistencies (e.g., missing use-case wrapper for generation, missing
-  `AssetLoader` port) remain as technical debt — consciously deferred rather than
-  accidental. (4) The "anchored summary" pattern (asking "What did we do so far?")
-  is an effective way to re-synchronise context: it forces the AI to produce a
-  structured recap that surfaces pending work, blockers, and next steps, which the
-  team can then confirm or redirect before spending effort on the wrong task.
-   (5) Tests and `analyze` catch logic and architecture faults, but **manual
-   runtime testing still matters**: ticket 13's "Could not load levels" was a
-   green-suite, clean-build session that only surfaced in the browser — a stale dev
-   session needing a cold restart after new plugins/assets, not a code defect.
-   (6) Domain invariants like `CeldaFlecha.bloqueaRayo == true` can have
-   far-reaching consequences for generators (every arrow must be an edge-head);
-   the AI initially missed this because it modified the snake fallback in
-   isolation without tracing the detector's behaviour — a reminder to trace
-   consumed interfaces when changing provider code. (7) Property-style tests
-   (48 permutations) proved far more effective at catching generator bugs than
-   unit tests alone; for any generator with a random component, a combinatorial
-    test matrix across sizes and seeds should be the norm, not an afterthought.
-    (8) Ticket 18 reinforced that adding fields with safe defaults (`numero: 0`,
-    `esBonus: false`) to an existing entity preserves backward compatibility, but
-    golden fixtures for dependent use cases must be updated in lockstep — a
-    reminder that test data must match production semantics when entity fields
-    affect rule evaluation. The rule-based `esCronometrado` getter pattern (logic
-    in domain, data in entity fields) kept all callers free of branching on level
-    number — a clean separation that should be replicated for future entity-level
-    rules.
+  established domain abstractions (like the `ConfiguracionGeneracion.ausentes`
+  port from ticket 16) makes subsequent tickets faster and less error-prone —
+  ticket 23 was one of the fastest slices precisely because the generator already
+  supported shaped boards. (3) A few architectural inconsistencies (e.g., missing
+  use-case wrapper for generation, missing `AssetLoader` port) remain as technical
+  debt — consciously deferred rather than accidental. (4) The "anchored summary"
+  pattern (asking "What did we do so far?") is an effective way to re-synchronise
+  context: it forces the AI to produce a structured recap that surfaces pending
+  work, blockers, and next steps, which the team can then confirm or redirect
+  before spending effort on the wrong task. (5) Tests and `analyze` catch logic
+  and architecture faults, but **manual runtime testing still matters**: ticket
+  13's "Could not load levels" was a green-suite, clean-build session that only
+  surfaced in the browser — a stale dev session needing a cold restart after new
+  plugins/assets, not a code defect. (6) Domain invariants like
+  `CeldaFlecha.bloqueaRayo == true` can have far-reaching consequences for
+  generators (every arrow must be an edge-head); the AI initially missed this
+  because it modified the snake fallback in isolation without tracing the
+  detector's behaviour — a reminder to trace consumed interfaces when changing
+  provider code. (7) Property-style tests (48 permutations) proved far more
+  effective at catching generator bugs than unit tests alone; for any generator
+  with a random component, a combinatorial test matrix across sizes and seeds
+  should be the norm, not an afterthought. (8) Ticket 18 reinforced that adding
+  fields with safe defaults (`numero: 0`, `esBonus: false`) to an existing entity
+  preserves backward compatibility, but golden fixtures for dependent use cases
+  must be updated in lockstep — a reminder that test data must match production
+  semantics when entity fields affect rule evaluation. The rule-based
+  `esCronometrado` getter pattern (logic in domain, data in entity fields) kept
+  all callers free of branching on level number — a clean separation that should
+  be replicated for future entity-level rules. (9) Ticket 23 confirmed that
+  orthogonal design axes (shape + difficulty) can be independently implemented as
+  separate domain entities (`RepertorioFormas` + `PerfilDificultad`) and composed
+  at the application layer, keeping each entity testable in isolation with minimal
+  cross-dependency.
 
