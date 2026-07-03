@@ -121,10 +121,13 @@ class _GameViewState extends State<GameView>
               return Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Undo the last move; disabled when there is nothing to undo.
+                  // Undo the last move; disabled when cap is exhausted or there
+                  // is nothing to undo.
                   IconButton(
                     icon: const Icon(Icons.undo),
-                    tooltip: 'Undo',
+                    tooltip: estado.usosUndoRestantes > 0
+                        ? 'Undo (${estado.usosUndoRestantes} left)'
+                        : 'Undo',
                     onPressed: widget.viewModel.puedeDeshacer
                         ? widget.viewModel.deshacer
                         : null,
@@ -151,9 +154,13 @@ class _GameViewState extends State<GameView>
               Column(
                 children: [
                   _Hud(
-                    movimientos: estado.movimientos,
+                    movimientos: estado.movimientosRestantes >= 0
+                        ? estado.movimientosRestantes
+                        : estado.movimientos,
+                    esCountdown: estado.movimientosRestantes >= 0,
                     coleccionables: estado.coleccionables,
                     tiempoRestante: estado.tiempoRestante,
+                    usosUndoRestantes: estado.usosUndoRestantes,
                     game: game,
                   ),
                   Expanded(
@@ -193,6 +200,7 @@ class _GameViewState extends State<GameView>
               if (estado.derrota)
                 _DerrotaOverlay(
                   game: game,
+                  derrotaPorTiempo: estado.derrotaPorTiempo,
                   onReintentar: widget.onReintentar,
                   onMenu: widget.onMenu,
                 ),
@@ -330,16 +338,19 @@ class _Estrellas extends StatelessWidget {
   }
 }
 
-/// Shown when a timed level's clock runs out — the defeat snapshot (UI),
-/// distinct from the domain `EstadoDerrota`.
+/// Shown when the level is lost — the defeat snapshot (UI), distinct from the
+/// domain `EstadoDerrota`. Shows different icon and message for timer timeout
+/// vs. move exhaustion (Ticket 30).
 class _DerrotaOverlay extends StatelessWidget {
   const _DerrotaOverlay({
     required this.game,
+    required this.derrotaPorTiempo,
     this.onReintentar,
     this.onMenu,
   });
 
   final GameTheme game;
+  final bool derrotaPorTiempo;
   final VoidCallback? onReintentar;
   final VoidCallback? onMenu;
 
@@ -347,11 +358,21 @@ class _DerrotaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     return _Overlay(
       children: [
-        Icon(Icons.timer_off, color: game.invalidMoveFlash, size: 64),
+        Icon(
+          derrotaPorTiempo ? Icons.timer_off : Icons.do_disturb_alt_outlined,
+          color: game.invalidMoveFlash,
+          size: 64,
+        ),
         const SizedBox(height: AppSpacing.md),
         Text(
-          'Time\'s up',
-          style: AppTypography.titleLarge.copyWith(color: game.invalidMoveFlash),
+          derrotaPorTiempo ? "Time's up" : 'No moves left',
+          style:
+              AppTypography.titleLarge.copyWith(color: game.invalidMoveFlash),
+        ),
+        const SizedBox(height: AppSpacing.xs),
+        Text(
+          derrotaPorTiempo ? 'You ran out of time' : 'You ran out of moves',
+          style: AppTypography.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.xl),
         // No "Next" after a defeat — only retry the same level or leave.
@@ -467,9 +488,11 @@ class _FeedbackInvalido extends StatelessWidget {
 class _Hud extends StatelessWidget {
   const _Hud({
     required this.movimientos,
+    required this.esCountdown,
     required this.coleccionables,
     required this.game,
     this.tiempoRestante,
+    this.usosUndoRestantes = 3,
   });
 
   /// Threshold at which the timer turns warning yellow (seconds).
@@ -479,9 +502,11 @@ class _Hud extends StatelessWidget {
   static const _peligroSegundos = 10;
 
   final int movimientos;
+  final bool esCountdown;
   final int coleccionables;
   final GameTheme game;
   final Duration? tiempoRestante;
+  final int usosUndoRestantes;
 
   /// Formats the remaining time as `m:ss` for the HUD clock.
   String _formatear(Duration d) {
@@ -505,8 +530,17 @@ class _Hud extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          const Text('Moves: ', style: AppTypography.bodyMedium),
+          Text(esCountdown ? 'Moves: ' : 'Moves: ', style: AppTypography.bodyMedium),
           Text('$movimientos', style: AppTypography.hudNumber),
+          if (usosUndoRestantes < 3) ...[
+            const SizedBox(width: AppSpacing.sm),
+            Icon(Icons.undo, size: 16, color: AppColors.textSecondary),
+            const SizedBox(width: AppSpacing.xs),
+            Text(
+              '$usosUndoRestantes',
+              style: AppTypography.bodyMedium,
+            ),
+          ],
           if (tiempoRestante != null) ...[
             const SizedBox(width: AppSpacing.xl),
             Icon(Icons.timer_outlined, size: 18, color: timerColor),

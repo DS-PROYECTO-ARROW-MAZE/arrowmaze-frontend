@@ -119,8 +119,10 @@ final class EstadoVictoria extends EstadoSesion {
   bool get relojActivo => false;
 }
 
-/// Terminal defeat: a timed level's clock reached zero (B2). Only timed levels
-/// can ever reach this state.
+/// Terminal defeat: the level was lost (B2). Reached either by timer timeout
+/// on a timed level, or by move exhaustion (budget hits zero before the board
+/// is cleared — Ticket 30). An untimed level can now also reach this state via
+/// move exhaustion.
 final class EstadoDerrota extends EstadoSesion {
   @override
   ResultadoToque tocarCelda(ContextoSesion sesion, Posicion posicion) =>

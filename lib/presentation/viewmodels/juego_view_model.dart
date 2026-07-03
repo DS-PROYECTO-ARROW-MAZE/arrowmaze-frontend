@@ -80,8 +80,10 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     _estado = JuegoViewState(
       tablero: _instantanea(),
       movimientos: 0,
+      movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       muted: _audioControl?.muted ?? false,
       tiempoRestante: _sesion.tiempoRestante,
+      usosUndoRestantes: _deshacerMovimiento.usosRestantes,
     );
     _iniciarReloj();
   }
@@ -218,13 +220,21 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       }
     }
 
+    final derrota = _sesion.estado is EstadoDerrota;
+    final derrotaPorTiempo = derrota &&
+        _definicionNivel.esCronometrado &&
+        (_sesion.tiempoRestante == null ||
+            _sesion.tiempoRestante == Duration.zero);
+
     _estado = _estado.copyWith(
       tablero: invalido ? null : _instantanea(),
       movimientos: resultado.movimientos,
+      movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       coleccionables: _coleccionables,
       movimientoInvalido: invalido,
       victoria: victoriaState,
-      derrota: _sesion.estado is EstadoDerrota,
+      derrota: derrota,
+      derrotaPorTiempo: derrotaPorTiempo,
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners(); // MVVM data-binding: push new state to the View.
@@ -257,7 +267,9 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     _estado = _estado.copyWith(
       tablero: resultado.valido ? _instantanea() : null,
       movimientos: resultado.movimientos,
+      movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       movimientoInvalido: false,
+      usosUndoRestantes: _deshacerMovimiento.usosRestantes,
     );
     notifyListeners(); // MVVM data-binding: push the reversed state to the View.
   }
@@ -291,8 +303,11 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   void _tic() {
     _sesion.avanzarTiempo(const Duration(seconds: 1));
     if (_sesion.estaTerminada) _reloj.detener();
+    final derrota = _sesion.estado is EstadoDerrota;
     _estado = _estado.copyWith(
-      derrota: _sesion.estado is EstadoDerrota,
+      derrota: derrota,
+      derrotaPorTiempo: derrota,
+      movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners();

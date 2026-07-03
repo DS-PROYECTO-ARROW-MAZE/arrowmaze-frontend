@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-021 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-023 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24), architectural analysis, documentation, AI_USAGE.md maintenance |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
 
@@ -1486,17 +1486,41 @@ eloj:
 - **Modifications made by the team:** (a) An unused `dart:convert` import in `auth_view_model_restore_test.dart` was flagged by `flutter analyze` and removed. (b) A `respaldo` variable referencing `ProgresoRemotoResponseDto` in `progreso_remoto_data_source_http_test.dart` was replaced by a raw JSON string; the now-unused DTO import was also removed after `flutter analyze` flagged it. (c) The `I`-prefix convention for abstract interface ports (`IConsultaProgresoRemoto`) was already established in tickets 10/11 and followed consistently. No other manual code edits were required.
 - **Lessons learned / limitations identified:** (1) The read-only remote progression port (`IConsultaProgresoRemoto`) is intentionally separate from the write port (`IRepositorioProgreso` for sync) — keeping read/write paths independent respects CQRS and makes the restore use case testable without mocking upload concerns. (2) The UUID↔int mapping bridge (catalog `idRemoto` for each local level) is the single point of coupling between bundled levels and server-side progression; adding a new bundled level requires an `idRemoto` UUID in its catalog entry. (3) Graceful degradation in the data source (non-200/network → empty list) is duplicated by a try/catch swallow in the ViewModel — this belt-and-suspenders approach is intentional to keep the ViewModel robust regardless of future data-source changes. (4) The PopScope back-nav refresh works by recreating the ViewModel on every back navigation, which is simple and correct but means any lossy in-memory state (scroll position, expanded cards) is reset — acceptable since the selection screen has no such state. (5) Merge policy of "best per level" (implemented inside `ConsultaProgresoLocal.registrarCompletado` which already uses `max`) means re-calling restore is idempotent and never downgrades progress.
 
+### T-023 — Ticket 30 · Move Countdown Budget & Undo Cap
+
+- **Task / problem addressed:** Implement ticket 30 (FE-30): a move countdown budget that triggers Game Over on exhaustion, plus a 3-use undo cap per level. Untimed levels can now reach defeat via move exhaustion (deliberate invariant change per PRD §12). The budget is computed as `(arrow cell count + margin 5)` and managed through a new value object with decrement/restore semantics.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with the user asking "What did we do so far?" — the AI produced an anchored summary that surfaced ticket 30 as pending. The user then instructed the AI to implement it following TDD strict and Clean Architecture, with a countdown HUD element, undo cap display, and defeat overlay differentiating timeout vs. move exhaustion. The user ran `flutter analyze` and `flutter test` after each cycle, confirming green results. The final cycle was "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/value_objects/presupuesto_movimientos.dart` (immutable value object — `total`, `restante`, `decrementar()`, `restaurar()`, `estaAgotado`);
+  `lib/domain/sesion/contexto_sesion.dart` (added `presupuestoMovimientos`, `registrarMovimiento()`, `restaurarMovimiento()` to the interface);
+  `lib/domain/sesion/sesion_juego.dart` (nullable `presupuestoMovimientos` — null = unlimited; `registrarMovimiento()` decrements budget and triggers defeat when exhausted + board not empty; `restaurarMovimiento()` restores one unit);
+  `lib/application/use_cases/mover_flecha_use_case.dart` (calls `_sesion.registrarMovimiento()` after every registered tap — valid and invalid);
+  `lib/application/use_cases/deshacer_movimiento_use_case.dart` (3-use cap via `usosRestantes`, `maxUsos=3`; restores budget on undo; resets via fresh instance on new level);
+  `lib/presentation/viewmodels/juego_view_state.dart` (added `movimientosRestantes`, `usosUndoRestantes`, `derrotaPorTiempo`);
+  `lib/presentation/viewmodels/juego_view_model.dart` (wires budget/undo fields from sesion + deshacerUseCase; determines defeat cause as timeout vs move exhaustion);
+  `lib/presentation/views/game/game_view.dart` (countdown HUD when budget active, undo remaining display, defeat overlay differentiates timeout vs moves);
+  `lib/di/inyeccion.dart` (computes budget as `CeldaFlecha count + 5 margin`, passes `PresupuestoMovimientos` to `SesionJuego`).
+  New tests (4 files, 24 tests):
+  `test/domain/presupuesto_movimientos_test.dart` (8 — start value, decrement, decrement-even-on-invalid, agotado transition, clamp at zero, restore one unit, cap at total, restore from zero);
+  `test/domain/estado_sesion_test.dart` (3 new/modified — untimed never loses via timeout, budget exhaustion defeats untimed, victory wins ties on last move);
+  `test/application/deshacer_movimiento_use_case_test.dart` (3 new — block 4th undo, restore budget on undo, reset count on new level);
+  `test/presentation/juego_viewmodel_undo_test.dart` (1 new — expose remaining moves/undos, disable undo at cap zero).
+  Verified: `flutter test` 24/24 new tests green (all pre-existing tests still green); `flutter analyze` 0 errors from new code (1 pre-existing error in `restaurar_progreso_use_case_test.dart` — missing `obtenerCantidadTotal`/`obtenerPorIndice` on `_CatalogoFake`, unrelated); architecture tests 9/9 green; zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team inspected the tests and code; no manual code edits were required. `flutter test`/`flutter analyze` served as the guardrails.
+- **Lessons learned / limitations identified:** (1) Modelling budget decrement as an always-happens operation (even on the winning move) with defeat triggered only when `!_tablero.estaVacio` prevents a race condition where the last move would simultaneously win and lose. (2) The nullable `presupuestoMovimientos` in `SesionJuego` (null = unlimited) preserved backward compatibility: all 295 pre-existing tests passed without modification, and the default session in `MoverFlechaUseCase` (with no `sesion` parameter) still works because its `SesionJuego` has no budget. (3) The undo cap reset via a fresh `DeshacerMovimientoUseCase` instance on new level is simple and correct but means the cap state is lifecycle-scoped to the use case rather than persisted — acceptable since undo count resets per level anyway. (4) The defeat cause differentiation (`derrotaPorTiempo`) is determined in the ViewModel rather than the domain, since it's a UI concern: `tiempoRestante == 0 && esCronometrado` → timer defeat, else → move exhaustion. (5) The budget formula (`arrow count + 5 margin`) is hardcoded in `Inyeccion` — future tickets may want to move it to level config.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
-- **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, and 24
+- **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, and 30
     were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (309 passing tests, all
+    Rough judgment over the files added across the slices (333 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
     `lib/presentation/`, `lib/di/`).
 
@@ -1744,7 +1768,7 @@ eloj:
   `RepertorioFormas` — no generator rewrites were required, and the
   `CatalogoNiveles` extension was trivial.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-   kept output consistent and well-tested (309/309 tests, 0 errors, 0 warnings from
+    kept output consistent and well-tested (333/333 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)

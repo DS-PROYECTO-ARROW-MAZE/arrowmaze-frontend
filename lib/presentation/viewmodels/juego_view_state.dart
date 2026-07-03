@@ -129,20 +129,26 @@ class JuegoViewState {
   const JuegoViewState({
     required this.tablero,
     required this.movimientos,
+    this.movimientosRestantes = -1,
     this.coleccionables = 0,
     this.movimientoInvalido = false,
     this.pausado = false,
     this.derrota = false,
+    this.derrotaPorTiempo = false,
     this.victoria,
     this.tiempoRestante,
     this.muted = false,
+    this.usosUndoRestantes = 3,
   });
 
   /// The board snapshot to render.
   final TableroUI tablero;
 
-  /// The move counter shown in the HUD.
+  /// The move counter shown in the HUD (total registered taps).
   final int movimientos;
+
+  /// Remaining moves before game over (countdown), or -1 when unlimited.
+  final int movimientosRestantes;
 
   /// How many collectibles the player has picked up so far, shown in the HUD as
   /// the bonus-time tally.
@@ -157,9 +163,13 @@ class JuegoViewState {
   /// overlay while taps are rejected (the domain `EstadoPausado`).
   final bool pausado;
 
-  /// Whether the level was lost on the clock: the View shows the defeat overlay
+  /// Whether the level was lost: the View shows the defeat overlay
   /// (the domain `EstadoDerrota`).
   final bool derrota;
+
+  /// Whether defeat was caused by timer timeout (as opposed to move
+  /// exhaustion). Meaningful only when [derrota] is `true`.
+  final bool derrotaPorTiempo;
 
   /// Whether audio is globally muted (the View shows a mute/unmute icon).
   final bool muted;
@@ -171,28 +181,38 @@ class JuegoViewState {
   /// Time left on the HUD clock for a timed level, or `null` when untimed.
   final Duration? tiempoRestante;
 
+  /// How many undos remain this level (starts at 3, capped per Ticket 30).
+  final int usosUndoRestantes;
+
   /// Returns a copy with the given fields replaced.
   JuegoViewState copyWith({
     TableroUI? tablero,
     int? movimientos,
+    int? movimientosRestantes,
     int? coleccionables,
     bool? movimientoInvalido,
     bool? pausado,
     bool? derrota,
+    bool? derrotaPorTiempo,
     bool? muted,
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
+    int? usosUndoRestantes,
   }) {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
       movimientos: movimientos ?? this.movimientos,
+      movimientosRestantes:
+          movimientosRestantes ?? this.movimientosRestantes,
       coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
+      derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,
       muted: muted ?? this.muted,
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,
+      usosUndoRestantes: usosUndoRestantes ?? this.usosUndoRestantes,
     );
   }
 }
