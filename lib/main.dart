@@ -168,36 +168,42 @@ class _JuegoHostState extends State<_JuegoHost> {
 
   @override
   Widget build(BuildContext context) {
-    return FutureBuilder<JuegoViewModel>(
-      future: _viewModel,
-      builder: (context, snapshot) {
-        if (snapshot.hasError) {
-          return Scaffold(
-            appBar: AppBar(title: const Text('ArrowMaze')),
-            body: Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Text(
-                  'Could not load level ${widget.nivel.id}.',
-                  textAlign: TextAlign.center,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _menu();
+      },
+      child: FutureBuilder<JuegoViewModel>(
+        future: _viewModel,
+        builder: (context, snapshot) {
+          if (snapshot.hasError) {
+            return Scaffold(
+              appBar: AppBar(title: const Text('ArrowMaze')),
+              body: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Text(
+                    'Could not load level ${widget.nivel.id}.',
+                    textAlign: TextAlign.center,
+                  ),
                 ),
               ),
-            ),
+            );
+          }
+          if (!snapshot.hasData) {
+            return const Scaffold(
+              body: Center(child: CircularProgressIndicator()),
+            );
+          }
+          return GameView(
+            viewModel: snapshot.data!,
+            construirRanking: _construirRanking,
+            onReintentar: _reintentar,
+            onSiguiente: _siguienteNivel == null ? null : _siguiente,
+            onMenu: _menu,
           );
-        }
-        if (!snapshot.hasData) {
-          return const Scaffold(
-            body: Center(child: CircularProgressIndicator()),
-          );
-        }
-        return GameView(
-          viewModel: snapshot.data!,
-          construirRanking: _construirRanking,
-          onReintentar: _reintentar,
-          onSiguiente: _siguienteNivel == null ? null : _siguiente,
-          onMenu: _menu,
-        );
-      },
+        },
+      ),
     );
   }
 }

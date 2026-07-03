@@ -50,6 +50,46 @@ void main() {
       expect(vm.estado.niveles, isEmpty);
       expect(vm.estado.mensajeError, isNotNull);
     });
+
+    /// Ticket 24 AC1 — re-calling `cargar()` (triggered by every View
+    /// appearance, including Back-nav) must re-read progression so the UI is
+    /// never stale. This test mutates progression between loads.
+    test('should_reload_progression_when_view_reappears', () async {
+      // Arrange — progression starts with only level 1 completed.
+      final progreso = _ProgresoMutable();
+      await progreso.registrarCompletado(idNivel: 1, estrellas: 2);
+      final useCase = ObtenerNivelesUseCase(
+        catalogo: _CatalogoFake(const [
+          ResumenNivel(id: 1, nombre: 'One', dificultad: Dificultad.facil),
+          ResumenNivel(id: 2, nombre: 'Two', dificultad: Dificultad.medio),
+          ResumenNivel(id: 3, nombre: 'Three', dificultad: Dificultad.dificil),
+        ]),
+        progreso: progreso,
+      );
+      final vm = SeleccionNivelesViewModel(obtenerNiveles: useCase);
+
+      // Act — first load.
+      await vm.cargar();
+
+      // Assert — level 1 complete, level 2 unlocked, level 3 locked.
+      expect(vm.estado.niveles[0].completado, isTrue);
+      expect(vm.estado.niveles[0].estrellas, 2);
+      expect(vm.estado.niveles[1].desbloqueado, isTrue);
+      expect(vm.estado.niveles[2].desbloqueado, isFalse);
+
+      // Arrange (2) — simulate player clears level 2 (Back-nav comes later).
+      await progreso.registrarCompletado(idNivel: 2, estrellas: 1);
+
+      // Act (2) — reload (as if Back-nav or Retry→Menu triggered).
+      await vm.cargar();
+
+      // Assert — level 3 now unlocked, level 2 shows its stars.
+      expect(vm.estado.niveles[0].completado, isTrue);
+      expect(vm.estado.niveles[0].estrellas, 2);
+      expect(vm.estado.niveles[1].completado, isTrue);
+      expect(vm.estado.niveles[1].estrellas, 1);
+      expect(vm.estado.niveles[2].desbloqueado, isTrue);
+    });
   });
 }
 
@@ -101,4 +141,31 @@ class _ProgresoFake implements ConsultaProgresoLocal {
 
   @override
   Future<void> limpiar() async {}
+}
+
+/// Mutable progression fake for the back-nav refresh test (Ticket 24 AC1).
+/// `registrarCompletado` actually writes so a subsequent `mejorEstrellas` / 
+/// `nivelesCompletados` yields fresh values.
+class _ProgresoMutable implements ConsultaProgresoLocal {
+  final Map<int, int> _data = {};
+
+  @override
+  Future<Set<int>> nivelesCompletados() async => _data.keys.toSet();
+
+  @override
+  Future<int> mejorEstrellas(int idNivel) async => _data[idNivel] ?? 0;
+
+  @override
+  Future<void> registrarCompletado({
+    required int idNivel,
+    required int estrellas,
+  }) async {
+    final actual = _data[idNivel] ?? -1;
+    if (estrellas > actual) {
+      _data[idNivel] = estrellas;
+    }
+  }
+
+  @override
+  Future<void> limpiar() async => _data.clear();
 }
