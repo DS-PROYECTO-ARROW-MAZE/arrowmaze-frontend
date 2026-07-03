@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-24 (T-020 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-021 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10, 21), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 24), architectural analysis, documentation |
 
 ## 2. Usage Log by Task
 
@@ -1384,17 +1384,41 @@ eloj:
   source of timer configuration is `DefinicionNivel`, keeping the rule in domain and
   the ViewModel a pure consumer.
 
+### T-021 — Ticket 24 · Frontend Progress Restore & Unlock Refresh
+
+- **Task / problem addressed:** Implement ticket 24: restore server-side progression on login (`RestaurarProgresoUseCase` — AC2) and refresh unlocked levels on back-navigation (PopScope + fresh ViewModel — AC1), with a best-per-level merge policy (AC3), graceful degradation on remote failure (AC4), and DTO contract aligned with backend ticket 18 (AC5). Scope captured in `.issues/24-fix-progress-restore-and-unlock-refresh.md`.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with the user asking "What did we do so far?" — the AI produced an anchored summary that surfaced ticket 24 as pending. The user then instructed: "Implementa el ticket 24. Es OBLIGATORIO que apliques estrictamente las reglas de las skills 'tdd-strict' y 'clean-architecture'." After each TDD cycle the user prompted "continuation" to advance to the next phase. The final cycle was "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/application/ports/i_consulta_progreso_remoto.dart` (read port — `obtenerProgreso()`);
+  `lib/application/ports/progreso_remoto_item.dart` (domain VO — `nivelId`, `estrellas`, `puntaje`);
+  `lib/application/use_cases/restaurar_progreso_use_case.dart` (injects `IConsultaProgresoRemoto` + `ConsultaProgresoLocal` + `CatalogoNiveles`; fetches remote, maps UUID→local id via catalog, merges best-per-level via `registrarCompletado`);
+  `lib/infrastructure/dtos/progreso_remoto_response_dto.dart` (`ProgresoRemotoResponseDto` + `ProgresoRemotoItemDto` — envelope `{"niveles":[...]}` matching backend ticket 18);
+  `lib/infrastructure/progreso/progreso_remoto_data_source_http.dart` (graceful degradation: non-200/network throw → empty list);
+  `lib/core/config/api_config.dart` (+`progressPath`);
+  `lib/presentation/viewmodels/auth_view_model.dart` (accepts optional `RestaurarProgresoUseCase`, calls `ejecutar()` after successful login with graceful swallow);
+  `lib/main.dart` (`_JuegoHost` wrapped in `PopScope` to intercept back button → `_menu()` creates fresh ViewModel + `cargar()`);
+  `lib/di/inyeccion.dart` (wired `fuenteProgresoRemoto` + `restaurarProgresoUseCase`).
+  New tests (4 test files, 14 tests):
+  `test/application/restaurar_progreso_use_case_test.dart` (6 — hydrate from remote, keep best per level, no-op when remote empty, no-op when remote fails, empty catalog skips restoration, idempotent re-call);
+  `test/infrastructure/progreso_remoto_data_source_http_test.dart` (4 — authorization header + parse golden response, non-200→empty list, network error→empty list, DTO fields exactly match domain VO);
+  `test/presentation/auth_view_model_restore_test.dart` (3 — restore invoked after successful login, graceful degradation prevents blocking navigation, no-op when use case absent);
+  `test/presentation/seleccion_niveles_viewmodel_test.dart` (1 — should reload progression when view reappears via mutable progression store).
+  Verified: `flutter test` **285/285 green** (271 prior + 14 new); `flutter analyze` 0 errors, 0 warnings from new code; zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** (a) An unused `dart:convert` import in `auth_view_model_restore_test.dart` was flagged by `flutter analyze` and removed. (b) A `respaldo` variable referencing `ProgresoRemotoResponseDto` in `progreso_remoto_data_source_http_test.dart` was replaced by a raw JSON string; the now-unused DTO import was also removed after `flutter analyze` flagged it. (c) The `I`-prefix convention for abstract interface ports (`IConsultaProgresoRemoto`) was already established in tickets 10/11 and followed consistently. No other manual code edits were required.
+- **Lessons learned / limitations identified:** (1) The read-only remote progression port (`IConsultaProgresoRemoto`) is intentionally separate from the write port (`IRepositorioProgreso` for sync) — keeping read/write paths independent respects CQRS and makes the restore use case testable without mocking upload concerns. (2) The UUID↔int mapping bridge (catalog `idRemoto` for each local level) is the single point of coupling between bundled levels and server-side progression; adding a new bundled level requires an `idRemoto` UUID in its catalog entry. (3) Graceful degradation in the data source (non-200/network → empty list) is duplicated by a try/catch swallow in the ViewModel — this belt-and-suspenders approach is intentional to keep the ViewModel robust regardless of future data-source changes. (4) The PopScope back-nav refresh works by recreating the ViewModel on every back navigation, which is simple and correct but means any lossy in-memory state (scroll position, expanded cards) is reset — acceptable since the selection screen has no such state. (5) Merge policy of "best per level" (implemented inside `ConsultaProgresoLocal.registrarCompletado` which already uses `max`) means re-calling restore is idempotent and never downgrades progress.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, and 21 were AI-generated
+   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, and 24 were AI-generated
   then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
   (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
   authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (271 passing tests, all source in `lib/domain/`,
+  files added across the slices (285 passing tests, all source in `lib/domain/`,
   `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
   `http` and `shared_preferences` added during tickets' web/persistence work).
 
@@ -1592,17 +1616,28 @@ eloj:
   - **How it was corrected:** Changed to `_definicionNivel.esCronometrado` which is
     the correct single source of truth for timer configuration.
 - **Case:** Golden fixtures in `calcular_puntuacion_use_case_test.dart` lacked
-  `numero: 10` on timed-level entries, so `esCronometrado` defaulted to `false`
-  and the rule-based test assertion failed (ticket 18).
-  - **How it was detected:** `flutter test` — the existing `calcular_puntuacion`
-    tests for timed levels failed because the fixture's `esCronometrado` getter
-    returned `false` without an explicit `numero >= 10`.
-  - **How it was corrected:** Added `numero: 10` to each golden fixture entry that
-    represents a timed level; this aligns test data with production semantics.
+   `numero: 10` on timed-level entries, so `esCronometrado` defaulted to `false`
+   and the rule-based test assertion failed (ticket 18).
+   - **How it was detected:** `flutter test` — the existing `calcular_puntuacion`
+     tests for timed levels failed because the fixture's `esCronometrado` getter
+     returned `false` without an explicit `numero >= 10`.
+   - **How it was corrected:** Added `numero: 10` to each golden fixture entry that
+     represents a timed level; this aligns test data with production semantics.
+- **Case:** An unused `import 'dart:convert'` in `auth_view_model_restore_test.dart`
+   was left over from an earlier test helper (ticket 24).
+   - **How it was detected:** `flutter analyze` — `unused_import` warning.
+   - **How it was corrected:** Removed the unused import directive.
+- **Case:** The test file `progreso_remoto_data_source_http_test.dart` had a
+   `respaldo` variable that referenced `ProgresoRemotoResponseDto`, but the test
+   only used a raw JSON string — the DTO import became unnecessary when `respaldo`
+   was removed (ticket 24).
+   - **How it was detected:** `flutter analyze` — after removing `respaldo`, the
+     DTO import was flagged as unused.
+   - **How it was corrected:** Removed the unused import directive.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all nineteen tickets. The predefined
+- **Impact on productivity:** Very high across all twenty-one tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -1621,7 +1656,7 @@ eloj:
    solution — each caught and corrected within the same TDD session by the proper
    test suite.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-   kept output consistent and well-tested (271/271 tests, 0 errors, 0 warnings from
+   kept output consistent and well-tested (285/285 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
@@ -1661,12 +1696,23 @@ eloj:
    (48 permutations) proved far more effective at catching generator bugs than
    unit tests alone; for any generator with a random component, a combinatorial
     test matrix across sizes and seeds should be the norm, not an afterthought.
-    (8) Ticket 18 reinforced that adding fields with safe defaults (`numero: 0`,
-    `esBonus: false`) to an existing entity preserves backward compatibility, but
-    golden fixtures for dependent use cases must be updated in lockstep — a
-    reminder that test data must match production semantics when entity fields
-    affect rule evaluation. The rule-based `esCronometrado` getter pattern (logic
-    in domain, data in entity fields) kept all callers free of branching on level
-    number — a clean separation that should be replicated for future entity-level
-    rules.
+     (8) Ticket 18 reinforced that adding fields with safe defaults (`numero: 0`,
+      `esBonus: false`) to an existing entity preserves backward compatibility, but
+      golden fixtures for dependent use cases must be updated in lockstep — a
+      reminder that test data must match production semantics when entity fields
+      affect rule evaluation. The rule-based `esCronometrado` getter pattern (logic
+      in domain, data in entity fields) kept all callers free of branching on level
+      number — a clean separation that should be replicated for future entity-level
+      rules.
+
+     (9) Ticket 24 confirmed that keeping read-only remote progression
+     (`IConsultaProgresoRemoto`) separate from the write path (`IRepositorioProgreso`)
+     respects CQRS and makes each use case independently testable. The PopScope
+     back-nav refresh pattern (recreate ViewModel → `cargar()`) is simpler and more
+     testable than a `RouteObserver`-based approach, at the cost of resetting
+     transient UI state. The belt-and-suspenders graceful degradation (data source
+     returns `[]` + ViewModel try/catch) proved its value during testing: test
+     setup is simpler when each layer can be independently verified for degradation
+     behaviour.
+
 

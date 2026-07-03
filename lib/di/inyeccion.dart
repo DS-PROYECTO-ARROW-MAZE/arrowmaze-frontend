@@ -11,6 +11,7 @@ import '../application/ports/catalogo_niveles.dart';
 import '../application/ports/consulta_progreso_local.dart';
 import '../application/ports/fuente_autenticacion.dart';
 import '../application/ports/i_caso_de_uso.dart';
+import '../application/ports/i_consulta_progreso_remoto.dart';
 import '../application/ports/i_consulta_ranking.dart';
 import '../application/ports/i_medidor_metricas.dart';
 import '../application/ports/i_registro.dart';
@@ -26,6 +27,7 @@ import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/obtener_niveles_use_case.dart';
 import '../application/use_cases/obtener_perfil_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
+import '../application/use_cases/restaurar_progreso_use_case.dart';
 import '../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
@@ -47,6 +49,7 @@ import '../infrastructure/observabilidad/registro_consola.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
 import '../infrastructure/progreso/progreso_local_persistente.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
+import '../infrastructure/progreso/progreso_remoto_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../infrastructure/sesion/proveedor_sesion_persistente.dart';
@@ -237,6 +240,15 @@ abstract final class Inyeccion {
         progreso: progresoLocal,
       );
 
+  /// Use case that reads server-side progression on login and merges it into
+  /// the local store keeping the best per-level (Ticket 24, AC2/AC3).
+  static RestaurarProgresoUseCase get restaurarProgresoUseCase =>
+      RestaurarProgresoUseCase(
+        consultaRemoto: fuenteProgresoRemoto,
+        progresoLocal: progresoLocal,
+        catalogo: catalogoNiveles,
+      );
+
   /// Builds the [SeleccionNivelesViewModel] for the Level Selection screen.
   static SeleccionNivelesViewModel construirSeleccionNivelesViewModel() {
     return SeleccionNivelesViewModel(obtenerNiveles: obtenerNivelesUseCase);
@@ -309,6 +321,7 @@ abstract final class Inyeccion {
       cerrarSesion: cerrarSesionUseCase,
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
+      restaurarProgreso: restaurarProgresoUseCase,
     );
   }
 
@@ -323,6 +336,12 @@ abstract final class Inyeccion {
   static IRepositorioProgreso get repositorioProgreso => _repositorioProgreso;
   static final ProgresoDataSourceHttp _repositorioProgreso =
       ProgresoDataSourceHttp(client: _clienteHttp);
+
+  /// Remote progression read port — `GET /progress` (Ticket 24). Used by
+  /// [RestaurarProgresoUseCase] to fetch server-side unlocks on login.
+  static IConsultaProgresoRemoto get fuenteProgresoRemoto => _fuenteProgresoRemoto;
+  static final ProgresoRemotoDataSourceHttp _fuenteProgresoRemoto =
+      ProgresoRemotoDataSourceHttp(client: _clienteHttp);
 
   static SincronizarProgresoUseCase get sincronizarProgresoUseCase =>
       SincronizarProgresoUseCase(
