@@ -1,80 +1,81 @@
 import 'package:arrowmaze/domain/niveles/perfil_dificultad.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Ticket 17 — PerfilDificultad complexity profile (AC2).
+/// Ticket 23 — PerfilDificultad aggressive difficulty scaling (AC2).
 ///
-/// Verifies that the profile returns monotonic non-decreasing values for
-/// cells and arrows over levels 1…15, matching the backend agreement.
+/// Verifies the steep monotonic curve: board size, arrow count, and move
+/// budget increase strictly with index, and the minimum floor is 7×7 at
+/// every index.
 void main() {
-  group('PerfilDificultad', () {
-    test('should_provide_monotonic_non_decreasing_cells_over_1_to_15', () {
-      // Act — collect cells for levels 1…15.
-      final cells = List.generate(15, (i) => PerfilDificultad.para(i + 1).totalCeldas);
+  group('PerfilDificultad — aggressive scaling', () {
+    test(
+        'should_increase_grid_size_and_arrow_count_monotonically_when_index_grows',
+        () {
+      final profiles =
+          List.generate(100, (i) => PerfilDificultad.para(i + 1));
 
-      // Assert — never decreases as level number goes up.
-      for (var i = 1; i < cells.length; i++) {
+      for (var i = 1; i < profiles.length; i++) {
         expect(
-          cells[i],
-          greaterThanOrEqualTo(cells[i - 1]),
-          reason: 'cells dropped from level ${i + 1} to ${i + 2}',
+          profiles[i].filas,
+          greaterThanOrEqualTo(profiles[i - 1].filas),
+          reason: 'filas dropped from index ${i + 1} to ${i + 2}',
+        );
+        expect(
+          profiles[i].columnas,
+          greaterThanOrEqualTo(profiles[i - 1].columnas),
+          reason: 'columnas dropped from index ${i + 1} to ${i + 2}',
+        );
+        expect(
+          profiles[i].totalFlechas,
+          greaterThanOrEqualTo(profiles[i - 1].totalFlechas),
+          reason: 'totalFlechas dropped from index ${i + 1} to ${i + 2}',
+        );
+        expect(
+          profiles[i].trayectorias,
+          greaterThanOrEqualTo(profiles[i - 1].trayectorias),
+          reason: 'trayectorias dropped from index ${i + 1} to ${i + 2}',
         );
       }
     });
 
-    test('should_provide_monotonic_non_decreasing_arrows_over_1_to_15', () {
-      // Act — collect arrows for levels 1…15.
-      final flechas = List.generate(15, (i) => PerfilDificultad.para(i + 1).totalFlechas);
+    test('should_never_yield_board_smaller_than_7x7_for_any_index', () {
+      for (var i = 1; i <= 50; i++) {
+        final p = PerfilDificultad.para(i);
+        expect(p.filas, greaterThanOrEqualTo(7),
+            reason: 'filas < 7 at index $i');
+        expect(p.columnas, greaterThanOrEqualTo(7),
+            reason: 'columnas < 7 at index $i');
+      }
+    });
 
-      // Assert — never decreases.
-      for (var i = 1; i < flechas.length; i++) {
+    test('should_increase_move_budget_monotonically_when_index_grows', () {
+      final profiles =
+          List.generate(100, (i) => PerfilDificultad.para(i + 1));
+
+      expect(profiles[0].presupuestoMovimientos, greaterThan(0));
+
+      for (var i = 1; i < profiles.length; i++) {
         expect(
-          flechas[i],
-          greaterThanOrEqualTo(flechas[i - 1]),
-          reason: 'arrows dropped from level ${i + 1} to ${i + 2}',
+          profiles[i].presupuestoMovimientos,
+          greaterThanOrEqualTo(profiles[i - 1].presupuestoMovimientos),
+          reason:
+              'presupuestoMovimientos dropped from index ${i + 1} to ${i + 2}: '
+              '${profiles[i - 1].presupuestoMovimientos} → ${profiles[i].presupuestoMovimientos}',
         );
       }
     });
 
-    test('should_provide_monotonic_non_decreasing_trayectorias_over_1_to_15', () {
-      // Act — collect trayectorias for levels 1…15.
-      final trayectorias =
-          List.generate(15, (i) => PerfilDificultad.para(i + 1).trayectorias);
+    test('should_yield_large_dense_board_when_index_is_late', () {
+      final p = PerfilDificultad.para(100);
 
-      // Assert — never decreases.
-      for (var i = 1; i < trayectorias.length; i++) {
-        expect(
-          trayectorias[i],
-          greaterThanOrEqualTo(trayectorias[i - 1]),
-          reason: 'trayectorias dropped from level ${i + 1} to ${i + 2}',
-        );
-      }
-    });
-
-    test('should_have_level_10_more_complex_than_level_1', () {
-      // Arrange
-      final nivel1 = PerfilDificultad.para(1);
-      final nivel10 = PerfilDificultad.para(10);
-
-      // Assert — level 10 must have at least as many cells and arrows.
-      expect(nivel10.totalCeldas, greaterThanOrEqualTo(nivel1.totalCeldas));
-      expect(nivel10.totalFlechas, greaterThanOrEqualTo(nivel1.totalFlechas));
-      expect(nivel10.trayectorias, greaterThanOrEqualTo(nivel1.trayectorias));
-      // And at least one dimension is strictly greater (otherwise same difficulty).
-      expect(
-        nivel10.totalCeldas > nivel1.totalCeldas ||
-            nivel10.totalFlechas > nivel1.totalFlechas ||
-            nivel10.trayectorias > nivel1.trayectorias,
-        isTrue,
-        reason: 'level 10 should be strictly harder than level 1',
-      );
-    });
-
-    test('should_provide_filas_and_columnas_for_each_level', () {
-      for (var nivel = 1; nivel <= 15; nivel++) {
-        final perfil = PerfilDificultad.para(nivel);
-        expect(perfil.filas, greaterThan(0));
-        expect(perfil.columnas, greaterThan(0));
-      }
+      expect(p.filas, greaterThanOrEqualTo(15),
+          reason: 'late index 100 should be at least 15×15');
+      expect(p.columnas, greaterThanOrEqualTo(15),
+          reason: 'late index 100 should be at least 15×15');
+      expect(p.totalFlechas, greaterThanOrEqualTo(100),
+          reason: 'late index 100 should have at least 100 arrow segments');
+      expect(p.trayectorias, greaterThan(5),
+          reason: 'late index 100 should have >5 arrow paths');
     });
   });
 }

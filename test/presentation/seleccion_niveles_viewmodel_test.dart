@@ -60,11 +60,25 @@ class _CatalogoFake implements CatalogoNiveles {
 
   @override
   Future<List<ResumenNivel>> listar() async => _niveles;
+
+  @override
+  Future<int> obtenerCantidadTotal() async => _niveles.length;
+
+  @override
+  Future<ResumenNivel> obtenerPorIndice(int indice) async =>
+      _niveles.firstWhere((r) => r.id == indice);
 }
 
 class _CatalogoQueFalla implements CatalogoNiveles {
   @override
   Future<List<ResumenNivel>> listar() async => throw Exception('boom');
+
+  @override
+  Future<int> obtenerCantidadTotal() async => throw Exception('boom');
+
+  @override
+  Future<ResumenNivel> obtenerPorIndice(int indice) async =>
+      throw Exception('boom');
 }
 
 class _ProgresoFake implements ConsultaProgresoLocal {
