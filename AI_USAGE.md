@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-04 (T-024, T-025 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-04 (T-024–T-026 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (ticket 27 — settings menu + i18n), full-suite regression diagnosis and fix |
+| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
@@ -1529,19 +1529,29 @@ eloj:
 - **Modifications made by the team:** None beyond the fix itself — the two-line addition mirrored an existing pattern verbatim; no further correction was needed.
 - **Lessons learned / limitations identified:** This confirms the T-023 note about this exact gap (`flutter analyze` had already flagged it as "1 pre-existing error ... unrelated") — it had been left undone across two subsequent tickets (24, 30) before blocking a full-suite run here. When a port interface gains methods, every fake implementing it should be grepped for and updated in the same change, not left for the next unlucky `flutter test` to discover.
 
+### T-026 — Ticket 25 · Softer, Gentler Sound Effects (SFX Tuning)
+
+- **Task / problem addressed:** Implement ticket 25 (`.issues/25-feat-frontend-softer-sound-effects.md`): the existing SFX (harsh, rigid 8-bit square-wave beeps at 8kHz) needed to be replaced/retuned with softer, more pleasant samples — gentler attack, lower harshness, comfortable non-clipping level — while keeping the exact same Observer wiring (sounds remain `ObservadorJuego` reactions to `TipoEvento`s, never referenced by game logic), plus bounded polyphony so rapid repeated triggers of the same event don't pile into a harsh overlapping burst.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (verbatim) "implement ticket c:\dev\arrowmaze-frontend\.issues\25-feat-frontend-softer-sound-effects.md You are REQUIRED to strictly apply the rules for the 'tdd-strict' and 'clean-architecture' skills. You define the visual design using 'lib/core/theme'." A background research agent was first dispatched to map the existing audio infrastructure (`AudioServiceImp`, `IReproductorAudio`, `TipoEvento`, DI wiring, existing asset files, the ticket-12 architecture guard forbidding audio symbols in `domain`/`application`) before any code was written.
+- **Result obtained:** Investigation revealed the existing `assets/sounds/*.wav` files were real 8-bit/8kHz PCM square waves (confirmed via hex dump — abrupt alternation between two amplitude levels, no envelope), consistent with the ticket's "harsh and rigid" premise — so this was treated as a genuine asset-retune task, not just a code change. Strict TDD (red → green → refactor) producing: a one-off Dart synthesis script (in the session scratchpad, not committed) generating `assets/sounds/{move,invalid,collect,victory,defeat}_soft.wav` — 16-bit/22050Hz sine-wave tones (single tones for move/invalid, short note sequences with crossfade for collect/victory/defeat) with linear attack/release envelopes and peak amplitude capped at 0.42–0.55 of full scale; the 5 old harsh `.wav` files deleted. `lib/infrastructure/audio/i_reproductor_audio.dart` (added `{double volumen = 1.0}` to `reproducir`); `lib/infrastructure/audio/reproductor_audio_assets.dart` (calls `_player.setVolume(volumen)` before playing); `lib/infrastructure/audio/audio_service_imp.dart` (the event→sound table is now `Map<TipoEvento, ({String asset, double volumen})>` — data-driven per ticket's refactor instruction; added a same-`TipoEvento` debounce via an injectable `DateTime Function() ahora` clock and a `Map<TipoEvento, DateTime> _ultimaReproduccion`, default window 120ms). Updated tests in `test/infrastructure/audio_service_imp_test.dart` (`should_play_softened_asset_for_each_event_type` — loops all 6 events, asserts the new soft asset path AND that volume is `>0` and `<1.0` for AC3; `should_debounce_rapid_repeats_of_same_event`; `should_not_debounce_different_event_types_against_each_other`; renamed `should_not_play_sound_when_muted` → `should_suppress_playback_when_muted` per the ticket's exact RED-phase test name) and `test/infrastructure/audio_service_singleton_test.dart` (fake updated to the new interface signature). Verified: `flutter test` 352/352 green (full suite, up from 355 — net −3 from consolidating 6 old per-event tests into 1 parametrized one plus 2 new debounce tests); `flutter analyze` 0 errors (54 pre-existing info-level style suggestions, same convention as every prior ticket); `test/architecture/dependency_direction_test.dart`'s `should_not_reference_audio_in_domain_or_application` guard stayed green untouched.
+- **Modifications made by the team:** Review only — the team inspected the generated waveforms (hex-dump verification that the original files were truly harsh square waves, not placeholders) and the test/production diffs; no manual code corrections were needed beyond what the AI self-corrected during the session (see next field).
+- **Lessons learned / limitations identified:** (1) A first attempt at the data-driven mapping used `<TipoEvento, (String asset, double volumen)>` (positional record type with field names in the type position) — Dart rejected this because named-record types require curly-brace syntax `({String asset, double volumen})`; the map values also had to switch from positional literals `(a, b)` to named literals `(asset: a, volumen: b)` to match. Caught immediately by the compiler on the first `flutter test` run after the GREEN-phase edit. (2) Before treating "softer" as a real audio-engineering task, the AI verified via `xxd` that the existing placeholder-looking `.wav` files were in fact valid tiny PCM square waves (8-bit, 8kHz, alternating between two fixed amplitudes ~80 units apart) — confirming the ticket's premise was literally true and that Dart (via its bundled `dart` CLI, no Python available on this machine) could synthesize genuinely softer replacements (16-bit, sine waveform, linear attack/release, headroom below full scale) rather than treating "softer" as an unfalsifiable/non-testable requirement. (3) Debounce was implemented as a per-`TipoEvento` timestamp map with an injectable clock function (`DateTime Function() ahora`) rather than a new architectural port — this keeps the seam test-only and avoids over-engineering a `Reloj`-style port (already used elsewhere for periodic ticking, but a poor fit for point-in-time debounce) for a single internal infrastructure concern. (4) Dispatching a research subagent to fully map existing audio wiring, tests, DI, and the architecture guard *before* writing any RED test avoided rediscovering the same information mid-implementation and made the debounce/gain design decisions faster to reach with confidence.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, 27,
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, 25, 27,
     and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (355 passing tests, all
+    Rough judgment over the files added across the slices (352 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
-    `lib/presentation/`, `lib/di/`, `lib/core/`).
+    `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
+    under `assets/sounds/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1770,6 +1780,16 @@ eloj:
     missing interface implementations.
   - **How it was corrected:** Added the two overrides mirroring the identical
     pattern already used in `obtener_niveles_use_case_test.dart`.
+- **Case:** The first draft of `AudioServiceImp`'s data-driven sound table used
+  `<TipoEvento, (String asset, double volumen)>` — a positional record type
+  annotation with field-like names — paired with positional literals like
+  `('sounds/move_soft.wav', 0.55)` (ticket 25).
+  - **How it was detected:** `flutter test` — compile error; Dart's named-record
+    type requires curly-brace syntax (`({String asset, double volumen})`), and
+    positional literals don't satisfy a named-record type.
+  - **How it was corrected:** Changed the type annotation to
+    `({String asset, double volumen})` and the literals to named field syntax
+    (`(asset: ..., volumen: ...)`).
 
 ### Team reflection
 

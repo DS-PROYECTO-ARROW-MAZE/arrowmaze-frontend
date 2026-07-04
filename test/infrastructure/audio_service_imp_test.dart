@@ -5,15 +5,18 @@ import 'package:arrowmaze/infrastructure/audio/audio_service_imp.dart';
 import 'package:arrowmaze/infrastructure/audio/i_reproductor_audio.dart';
 import 'package:flutter_test/flutter_test.dart';
 
-/// Fake audio player that records every asset it was asked to play.
+/// Fake audio player that records every asset (and volume) it was asked to
+/// play.
 class _ReproductorFake implements IReproductorAudio {
   final List<String> assetsReproducidos = [];
+  final List<double> volumenesReproducidos = [];
   bool debeFallar = false;
 
   @override
-  void reproducir(String asset) {
+  void reproducir(String asset, {double volumen = 1.0}) {
     if (debeFallar) throw Exception('Simulated audio failure');
     assetsReproducidos.add(asset);
+    volumenesReproducidos.add(volumen);
   }
 
   @override
@@ -22,7 +25,10 @@ class _ReproductorFake implements IReproductorAudio {
   @override
   void liberar() {}
 
-  void reiniciar() => assetsReproducidos.clear();
+  void reiniciar() {
+    assetsReproducidos.clear();
+    volumenesReproducidos.clear();
+  }
 }
 
 void main() {
@@ -35,163 +41,141 @@ void main() {
     audioService = AudioServiceImp(reproductor: reproductor);
   });
 
-  group('AudioServiceImp — event-to-sound mapping (AC1)', () {
-    test(
-      'should_play_move_sound_when_notified_of_valid_move',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.movimientoRealizado, posicion),
-        );
+  group('AudioServiceImp — softened event-to-sound mapping (AC1/AC3)', () {
+    test('should_play_softened_asset_for_each_event_type', () {
+      const esperado = <TipoEvento, String>{
+        TipoEvento.movimientoRealizado: 'sounds/move_soft.wav',
+        TipoEvento.flechaEliminada: 'sounds/move_soft.wav',
+        TipoEvento.movimientoInvalido: 'sounds/invalid_soft.wav',
+        TipoEvento.coleccionableRecogido: 'sounds/collect_soft.wav',
+        TipoEvento.victoria: 'sounds/victory_soft.wav',
+        TipoEvento.derrota: 'sounds/defeat_soft.wav',
+      };
 
-        expect(reproductor.assetsReproducidos, contains('sounds/move.wav'));
-      },
-    );
+      for (final entry in esperado.entries) {
+        reproductor.reiniciar();
 
-    test(
-      'should_play_move_sound_when_notified_of_arrow_exit',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.flechaEliminada, posicion),
-        );
+        audioService.alOcurrirEvento(EventoJuego(entry.key, posicion));
 
-        expect(reproductor.assetsReproducidos, contains('sounds/move.wav'));
-      },
-    );
+        expect(reproductor.assetsReproducidos, contains(entry.value));
+        // AC3 — comfortable, non-clipping level: strictly below full scale.
+        expect(reproductor.volumenesReproducidos.single, greaterThan(0));
+        expect(reproductor.volumenesReproducidos.single, lessThan(1.0));
+      }
+    });
+  });
 
-    test(
-      'should_play_invalid_sound_when_notified_of_invalid_move',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.movimientoInvalido, posicion),
-        );
+  group('AudioServiceImp — bounded polyphony (AC3)', () {
+    test('should_debounce_rapid_repeats_of_same_event', () {
+      var ahora = DateTime(2026, 1, 1);
+      audioService = AudioServiceImp(
+        reproductor: reproductor,
+        ahora: () => ahora,
+      );
 
-        expect(reproductor.assetsReproducidos, contains('sounds/invalid.wav'));
-      },
-    );
+      // Act — three notifications of the same event in immediate succession.
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
 
-    test(
-      'should_play_collectible_sound_when_notified_of_collectible',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.coleccionableRecogido, posicion),
-        );
+      // Assert — only the first one played; the rapid repeats were debounced.
+      expect(reproductor.assetsReproducidos, hasLength(1));
 
-        expect(
-          reproductor.assetsReproducidos,
-          contains('sounds/collect.wav'),
-        );
-      },
-    );
+      // Act — once the debounce window elapses, the event plays again.
+      ahora = ahora.add(const Duration(milliseconds: 200));
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
 
-    test(
-      'should_play_victory_sound_when_notified_of_victory',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.victoria, posicion),
-        );
+      expect(reproductor.assetsReproducidos, hasLength(2));
+    });
 
-        expect(
-          reproductor.assetsReproducidos,
-          contains('sounds/victory.wav'),
-        );
-      },
-    );
+    test('should_not_debounce_different_event_types_against_each_other', () {
+      var ahora = DateTime(2026, 1, 1);
+      audioService = AudioServiceImp(
+        reproductor: reproductor,
+        ahora: () => ahora,
+      );
 
-    test(
-      'should_play_defeat_sound_when_notified_of_defeat',
-      () {
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.derrota, posicion),
-        );
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
+      audioService.alOcurrirEvento(EventoJuego(TipoEvento.victoria, posicion));
 
-        expect(
-          reproductor.assetsReproducidos,
-          contains('sounds/defeat.wav'),
-        );
-      },
-    );
+      expect(reproductor.assetsReproducidos, hasLength(2));
+    });
   });
 
   group('AudioServiceImp — mute toggle (AC4)', () {
-    test(
-      'should_not_play_sound_when_muted',
-      () {
-        audioService.toggleMute();
-        expect(audioService.muted, isTrue);
+    test('should_suppress_playback_when_muted', () {
+      audioService.toggleMute();
+      expect(audioService.muted, isTrue);
 
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.movimientoRealizado, posicion),
-        );
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.victoria, posicion),
-        );
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
+      audioService.alOcurrirEvento(EventoJuego(TipoEvento.victoria, posicion));
 
-        expect(reproductor.assetsReproducidos, isEmpty);
-      },
-    );
+      expect(reproductor.assetsReproducidos, isEmpty);
+    });
 
-    test(
-      'should_resume_playing_when_unmuted',
-      () {
-        audioService.toggleMute();
-        expect(audioService.muted, isTrue);
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.movimientoRealizado, posicion),
-        );
-        expect(reproductor.assetsReproducidos, isEmpty);
+    test('should_resume_playing_when_unmuted', () {
+      audioService.toggleMute();
+      expect(audioService.muted, isTrue);
+      audioService.alOcurrirEvento(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
+      expect(reproductor.assetsReproducidos, isEmpty);
 
-        audioService.toggleMute();
-        expect(audioService.muted, isFalse);
-        audioService.alOcurrirEvento(
-          EventoJuego(TipoEvento.victoria, posicion),
-        );
+      audioService.toggleMute();
+      expect(audioService.muted, isFalse);
+      audioService.alOcurrirEvento(EventoJuego(TipoEvento.victoria, posicion));
 
-        expect(reproductor.assetsReproducidos, contains('sounds/victory.wav'));
-      },
-    );
+      expect(
+        reproductor.assetsReproducidos,
+        contains('sounds/victory_soft.wav'),
+      );
+    });
   });
 
   group('AudioServiceImp — graceful degradation (AC4)', () {
-    test(
-      'should_not_crash_when_asset_missing_or_player_error',
-      () {
-        reproductor.debeFallar = true;
+    test('should_not_crash_when_asset_missing_or_player_error', () {
+      reproductor.debeFallar = true;
 
+      expect(
+        () => audioService.alOcurrirEvento(
+          EventoJuego(TipoEvento.movimientoRealizado, posicion),
+        ),
+        returnsNormally,
+      );
+    });
+
+    test('should_handle_all_event_types_without_error', () {
+      for (final tipo in TipoEvento.values) {
         expect(
-          () => audioService.alOcurrirEvento(
-            EventoJuego(TipoEvento.movimientoRealizado, posicion),
-          ),
+          () => audioService.alOcurrirEvento(EventoJuego(tipo, posicion)),
           returnsNormally,
         );
-      },
-    );
-
-    test(
-      'should_handle_all_event_types_without_error',
-      () {
-        for (final tipo in TipoEvento.values) {
-          expect(
-            () => audioService.alOcurrirEvento(EventoJuego(tipo, posicion)),
-            returnsNormally,
-          );
-        }
-      },
-    );
+      }
+    });
   });
 
   group('AudioServiceImp — IControlAudio', () {
-    test(
-      'should_expose_muted_state',
-      () {
-        expect(audioService.muted, isFalse);
+    test('should_expose_muted_state', () {
+      expect(audioService.muted, isFalse);
 
-        audioService.toggleMute();
-        expect(audioService.muted, isTrue);
+      audioService.toggleMute();
+      expect(audioService.muted, isTrue);
 
-        audioService.toggleMute();
-        expect(audioService.muted, isFalse);
-      },
-    );
+      audioService.toggleMute();
+      expect(audioService.muted, isFalse);
+    });
   });
 
   group('AudioServiceImp — Singleton (ADR-0002)', () {
@@ -199,45 +183,34 @@ void main() {
       AudioServiceImp.usarReproductor(_ReproductorFake());
     });
 
-    test(
-      'should_return_same_instance_when_accessed_twice',
-      () {
-        final a = AudioServiceImp.instance;
-        final b = AudioServiceImp.instance;
+    test('should_return_same_instance_when_accessed_twice', () {
+      final a = AudioServiceImp.instance;
+      final b = AudioServiceImp.instance;
 
-        expect(identical(a, b), isTrue);
-      },
-    );
+      expect(identical(a, b), isTrue);
+    });
   });
 
   group('AudioServiceImp — Observer wiring through publisher', () {
-    test(
-      'should_play_when_event_published_through_real_publisher',
-      () {
-        final publicador = PublicadorEventosJuego();
-        publicador.suscribir(audioService);
+    test('should_play_when_event_published_through_real_publisher', () {
+      final publicador = PublicadorEventosJuego();
+      publicador.suscribir(audioService);
 
-        publicador.publicar(
-          EventoJuego(TipoEvento.movimientoRealizado, posicion),
-        );
+      publicador.publicar(
+        EventoJuego(TipoEvento.movimientoRealizado, posicion),
+      );
 
-        expect(reproductor.assetsReproducidos, contains('sounds/move.wav'));
-      },
-    );
+      expect(reproductor.assetsReproducidos, contains('sounds/move_soft.wav'));
+    });
 
-    test(
-      'should_not_play_when_muted_and_event_published',
-      () {
-        audioService.toggleMute();
-        final publicador = PublicadorEventosJuego();
-        publicador.suscribir(audioService);
+    test('should_not_play_when_muted_and_event_published', () {
+      audioService.toggleMute();
+      final publicador = PublicadorEventosJuego();
+      publicador.suscribir(audioService);
 
-        publicador.publicar(
-          EventoJuego(TipoEvento.victoria, posicion),
-        );
+      publicador.publicar(EventoJuego(TipoEvento.victoria, posicion));
 
-        expect(reproductor.assetsReproducidos, isEmpty);
-      },
-    );
+      expect(reproductor.assetsReproducidos, isEmpty);
+    });
   });
 }
