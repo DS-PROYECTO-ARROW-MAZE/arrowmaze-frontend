@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-023 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-04 (T-024, T-025 appended)
 
 ## 1. Tools Used
 
@@ -9,6 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
+| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (ticket 27 — settings menu + i18n), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
@@ -1510,19 +1511,37 @@ eloj:
 - **Modifications made by the team:** Review only — the team inspected the tests and code; no manual code edits were required. `flutter test`/`flutter analyze` served as the guardrails.
 - **Lessons learned / limitations identified:** (1) Modelling budget decrement as an always-happens operation (even on the winning move) with defeat triggered only when `!_tablero.estaVacio` prevents a race condition where the last move would simultaneously win and lose. (2) The nullable `presupuestoMovimientos` in `SesionJuego` (null = unlimited) preserved backward compatibility: all 295 pre-existing tests passed without modification, and the default session in `MoverFlechaUseCase` (with no `sesion` parameter) still works because its `SesionJuego` has no budget. (3) The undo cap reset via a fresh `DeshacerMovimientoUseCase` instance on new level is simple and correct but means the cap state is lifecycle-scoped to the use case rather than persisted — acceptable since undo count resets per level anyway. (4) The defeat cause differentiation (`derrotaPorTiempo`) is determined in the ViewModel rather than the domain, since it's a UI concern: `tiempoRestante == 0 && esCronometrado` → timer defeat, else → move exhaustion. (5) The budget formula (`arrow count + 5 margin`) is hardcoded in `Inyeccion` — future tickets may want to move it to level config.
 
+### T-024 — Ticket 27 · Settings Menu — Sound Toggle + Language (EN/ES i18n)
+
+- **Task / problem addressed:** Implement ticket 27 (`.issues/27-feat-frontend-settings-menu-i18n.md`): a post-login Settings screen with a Sound On/Off toggle and an English/Spanish language switch. All user-facing strings externalized via a real i18n layer; both settings persist across sessions (`shared_preferences`) and are read on startup; `ConfiguracionManager` is DI-lifetime per ADR-0002, not a Singleton.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (paraphrased, consistent with prior tickets) Implement ticket 27 following strict TDD (Red → Green → Refactor) and Clean Architecture (per `tdd-strict`/`clean-architecture` skills): `ConfiguracionManager` exposing `sonidoHabilitado`/`idioma`, a `PreferenciasUsuario` port persisted via `shared_preferences`, `AjustesViewModel`/`AjustesViewState`/`AjustesView` with the two controls, a Settings entry point reachable only after login, and an EN/ES string-resource layer with live locale switching — no hard-coded UI strings.
+- **Result obtained:** Strict TDD producing: `lib/application/ports/preferencias_usuario.dart` (port); `lib/infrastructure/preferencias/preferencias_usuario_persistente.dart` (`shared_preferences`-backed adapter); `lib/core/configuracion_manager.dart` (DI-lifetime settings holder — sound + locale); `lib/core/i18n/` (`cadenas.dart` abstract string table, `cadenas_en.dart`/`cadenas_es.dart` concrete resources, `cadenas_scope.dart` InheritedWidget-style scope, `localizaciones_provider.dart`); `lib/presentation/viewmodels/ajustes_view_model.dart` + `ajustes_view_state.dart`; `lib/presentation/views/settings/ajustes_view.dart` (Sound toggle + language selector); a Settings button wired into the post-login header (`auth_view.dart`/`game_view.dart`/`ranking_view.dart`/`seleccion_niveles_view.dart`/`main.dart`/`inyeccion.dart` updated to route/inject it). New tests: `test/i18n/localizaciones_test.dart` (every key resolves in both EN and ES, no missing/literal fallbacks); `test/infrastructure/preferencias_usuario_persistente_test.dart` (round-trips sound + language across instances via `SharedPreferences.setMockInitialValues`); `test/presentation/ajustes_viewmodel_test.dart` (7 tests — persist+apply sound toggle, persist+change locale, load saved settings on init, sensible first-run defaults, listener notifications on toggle/locale change, no-op when same language reselected).
+- **Modifications made by the team:** Review only during the authoring session — tests and code inspected against `CLAUDE.md`/ADR-0002 (confirming `ConfiguracionManager` is DI-lifetime, not a Singleton, unlike `AudioServiceImp`). A follow-up defect surfaced only when running the full suite afterward (see T-025): an unrelated pre-existing fake (`_CatalogoFake` in `restaurar_progreso_use_case_test.dart`, broken since ticket 23) blocked a clean `flutter test` run and had to be fixed separately before the ticket 27 tests could be confirmed green end-to-end.
+- **Lessons learned / limitations identified:** (1) Keeping `ConfiguracionManager` DI-lifetime rather than a Singleton (per ADR-0002) meant the sound-mute side effect on `AudioServiceImp` had to be threaded explicitly through the ViewModel rather than reached for globally — more verbose but keeps the settings screen unit-testable without a static audio dependency. (2) Routing every UI string through the `CadenaScope`/`Cadenas` indirection up front avoided a later find-and-replace pass across five view files when wiring the Settings button post-login. (3) Running the full test suite (not just the new files) after finishing a ticket remains necessary — the compile-time regression in T-025 was in a completely unrelated file and would not have surfaced from `flutter test test/presentation/` or `test/i18n/` alone.
+
+### T-025 — Ticket 27 (follow-up) · Fix pre-existing `_CatalogoFake` compile error blocking full suite
+
+- **Task / problem addressed:** After implementing ticket 27, running the full `flutter test` suite failed to compile `test/application/restaurar_progreso_use_case_test.dart` — unrelated to the settings/i18n work. `_CatalogoFake implements CatalogoNiveles` was missing `obtenerCantidadTotal()` and `obtenerPorIndice(int)`, added to the `CatalogoNiveles` port back in ticket 23 (endless level generation) but never backfilled into this one fake.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (verbatim, paraphrased for brevity) The user pasted the `flutter test` terminal output showing first a stale `.pub-preload-cache` lock error, then the real failure: `_CatalogoFake` missing implementations for `CatalogoNiveles.obtenerCantidadTotal`/`obtenerPorIndice`, and asked for it to be diagnosed and fixed.
+- **Result obtained:** Read `lib/application/ports/catalogo_niveles.dart` to confirm the full interface, then found the already-established fix pattern in `test/application/obtener_niveles_use_case_test.dart` (`obtenerCantidadTotal` → list length, `obtenerPorIndice` → `firstWhere` by id) and applied the identical two overrides to `_CatalogoFake`. Verified: full `flutter test` run — 355/355 tests green (0 failures), including all ticket 27 tests (`ajustes_viewmodel_test.dart`, `preferencias_usuario_persistente_test.dart`, `localizaciones_test.dart`).
+- **Modifications made by the team:** None beyond the fix itself — the two-line addition mirrored an existing pattern verbatim; no further correction was needed.
+- **Lessons learned / limitations identified:** This confirms the T-023 note about this exact gap (`flutter analyze` had already flagged it as "1 pre-existing error ... unrelated") — it had been left undone across two subsequent tickets (24, 30) before blocking a full-suite run here. When a port interface gains methods, every fake implementing it should be grepped for and updated in the same change, not left for the next unlucky `flutter test` to discover.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, and 30
-    were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, 27,
+    and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (333 passing tests, all
+    Rough judgment over the files added across the slices (355 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
-    `lib/presentation/`, `lib/di/`).
+    `lib/presentation/`, `lib/di/`, `lib/core/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1742,6 +1761,15 @@ eloj:
    - **How it was detected:** `flutter analyze` — after removing `respaldo`, the
      DTO import was flagged as unused.
    - **How it was corrected:** Removed the unused import directive.
+- **Case:** `_CatalogoFake` in `restaurar_progreso_use_case_test.dart` (authored in
+  an earlier ticket, not ticket 27) was missing `obtenerCantidadTotal()`/
+  `obtenerPorIndice()` after `CatalogoNiveles` was extended in ticket 23 — it went
+  unnoticed through tickets 24 and 30 because scoped test runs didn't compile that
+  file, and only surfaced when running the full suite after ticket 27.
+  - **How it was detected:** `flutter test` (full run) — compile error, class
+    missing interface implementations.
+  - **How it was corrected:** Added the two overrides mirroring the identical
+    pattern already used in `obtener_niveles_use_case_test.dart`.
 
 ### Team reflection
 
