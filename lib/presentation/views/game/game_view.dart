@@ -2,6 +2,7 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/cadenas_scope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
@@ -18,7 +19,8 @@ import '../../viewmodels/juego_view_state.dart';
 /// [_TableroPainter] as **continuous, bending arrow paths** over a plain dark
 /// backdrop with subtle dots for empty space — there are no discrete background
 /// tiles. All colour, spacing and radius come from theme tokens (`GameTheme`,
-/// `AppSpacing`, `AppRadii`), never hard-coded here.
+/// `AppSpacing`, `AppRadii`), never hard-coded here. Every user-facing string is
+/// read from [CadenasScope] — no literals in this View (AC3).
 class GameView extends StatefulWidget {
   /// Creates the board screen bound to [viewModel].
   const GameView({
@@ -82,16 +84,17 @@ class _GameViewState extends State<GameView>
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     final game = Theme.of(context).extension<GameTheme>()!;
     return Scaffold(
       appBar: AppBar(
-        title: const Text('ArrowMaze'),
+        title: Text(s.pantallaJuego),
         actions: [
           // Leaderboard is always reachable, even after the level is decided.
           if (widget.construirRanking != null)
             IconButton(
               icon: const Icon(Icons.leaderboard_outlined),
-              tooltip: 'Leaderboard',
+              tooltip: s.tableroDeClasificacion,
               onPressed: () => Navigator.of(context).push(
                 MaterialPageRoute(builder: widget.construirRanking!),
               ),
@@ -107,7 +110,7 @@ class _GameViewState extends State<GameView>
                 );
               },
             ),
-            tooltip: 'Toggle sound',
+            tooltip: s.alternarSonido,
             onPressed: widget.viewModel.toggleMute,
           ),
           ListenableBuilder(
@@ -126,15 +129,15 @@ class _GameViewState extends State<GameView>
                   IconButton(
                     icon: const Icon(Icons.undo),
                     tooltip: estado.usosUndoRestantes > 0
-                        ? 'Undo (${estado.usosUndoRestantes} left)'
-                        : 'Undo',
+                        ? s.deshacerConUsos(estado.usosUndoRestantes)
+                        : s.deshacer,
                     onPressed: widget.viewModel.puedeDeshacer
                         ? widget.viewModel.deshacer
                         : null,
                   ),
                   IconButton(
                     icon: Icon(estado.pausado ? Icons.play_arrow : Icons.pause),
-                    tooltip: estado.pausado ? 'Resume' : 'Pause',
+                    tooltip: estado.pausado ? s.reanudar : s.pausar,
                     onPressed: estado.pausado
                         ? widget.viewModel.reanudar
                         : widget.viewModel.pausar,
@@ -246,13 +249,14 @@ class _PausaOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     return _Overlay(
       children: [
-        const Text('Paused', style: AppTypography.titleLarge),
+        Text(s.pausado, style: AppTypography.titleLarge),
         const SizedBox(height: AppSpacing.lg),
         FilledButton(
           onPressed: onReanudar,
-          child: const Text('Resume'),
+          child: Text(s.reanudar),
         ),
       ],
     );
@@ -278,10 +282,11 @@ class _VictoriaOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     return _Overlay(
       children: [
         Text(
-          'Victory!',
+          s.victoria,
           style: AppTypography.titleLarge.copyWith(color: game.validMoveFlash),
         ),
         if (victoria.mostrarPuntuacion) ...[
@@ -297,7 +302,7 @@ class _VictoriaOverlay extends StatelessWidget {
         ],
         const SizedBox(height: AppSpacing.xs),
         Text(
-          'Cleared in ${victoria.movimientos} moves',
+          s.limpiadoEn(victoria.movimientos),
           style: AppTypography.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -356,6 +361,7 @@ class _DerrotaOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     return _Overlay(
       children: [
         Icon(
@@ -365,13 +371,13 @@ class _DerrotaOverlay extends StatelessWidget {
         ),
         const SizedBox(height: AppSpacing.md),
         Text(
-          derrotaPorTiempo ? "Time's up" : 'No moves left',
+          derrotaPorTiempo ? s.tiempoAgotado : s.movimientosAgotados,
           style:
               AppTypography.titleLarge.copyWith(color: game.invalidMoveFlash),
         ),
         const SizedBox(height: AppSpacing.xs),
         Text(
-          derrotaPorTiempo ? 'You ran out of time' : 'You ran out of moves',
+          derrotaPorTiempo ? s.sinTiempo : s.sinMovimientos,
           style: AppTypography.bodyMedium,
         ),
         const SizedBox(height: AppSpacing.xl),
@@ -400,6 +406,7 @@ class _AccionesFinDeJuego extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -407,21 +414,21 @@ class _AccionesFinDeJuego extends StatelessWidget {
           FilledButton.icon(
             onPressed: onSiguiente,
             icon: const Icon(Icons.arrow_forward),
-            label: const Text('Next Level'),
+            label: Text(s.siguienteNivel),
           ),
         if (onSiguiente != null) const SizedBox(height: AppSpacing.sm),
         if (onReintentar != null)
           OutlinedButton.icon(
             onPressed: onReintentar,
             icon: const Icon(Icons.refresh),
-            label: const Text('Retry'),
+            label: Text(s.reintentar),
           ),
         if (onReintentar != null) const SizedBox(height: AppSpacing.sm),
         if (onMenu != null)
           TextButton.icon(
             onPressed: onMenu,
             icon: const Icon(Icons.list),
-            label: const Text('Level Select'),
+            label: Text(s.seleccionNiveles),
           ),
       ],
     );
@@ -523,6 +530,7 @@ class _Hud extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     final timerColor =
         tiempoRestante != null ? _timerColor(tiempoRestante!) : null;
     return Padding(
@@ -530,7 +538,7 @@ class _Hud extends StatelessWidget {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Text(esCountdown ? 'Moves: ' : 'Moves: ', style: AppTypography.bodyMedium),
+          Text(s.etiquetaMovimientos, style: AppTypography.bodyMedium),
           Text('$movimientos', style: AppTypography.hudNumber),
           if (usosUndoRestantes < 3) ...[
             const SizedBox(width: AppSpacing.sm),
