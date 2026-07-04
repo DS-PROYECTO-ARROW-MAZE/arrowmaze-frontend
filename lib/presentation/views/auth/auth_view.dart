@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/cadenas_scope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
@@ -8,8 +9,10 @@ import '../../viewmodels/auth_view_model.dart';
 /// Register / Login screen — a thin View that only draws.
 ///
 /// It owns no auth logic: it observes its [AuthViewModel] (a `ChangeNotifier`)
-/// and forwards field changes and button taps to the ViewModel. The design
-/// follows the Dark Mode Neón Minimalista palette via theme tokens.
+/// and forwards field changes and button taps to the ViewModel. Every
+/// user-facing string is read from [CadenasScope] — no literals in this View
+/// (AC3). The design follows the Dark Mode Neón Minimalista palette via theme
+/// tokens.
 ///
 /// Navigation is a View concern: once the ViewModel reports an authenticated
 /// session — or the user chooses to continue as a guest — the View replaces
@@ -54,8 +57,6 @@ class _AuthViewState extends State<AuthView> {
   }
 
   void _alCambiarEstado() {
-    // The form rebuilds via ListenableBuilder; the only extra reaction is to
-    // leave the auth screen once a session exists (fresh login or restored).
     if (widget.viewModel.estado.autenticado) {
       _irAlJuego();
     }
@@ -73,13 +74,15 @@ class _AuthViewState extends State<AuthView> {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
+
     return Scaffold(
       appBar: AppBar(
         title: ListenableBuilder(
           listenable: widget.viewModel,
           builder: (context, _) {
             final estado = widget.viewModel.estado;
-            return Text(estado.esRegistro ? 'Create Account' : 'Sign In');
+            return Text(estado.esRegistro ? s.crearCuenta : s.iniciarSesion);
           },
         ),
       ),
@@ -106,8 +109,8 @@ class _AuthViewState extends State<AuthView> {
                       const SizedBox(height: AppSpacing.sm),
                       Text(
                         estado.esRegistro
-                            ? 'Create your account to save progress'
-                            : 'Sign in to continue',
+                            ? s.crearCuentaSubtitulo
+                            : s.iniciarSesionSubtitulo,
                         style: AppTypography.bodyMedium,
                         textAlign: TextAlign.center,
                       ),
@@ -116,16 +119,16 @@ class _AuthViewState extends State<AuthView> {
                       // Username field (register only)
                       if (estado.esRegistro) ...[
                         TextFormField(
-                          decoration: const InputDecoration(
-                            labelText: 'Username',
-                            prefixIcon: Icon(Icons.person_outline),
+                          decoration: InputDecoration(
+                            labelText: s.campoUsuario,
+                            prefixIcon: const Icon(Icons.person_outline),
                           ),
                           initialValue: estado.username,
                           onChanged: widget.viewModel.cambiarUsername,
                           validator: estado.esRegistro
                               ? (v) =>
                                   (v == null || v.trim().isEmpty)
-                                      ? 'Required'
+                                      ? s.requerido
                                       : null
                               : null,
                           enabled: !estado.cargando,
@@ -135,15 +138,15 @@ class _AuthViewState extends State<AuthView> {
 
                       // Email field
                       TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'Email',
-                          prefixIcon: Icon(Icons.email_outlined),
+                        decoration: InputDecoration(
+                          labelText: s.campoEmail,
+                          prefixIcon: const Icon(Icons.email_outlined),
                         ),
                         initialValue: estado.email,
                         onChanged: widget.viewModel.cambiarEmail,
                         validator: (v) =>
                             (v == null || !v.contains('@'))
-                                ? 'Enter a valid email'
+                                ? s.emailInvalido
                                 : null,
                         keyboardType: TextInputType.emailAddress,
                         enabled: !estado.cargando,
@@ -152,15 +155,15 @@ class _AuthViewState extends State<AuthView> {
 
                       // Password field
                       TextFormField(
-                        decoration: const InputDecoration(
-                          labelText: 'Password',
-                          prefixIcon: Icon(Icons.lock_outline),
+                        decoration: InputDecoration(
+                          labelText: s.campoContrasena,
+                          prefixIcon: const Icon(Icons.lock_outline),
                         ),
                         initialValue: estado.password,
                         onChanged: widget.viewModel.cambiarPassword,
                         validator: (v) =>
                             (v == null || v.length < 6)
-                                ? 'At least 6 characters'
+                                ? s.contrasenaMinima
                                 : null,
                         obscureText: true,
                         enabled: !estado.cargando,
@@ -194,7 +197,9 @@ class _AuthViewState extends State<AuthView> {
                                 ),
                               )
                             : Text(
-                                estado.esRegistro ? 'Register' : 'Sign In',
+                                estado.esRegistro
+                                    ? s.registrar
+                                    : s.iniciarSesion,
                               ),
                       ),
                       const SizedBox(height: AppSpacing.md),
@@ -206,16 +211,16 @@ class _AuthViewState extends State<AuthView> {
                             : widget.viewModel.alternarModo,
                         child: Text(
                           estado.esRegistro
-                              ? 'Already have an account? Sign In'
-                              : 'Don\'t have an account? Create one',
+                              ? s.yaTieneCuenta
+                              : s.noTieneCuenta,
                         ),
                       ),
                       const SizedBox(height: AppSpacing.sm),
 
-                      // Guest bypass: skip auth and go straight to the board.
+                      // Guest bypass
                       TextButton(
                         onPressed: estado.cargando ? null : _irAlJuego,
-                        child: const Text('Continue as guest'),
+                        child: Text(s.continuarInvitado),
                       ),
                     ],
                   );
