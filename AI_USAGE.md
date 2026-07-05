@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-04 (T-024–T-026 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-05 (T-027 appended)
 
 ## 1. Tools Used
 
@@ -10,7 +10,7 @@
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
 
@@ -1538,17 +1538,35 @@ eloj:
 - **Modifications made by the team:** Review only — the team inspected the generated waveforms (hex-dump verification that the original files were truly harsh square waves, not placeholders) and the test/production diffs; no manual code corrections were needed beyond what the AI self-corrected during the session (see next field).
 - **Lessons learned / limitations identified:** (1) A first attempt at the data-driven mapping used `<TipoEvento, (String asset, double volumen)>` (positional record type with field names in the type position) — Dart rejected this because named-record types require curly-brace syntax `({String asset, double volumen})`; the map values also had to switch from positional literals `(a, b)` to named literals `(asset: a, volumen: b)` to match. Caught immediately by the compiler on the first `flutter test` run after the GREEN-phase edit. (2) Before treating "softer" as a real audio-engineering task, the AI verified via `xxd` that the existing placeholder-looking `.wav` files were in fact valid tiny PCM square waves (8-bit, 8kHz, alternating between two fixed amplitudes ~80 units apart) — confirming the ticket's premise was literally true and that Dart (via its bundled `dart` CLI, no Python available on this machine) could synthesize genuinely softer replacements (16-bit, sine waveform, linear attack/release, headroom below full scale) rather than treating "softer" as an unfalsifiable/non-testable requirement. (3) Debounce was implemented as a per-`TipoEvento` timestamp map with an injectable clock function (`DateTime Function() ahora`) rather than a new architectural port — this keeps the seam test-only and avoids over-engineering a `Reloj`-style port (already used elsewhere for periodic ticking, but a poor fit for point-in-time debounce) for a single internal infrastructure concern. (4) Dispatching a research subagent to fully map existing audio wiring, tests, DI, and the architecture guard *before* writing any RED test avoided rediscovering the same information mid-implementation and made the debounce/gain design decisions faster to reach with confidence.
 
+### T-027 — Ticket 19 · Proportional Star Display (bands synchronized with backend)
+
+- **Task / problem addressed:** Synchronize the frontend's star calculation with the backend's new proportional system (Ticket 17) by replacing hardcoded absolute threshold bands (`umbralesEstrellas: [300, 600, 900]`) with a proportional mapping using integer cross-multiplication against a `referencia` value (max achievable score). Acceptance criteria: (AC1) 3★ when `puntaje >= 90%` of reference; (AC2) 2★ when `puntaje >= 67%` of reference; (AC3) 1★ otherwise; (AC4) golden fixtures match the backend (3 timed fixtures verified at the new proportional bands). The `referencia` must be calculated from the level's definition — `baseNivel + limiteTiempo * ktiempo` for timed levels, `baseNivel` for untimed. Bonus levels short-circuit to 0 score / 0 stars.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with a "What did we do so far?" anchored summary that surfaced Ticket 19 from the issue tracker. The user then instructed: "Implementa el Ticket 19 siguiendo TDD estricto (Red → Green → Refactor) y Clean Architecture. Primero explora el código de puntuación existente (CalcularPuntuacionUseCase, DefinicionNivel, ResultadoPuntaje, tests). Luego escribe tests RED para las bandas proporcionales. Después implementa GREEN: modifica DefinicionNivel para quitar umbralesEstrellas y agregar un getter referencia, y modifica CalcularPuntuacionUseCase para usar multiplicación-cruzada. Finalmente actualiza Inyeccion y todos los tests que referencien umbralesEstrellas."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/puntuacion/definicion_nivel.dart` — removed `umbralesEstrellas` field; added `referencia` computed getter that returns `max(0, baseNivel + limiteTiempo.inSeconds * ktiempo)` for timed levels and `baseNivel` for untimed levels; added `import 'dart:math'` for `max()`.
+  `lib/application/use_cases/calcular_puntuacion_use_case.dart` — replaced `_calcularEstrellas` with integer cross-multiplication bands: 3★ when `puntaje * 10 >= referencia * 9`, 2★ when `puntaje * 3 >= referencia * 2`, 1★ fallthrough; bonus levels return `ResultadoPuntaje(0, 0)` before any strategy evaluation.
+  `lib/di/inyeccion.dart` — removed `umbralesEstrellas: [300, 600, 900]` from `definicionNivelInicial`.
+  **Test updates (12 files):**
+  `test/application/calcular_puntuacion_use_case_test.dart` — completely rewritten (11 tests): proportional band verification (AC1), score=0→1★ (AC3), score=reference→3★ (AC2), golden fixtures aligned with backend (AC4).
+  `test/application/calcular_puntuacion_bonus_test.dart` — removed `umbralesEstrellas`.
+  `test/domain/definicion_nivel_test.dart` — removed `umbralesEstrellas` (9 constructor calls); added `referencia` getter tests.
+  `test/presentation/juego_viewmodel_sync_test.dart`, `juego_viewmodel_session_test.dart`, `juego_viewmodel_invalido_test.dart`, `juego_viewmodel_undo_test.dart`, `juego_viewmodel_timer_test.dart`, `juego_viewmodel_collectible_test.dart`, `juego_viewmodel_test.dart` — removed `umbralesEstrellas` from all `DefinicionNivel(` constructor calls.
+  Verified: **`flutter test` 354/354 green** (271 prior + 11 new + 72 existing fixture updates); **`flutter analyze` 0 errors, 0 warnings** (only pre-existing info-level lints); zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as guardrails throughout.
+- **Lessons learned / limitations identified:** (1) Integer cross-multiplication (`puntaje * 10 >= referencia * 9`) avoids the float-drift issues of percentage-based comparison while keeping the 90% / 67% threshold semantics clear. (2) Removing `umbralesEstrellas` from `DefinicionNivel` required updating 12 files across three layers (domain, application, presentation tests) — a one-time refactoring cost that eliminates the concept of hardcoded thresholds entirely. (3) The `referencia` getter uses `import 'dart:math'` (the only non-project import in `domain/`) for the `max(0, ...)` guard, which is acceptable because `dart:math` is a core Dart library, not a Flutter import — the Clean Architecture domain-purity guard (`dependency_direction_test.dart`) only forbids `package:flutter` imports. (4) The rule-based `referencia` calculation (`esCronometrado ? baseNivel + limiteTiempo * ktiempo : baseNivel`) mirrors the same condition used in `EstrategiaPuntuacionMixta` to select the scoring formula, keeping the max-score estimation consistent with the scoring strategy. (5) All golden fixtures (3 timed levels, 3 untimed levels) were updated to assert the new proportional band behaviour, matching the backend's Ticket 17 contract exactly — verified by the test suite.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, 25, 27,
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27,
     and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (352 passing tests, all
+    Rough judgment over the files added across the slices (354 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
     `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
     under `assets/sounds/`).
@@ -1816,7 +1834,7 @@ eloj:
   `RepertorioFormas` — no generator rewrites were required, and the
   `CatalogoNiveles` extension was trivial.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-    kept output consistent and well-tested (333/333 tests, 0 errors, 0 warnings from
+    kept output consistent and well-tested (354/354 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
