@@ -1,3 +1,5 @@
+import 'dart:math';
+
 /// Holds the tuning **data** for a level's scoring algorithm (DM-F6).
 ///
 /// This is a pure data entity — it carries no behaviour. The
@@ -6,9 +8,9 @@
 /// constants. All tuning lives here so the algorithm swaps without touching
 /// callers (OCP).
 ///
-/// [umbralesEstrellas] contains exactly three thresholds in ascending order:
-/// `[1-star, 2-star, 3-star]`. A score at or above a threshold earns that star
-/// count.
+/// [referencia] is the maximum achievable score for this level, derived from
+/// the strategy's ideal inputs (0 moves, full time). Stars are assigned via
+/// proportional bands against this reference (Ticket 19).
 class DefinicionNivel {
   static const _umbralCronometrado = 10;
 
@@ -18,7 +20,6 @@ class DefinicionNivel {
     required this.baseNivel,
     required this.kmov,
     required this.ktiempo,
-    required this.umbralesEstrellas,
     Duration? limiteTiempo,
     this.esBonus = false,
   }) : _limiteTiempo = limiteTiempo;
@@ -33,8 +34,6 @@ class DefinicionNivel {
 
   final int ktiempo;
 
-  final List<int> umbralesEstrellas;
-
   final Duration? _limiteTiempo;
 
   final bool esBonus;
@@ -42,4 +41,15 @@ class DefinicionNivel {
   Duration? get limiteTiempo => esBonus ? null : _limiteTiempo;
 
   bool get esCronometrado => !esBonus && numero >= _umbralCronometrado && _limiteTiempo != null;
+
+  /// The maximum achievable score for this level.
+  ///
+  /// For timed levels: `baseNivel + limiteTiempo * ktiempo` (0 moves, full time).
+  /// For untimed levels: just `baseNivel` (0 moves).
+  int get referencia {
+    if (esCronometrado) {
+      return max(0, baseNivel + _limiteTiempo!.inSeconds * ktiempo);
+    }
+    return baseNivel;
+  }
 }

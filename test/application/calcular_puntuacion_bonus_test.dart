@@ -13,7 +13,6 @@ void main() {
       baseNivel: 1000,
       kmov: 10,
       ktiempo: 2,
-      umbralesEstrellas: [300, 600, 900],
       limiteTiempo: Duration(seconds: 90),
       esBonus: true,
     );
