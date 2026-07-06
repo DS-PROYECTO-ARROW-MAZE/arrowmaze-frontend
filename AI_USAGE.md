@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-05 (T-027 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-028 appended)
 
 ## 1. Tools Used
 
@@ -1556,6 +1556,22 @@ eloj:
 - **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as guardrails throughout.
 - **Lessons learned / limitations identified:** (1) Integer cross-multiplication (`puntaje * 10 >= referencia * 9`) avoids the float-drift issues of percentage-based comparison while keeping the 90% / 67% threshold semantics clear. (2) Removing `umbralesEstrellas` from `DefinicionNivel` required updating 12 files across three layers (domain, application, presentation tests) — a one-time refactoring cost that eliminates the concept of hardcoded thresholds entirely. (3) The `referencia` getter uses `import 'dart:math'` (the only non-project import in `domain/`) for the `max(0, ...)` guard, which is acceptable because `dart:math` is a core Dart library, not a Flutter import — the Clean Architecture domain-purity guard (`dependency_direction_test.dart`) only forbids `package:flutter` imports. (4) The rule-based `referencia` calculation (`esCronometrado ? baseNivel + limiteTiempo * ktiempo : baseNivel`) mirrors the same condition used in `EstrategiaPuntuacionMixta` to select the scoring formula, keeping the max-score estimation consistent with the scoring strategy. (5) All golden fixtures (3 timed levels, 3 untimed levels) were updated to assert the new proportional band behaviour, matching the backend's Ticket 17 contract exactly — verified by the test suite.
 
+### T-028 — Ticket 28 · Invalid-Move Feedback — Single Red Alert (debounced) + Haptic Vibration
+
+- **Task / problem addressed:** Implement Story A2 refinement from `.issues/28-feat-frontend-invalid-move-haptic-feedback.md`: when the player taps a **blocked** arrow (invalid move), the red visual alert must fire **exactly once per interaction** — rapid repeated invalid taps must not stack/strobe — **and** the device must emit a short **haptic vibration**. The invalid-move *rule* is unchanged (move still counts, board unchanged, ticket 02). Acceptance criteria: (AC1) an invalid tap triggers the red alert exactly once; rapid taps within a debounce window coalesce into a single clean pulse; (AC2) an invalid tap emits haptic feedback via a **port**, degrading gracefully (no crash) on devices without haptics; (AC3) haptics/visual are decoupled from rules — `domain`/`application` contain no haptic or UI symbol; (AC4) a **valid** move triggers neither the alert nor the haptic.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.issues\28-feat-frontend-invalid-move-haptic-feedback.md` it is importante to apply the rules in these skills `…\.claude\skills\clean-architecture` `…\.claude\skills\tdd-strict`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/application/ports/haptic_feedback_port.dart` — new `HapticFeedbackPort` abstract interface (`vibrar()`), zero Flutter imports (the DIP seam, placed alongside the existing presentation-facing ports `IControlAudio`/`Reloj`).
+  `lib/infrastructure/haptica/haptic_feedback_flutter.dart` — `HapticFeedbackFlutter` adapter wrapping Flutter's `HapticFeedback.mediumImpact()`, fire-and-forget with `.catchError` so a device without a vibrator (or a channel error) degrades to a silent no-op (AC2).
+  `lib/presentation/viewmodels/juego_view_state.dart` — new debounced `alertaInvalida` pulse field (+ `copyWith`), kept distinct from the existing `movimientoInvalido` rule-mirror flag: a suppressed rapid tap has `movimientoInvalido: true, alertaInvalida: false`.
+  `lib/presentation/viewmodels/juego_view_model.dart` — injects `HapticFeedbackPort?` and an overridable `DateTime Function() ahora` clock; a single named constant `ventanaAlertaInvalida` (400 ms) debounces the alert via `_registrarAlertaInvalida()` — only the *leading* invalid tap of a streak raises the pulse and buzzes; a valid move or undo resets the streak so the next invalid tap alerts again.
+  `lib/presentation/views/game/game_view.dart` — the shake/flash `AnimationController` now keys off `alertaInvalida` instead of `movimientoInvalido`, so rapid taps produce one clean pulse instead of a strobe.
+  `lib/di/inyeccion.dart` — wires `HapticFeedbackFlutter()` into `_construirJuegoViewModel`.
+  New tests: `test/presentation/juego_viewmodel_haptic_test.dart` (3 tests — AC1 single pulse + single buzz on 5 rapid invalid taps via a frozen clock, AC2 haptic port invoked on an invalid tap, AC4 valid move is silent), `test/infrastructure/haptic_feedback_port_test.dart` (1 test — AC2 graceful no-op when the platform haptics channel rejects the call, via a mock `SystemChannels.platform` handler that throws `PlatformException`). Verified: **`flutter test` 360/360 green** (354 prior + 6 new); **`flutter analyze`** clean (only pre-existing info-level `prefer_initializing_formals` and similar style hints); zero `package:flutter`/haptic symbols under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as the guardrails; the full suite passed on the first green run.
+- **Lessons learned / limitations identified:** (1) Modelling the debounced view/haptic signal (`alertaInvalida`) as a field *separate* from the ticket-02 rule outcome (`movimientoInvalido`) kept the "rule unchanged" guarantee structural — the move still counts and the board stays byte-identical on every invalid tap, while only the *leading* tap of a burst produces feedback. Collapsing the two into one flag would have re-coupled the debounce (a presentation concern) to the rule mirror. (2) The debounce is leading-edge against the last *pulse* timestamp, so haptics ride the same gate as the visual pulse and coalesce together — one buzz per interaction, satisfying "rapid taps don't spam" without a second mechanism. (3) Injecting an overridable `ahora` clock (defaulting to `DateTime.now`) made the "5 rapid taps → 1 pulse" test deterministic with a frozen clock, avoiding a flaky wall-clock dependency. (4) Placing `HapticFeedbackPort` in `application/ports` (not `domain`) mirrors the existing `IControlAudio`/`Reloj` precedent: the port is a Flutter-free abstraction, so AC3 (no haptic symbol in the *rules*) holds — the use cases and entities never reference it; only the ViewModel (presentation) and the adapter (infrastructure) do. (5) The infrastructure adapter's fire-and-forget `.catchError` is essential: `HapticFeedback.mediumImpact()` returns a `Future` whose platform-channel rejection would otherwise surface as an unhandled async error on a device without a vibrator; the test proves the rejection is swallowed by mocking the channel to throw.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1563,10 +1579,10 @@ eloj:
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
     03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27,
-    and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    28, and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (354 passing tests, all
+    Rough judgment over the files added across the slices (360 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
     `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
     under `assets/sounds/`).
