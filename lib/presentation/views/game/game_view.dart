@@ -2,6 +2,8 @@ import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 
+import '../../../core/animacion/muestreador_trayectoria.dart';
+import '../../../core/animacion/punto2d.dart';
 import '../../../core/i18n/cadenas_scope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
@@ -54,10 +56,18 @@ class GameView extends StatefulWidget {
   State<GameView> createState() => _GameViewState();
 }
 
-class _GameViewState extends State<GameView>
-    with SingleTickerProviderStateMixin {
+class _GameViewState extends State<GameView> with TickerProviderStateMixin {
   /// Drives the invalid-tap shake/flash; one short pulse per penalized move.
   late final AnimationController _feedback;
+
+  /// The exit animations currently playing — one per arrow leaving the board.
+  /// Multiple may run at once (concurrent exits, AC4); each is removed and its
+  /// controller disposed when it finishes.
+  final List<_SalidaEnCurso> _salidas = <_SalidaEnCurso>[];
+
+  /// Guards against launching the same transient descriptor twice: the last
+  /// descriptor instance already turned into a running animation.
+  AnimacionSalida? _ultimaSalidaProcesada;
 
   @override
   void initState() {
@@ -66,18 +76,81 @@ class _GameViewState extends State<GameView>
     widget.viewModel.addListener(_alCambiarEstado);
   }
 
-  /// Fires the feedback pulse whenever the published state reports a penalized
-  /// invalid tap. The board itself is never mutated here — only the affordance.
+  /// Reacts to every published state: fires the invalid-tap feedback pulse and
+  /// launches a snake-gait exit animation when a fresh descriptor appears. The
+  /// board itself is never mutated here — only the transient affordances.
   void _alCambiarEstado() {
-    if (widget.viewModel.estado.alertaInvalida) {
+    final estado = widget.viewModel.estado;
+    if (estado.alertaInvalida) {
       _feedback.forward(from: 0);
     }
+    final salida = estado.animacionSalida;
+    if (salida != null && !identical(salida, _ultimaSalidaProcesada)) {
+      _ultimaSalidaProcesada = salida;
+      _lanzarSalida(salida);
+    }
+  }
+
+  /// Starts one exit animation for [salida], driving a normalized `t` from 0→1
+  /// that the painter samples along the arrow's own polyline.
+  void _lanzarSalida(AnimacionSalida salida) {
+    final controlador = AnimationController(
+      vsync: this,
+      duration: AppDurations.slow,
+    );
+    final tablero = widget.viewModel.estado.tablero;
+    final enCurso = _SalidaEnCurso(
+      idFlecha: salida.idFlecha,
+      controlador: controlador,
+      muestreador: _construirMuestreador(salida),
+      cantidad: salida.segmentos.length,
+      direccion: salida.direccionSalida,
+      filas: tablero.filas,
+      columnas: tablero.columnas,
+    );
+    controlador.addStatusListener((status) {
+      if (status != AnimationStatus.completed) return;
+      // Once finished, drop the overlay and free the controller. The `mounted`
+      // guard covers the screen closing mid-exit — there, dispose() already
+      // released every in-flight controller, so this listener never fires late.
+      if (mounted) setState(() => _salidas.remove(enCurso));
+      controlador.dispose();
+    });
+    setState(() => _salidas.add(enCurso));
+    controlador.forward();
+  }
+
+  /// Builds the arc-length sampler for [salida]: the exiting cell centres
+  /// (tail → head) in cell units, extended straight past the head toward the
+  /// off-board edge target with enough runway for the whole body to clear.
+  MuestreadorTrayectoria _construirMuestreador(AnimacionSalida salida) {
+    Punto2D centro(Posicion p) => Punto2D(p.columna + 0.5, p.fila + 0.5);
+
+    final puntos = salida.segmentos.map(centro).toList();
+    final cabeza = salida.segmentos.last;
+    final paso = salida.direccionSalida.delta;
+    // Steps from the head to the board-edge target, then a full body-length of
+    // extra runway so at t = 1 even the tail has slid off the board.
+    final distanciaBorde = (salida.objetivoBorde.columna - cabeza.columna) *
+            paso.x +
+        (salida.objetivoBorde.fila - cabeza.fila) * paso.y;
+    final pasosExtra = distanciaBorde + salida.segmentos.length;
+    for (var k = 1; k <= pasosExtra; k++) {
+      puntos.add(centro(Posicion.en(
+        fila: cabeza.fila + paso.y * k,
+        columna: cabeza.columna + paso.x * k,
+      )));
+    }
+    return MuestreadorTrayectoria(puntos);
   }
 
   @override
   void dispose() {
     widget.viewModel.removeListener(_alCambiarEstado);
     _feedback.dispose();
+    for (final salida in _salidas) {
+      salida.controlador.dispose();
+    }
     widget.viewModel.dispose();
     super.dispose();
   }
@@ -179,6 +252,7 @@ class _GameViewState extends State<GameView>
                             child: _Tablero(
                               estado: estado,
                               game: game,
+                              salidas: _salidas,
                               onTap: widget.viewModel.tocar,
                             ),
                           ),
@@ -574,16 +648,22 @@ class _Hud extends StatelessWidget {
   }
 }
 
-/// The board: a tappable canvas that paints the whole grid in one pass.
+/// The board: a tappable canvas that paints the whole grid in one pass, with any
+/// in-flight snake-gait exit animations overlaid on top of it.
 class _Tablero extends StatelessWidget {
   const _Tablero({
     required this.estado,
     required this.game,
+    required this.salidas,
     required this.onTap,
   });
 
   final JuegoViewState estado;
   final GameTheme game;
+
+  /// The exit animations currently playing, drawn over the settled board so the
+  /// arrow that already left the domain glides off visually.
+  final List<_SalidaEnCurso> salidas;
   final void Function(Posicion posicion) onTap;
 
   @override
@@ -606,14 +686,161 @@ class _Tablero extends StatelessWidget {
             }
             onTap(Posicion.en(fila: fila, columna: columna));
           },
-          child: CustomPaint(
-            size: Size.infinite,
-            painter: _TableroPainter(tablero: tablero, game: game),
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              CustomPaint(
+                size: Size.infinite,
+                painter: _TableroPainter(tablero: tablero, game: game),
+              ),
+              // One repainting overlay per exiting arrow; each samples its own
+              // controller so concurrent exits animate independently.
+              for (final salida in salidas)
+                IgnorePointer(
+                  child: AnimatedBuilder(
+                    animation: salida.controlador,
+                    builder: (context, _) => CustomPaint(
+                      size: Size.infinite,
+                      painter: _SalidaPainter(
+                        salida: salida,
+                        t: salida.controlador.value,
+                        game: game,
+                      ),
+                    ),
+                  ),
+                ),
+            ],
           ),
         );
       },
     );
   }
+}
+
+/// One arrow's in-flight exit animation: its controller plus the pure sampler
+/// that maps a normalized `t` onto the head and trailing body positions.
+class _SalidaEnCurso {
+  _SalidaEnCurso({
+    required this.idFlecha,
+    required this.controlador,
+    required this.muestreador,
+    required this.cantidad,
+    required this.direccion,
+    required this.filas,
+    required this.columnas,
+  });
+
+  /// The id of the exiting path — selects its colour so the glide matches the
+  /// arrow that was on the board.
+  final int idFlecha;
+
+  /// Drives the normalized progress `t` from 0 (settled) to 1 (fully off-board).
+  final AnimationController controlador;
+
+  /// The pure arc-length sampler for this arrow's exit polyline.
+  final MuestreadorTrayectoria muestreador;
+
+  /// How many body segments the snake has (its cell count).
+  final int cantidad;
+
+  /// The direction the head points as it leaves — where the arrowhead aims.
+  final Direccion direccion;
+
+  /// The board's row count, used to scale cell units to pixels so the overlay
+  /// lines up with the settled board beneath it.
+  final int filas;
+
+  /// The board's column count (see [filas]).
+  final int columnas;
+}
+
+/// Paints one exiting arrow as a continuous, bending snake: the sampled segment
+/// centres are stroked into a single glowing line with an arrowhead at the head.
+///
+/// It is deliberately *dumb* — it consumes points sampled by
+/// [MuestreadorTrayectoria] and never computes any path geometry itself, so the
+/// gait (and its correctness through bends) lives entirely in the pure sampler.
+class _SalidaPainter extends CustomPainter {
+  _SalidaPainter({
+    required this.salida,
+    required this.t,
+    required this.game,
+  });
+
+  final _SalidaEnCurso salida;
+  final double t;
+  final GameTheme game;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final puntos = salida.muestreador.posicionesSegmentos(
+      t: t,
+      cantidad: salida.cantidad,
+    );
+    if (puntos.isEmpty) return;
+
+    // Cell units already carry the +0.5 centre offset, so scaling by the cell
+    // size lands exactly where the board painter draws its cells.
+    final anchoC = size.width / salida.columnas;
+    final altoC = size.height / salida.filas;
+    Offset aPixel(Punto2D p) => Offset(p.x * anchoC, p.y * altoC);
+    final lado = anchoC < altoC ? anchoC : altoC;
+    final grosor = lado * 0.22;
+    final color = game.colorFlecha(salida.idFlecha);
+
+    final glow = Paint()
+      ..color = color.withValues(alpha: 0.35)
+      ..strokeWidth = grosor * 1.5
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke
+      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 8);
+    final trazo = Paint()
+      ..color = color
+      ..strokeWidth = grosor
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round
+      ..style = PaintingStyle.stroke;
+
+    final camino = Path()..moveTo(aPixel(puntos.last).dx, aPixel(puntos.last).dy);
+    for (var i = puntos.length - 2; i >= 0; i--) {
+      camino.lineTo(aPixel(puntos[i]).dx, aPixel(puntos[i]).dy);
+    }
+    canvas.drawPath(camino, glow);
+    canvas.drawPath(camino, trazo);
+
+    // Arrowhead at the head (first sampled point), aiming along the exit.
+    _pintarPunta(canvas, aPixel(puntos.first), salida.direccion, lado, color);
+  }
+
+  /// Draws a filled triangular arrowhead at [centro] pointing in [direccion].
+  void _pintarPunta(
+    Canvas canvas,
+    Offset centro,
+    Direccion direccion,
+    double lado,
+    Color color,
+  ) {
+    final dir = Offset(
+      direccion.delta.x.toDouble(),
+      direccion.delta.y.toDouble(),
+    );
+    final perp = Offset(-dir.dy, dir.dx);
+    final punta = centro + dir * (lado * 0.34);
+    final base = centro + dir * (lado * 0.04);
+    final izquierda = base + perp * (lado * 0.17);
+    final derecha = base - perp * (lado * 0.17);
+    final camino = Path()
+      ..moveTo(punta.dx, punta.dy)
+      ..lineTo(izquierda.dx, izquierda.dy)
+      ..lineTo(derecha.dx, derecha.dy)
+      ..close();
+    canvas.drawPath(camino, Paint()..color = color);
+  }
+
+  @override
+  bool shouldRepaint(covariant _SalidaPainter old) =>
+      old.t != t || !identical(old.salida, salida) || old.game != game;
 }
 
 /// Paints empty dots, walls and continuous bending arrow paths with arrowheads.

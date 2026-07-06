@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-028 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-029 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
@@ -1556,7 +1556,24 @@ eloj:
 - **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as guardrails throughout.
 - **Lessons learned / limitations identified:** (1) Integer cross-multiplication (`puntaje * 10 >= referencia * 9`) avoids the float-drift issues of percentage-based comparison while keeping the 90% / 67% threshold semantics clear. (2) Removing `umbralesEstrellas` from `DefinicionNivel` required updating 12 files across three layers (domain, application, presentation tests) — a one-time refactoring cost that eliminates the concept of hardcoded thresholds entirely. (3) The `referencia` getter uses `import 'dart:math'` (the only non-project import in `domain/`) for the `max(0, ...)` guard, which is acceptable because `dart:math` is a core Dart library, not a Flutter import — the Clean Architecture domain-purity guard (`dependency_direction_test.dart`) only forbids `package:flutter` imports. (4) The rule-based `referencia` calculation (`esCronometrado ? baseNivel + limiteTiempo * ktiempo : baseNivel`) mirrors the same condition used in `EstrategiaPuntuacionMixta` to select the scoring formula, keeping the max-score estimation consistent with the scoring strategy. (5) All golden fixtures (3 timed levels, 3 untimed levels) were updated to assert the new proportional band behaviour, matching the backend's Ticket 17 contract exactly — verified by the test suite.
 
-### T-028 — Ticket 28 · Invalid-Move Feedback — Single Red Alert (debounced) + Haptic Vibration
+### T-028 — Ticket 22 · Path-following (snake-like) arrow exit animation
+
+- **Task / problem addressed:** Implement Story A1 (visual refinement) from `.issues/22-feat-frontend-path-following-exit-animation.md`: when a `Trayectoria` resolves, animate it out of the board **like a snake moving forward** — the head advances along the path's own multi-cell trajectory to the exit edge and off-board, and every tail segment follows the *identical* polyline (including 90° bends) one cell behind, until the whole path has left. It must **not** be a rigid whole-shape slide. Strictly presentation-only: the domain already removes the path atomically the instant the tap is valid; this ticket changes only how that removal is *drawn over time*. Acceptance criteria: (AC1) head advances along its own trajectory, each tail follows the identical bending polyline one cell behind; (AC2) motion is driven by a Flutter `AnimationController` tweening arc-length-parametrized segments, not a rigid bitmap translation; (AC3) animation is decoupled from the rule — `movimientos`/victory unaffected, skipping it yields an identical end state (empty dots); (AC4) holds the frame budget, concurrent exits don't stutter; (AC5) works on shaped boards (Ticket 16).
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket `c:\…\.issues\22-feat-frontend-path-following-exit-animation.md` it is obligatory to apply the rules in theses skills `c:\…\.claude\skills\clean-architecture` `c:\…\.claude\skills\tdd-strict`".
+- **Result obtained:** Strict TDD (🔴 red → 🟢 green → ♻️ refactor) producing —
+  **core (pure Dart, zero Flutter/`dart:ui`):**
+  `lib/core/animacion/punto2d.dart` — a lightweight value-type 2D point in cell units (`x`, `y`, `interpolarHacia`, value equality) so the sampler stays framework-free;
+  `lib/core/animacion/muestreador_trayectoria.dart` — `MuestreadorTrayectoria`, the arc-length polyline sampler: `segmentosDesde(longitudCabeza, cantidad, separacion)` places each tail one cell of arc-length behind the one ahead (following bends, never a rigid diagonal offset), and `posicionesSegmentos(t, cantidad)` maps normalized `t`∈[0,1] so the head rests on its start cell at `t=0` and reaches the off-board edge target at `t=1`; private `_puntoEnLongitud` does the clamped per-segment lerp over cumulative arc-lengths.
+  **presentation (no Flutter UI import in VM):**
+  `lib/presentation/viewmodels/juego_view_state.dart` — new transient `AnimacionSalida` descriptor (idFlecha, ordered `segmentos` tail→head, `direccionSalida`, off-board `objetivoBorde`); the `copyWith` field is deliberately **not** carried forward with `?? this`, so it auto-clears on the very next state and a finished animation never leaks into later frames;
+  `lib/presentation/viewmodels/juego_view_model.dart` — on a valid move builds the descriptor from `resultado.delta.trayectoria` and computes `objetivoBorde` by walking off the grid edge (`_objetivoBorde`/`_dentroDelTablero`).
+  **infrastructure/ui:**
+  `lib/presentation/views/game/game_view.dart` — `_GameViewState` switched to `TickerProviderStateMixin`, drives one `AnimationController` per exit (concurrent exits supported, AC4), builds the exit polyline (cell centres + straight extension past the head with a full body-length of runway) and a *dumb* `_SalidaPainter` that consumes only sampled points to stroke the bending snake with an arrowhead; controllers are cleaned up on completion (`mounted`-guarded) and in `dispose()`.
+  New tests (4): `test/core/path_sampling_test.dart` — `should_place_tail_segments_one_cell_behind_head_along_curve_when_sampled_at_t` (AC1/AC2, verified on an L-shaped bending polyline), `should_reach_edge_target_when_t_equals_one` (AC1); `test/presentation/juego_viewmodel_test.dart` (appended) — `should_emit_exit_animation_descriptor_with_ordered_path_when_move_valid` (AC1/AC3, incl. the transient-clear assertion), `should_not_emit_exit_descriptor_when_move_invalid` (AC3). Verified: **`flutter test` 360/360 green** (356 prior + 4 new), including the architecture guards (`dependency_direction_test`, `ubiquitous_language_test`); **`flutter analyze` clean on all new/changed files** (the only remaining lints are 6 pre-existing info-level `prefer_initializing_formals` hints in the untouched `JuegoViewModel` constructor); zero `package:flutter`/`dart:ui` imports under `core/animacion`, `domain/`, or the ViewModel.
+- **Modifications made by the team:** Review only for the final code — but two self-corrections were made *during* implementation before the green run: (a) the sampler's first draft hand-rolled a Newton's-method `sqrt` to "avoid importing `dart:math`", which was needless — simplified to `import 'dart:math'` (a core Dart library, allowed everywhere; only `package:flutter`/`dart:ui` are forbidden in `core`/`domain`); (b) the `_SalidaPainter` first accessed board dimensions through confused `_columnas`/`_cols`/`_filas` helpers referencing non-existent fields — cleaned up by carrying `filas`/`columnas` on the `_SalidaEnCurso` holder and scaling cell-units → pixels directly. A `mounted` guard was also added to the completion `setState` so a controller finishing after the screen closes can't touch a disposed State.
+- **Lessons learned / limitations identified:** (1) Modelling the exit as **arc-length parametrization of a single shared polyline** made "each tail is exactly one cell behind, through every bend" a structural property of the sampler rather than per-frame geometry in the widget — the painter stays dumb and the correctness lives in two pure unit tests with no widget/controller needed. (2) A *transient* `copyWith` field (assigned directly, not `?? this.x`) is the clean way to model a one-shot descriptor that must ride on exactly one emitted state and clear on the next; it also keeps the rule/animation decoupling (AC3) honest — the running `AnimationController`, not the view state, owns the in-flight animation. (3) Keeping the sampler in `core` with its own `Punto2D` (instead of reusing the domain `Vector3` or Flutter's `Offset`) preserved both the layer boundary and framework-freedom. (4) No headless widget test was added for the `GameView` overlay wiring (the repo tests ViewModels + pure logic, not widgets, and driving `CustomPaint` headlessly on Windows is flaky) — the animation *policy* is covered by the sampler + VM tests, but a device/emulator run remains the way to confirm the on-screen glide visually.
+### T-029 — Ticket 28 · Invalid-Move Feedback — Single Red Alert (debounced) + Haptic Vibration
 
 - **Task / problem addressed:** Implement Story A2 refinement from `.issues/28-feat-frontend-invalid-move-haptic-feedback.md`: when the player taps a **blocked** arrow (invalid move), the red visual alert must fire **exactly once per interaction** — rapid repeated invalid taps must not stack/strobe — **and** the device must emit a short **haptic vibration**. The invalid-move *rule* is unchanged (move still counts, board unchanged, ticket 02). Acceptance criteria: (AC1) an invalid tap triggers the red alert exactly once; rapid taps within a debounce window coalesce into a single clean pulse; (AC2) an invalid tap emits haptic feedback via a **port**, degrading gracefully (no crash) on devices without haptics; (AC3) haptics/visual are decoupled from rules — `domain`/`application` contain no haptic or UI symbol; (AC4) a **valid** move triggers neither the alert nor the haptic.
 - **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
@@ -1578,7 +1595,7 @@ eloj:
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27,
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27,
     28, and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
@@ -1824,6 +1841,21 @@ eloj:
   - **How it was corrected:** Changed the type annotation to
     `({String asset, double volumen})` and the literals to named field syntax
     (`(asset: ..., volumen: ...)`).
+- **Case:** The path sampler's first draft hand-rolled a Newton's-method square
+  root specifically to "avoid importing `dart:math`", over-engineering a
+  non-problem (ticket 22).
+  - **How it was detected:** Self-review during the green phase — `dart:math` is a
+    core Dart library, not a Flutter/`dart:ui` import, so it is allowed in `core`
+    and never flagged by the domain-purity guard.
+  - **How it was corrected:** Deleted the bespoke `sqrt` and replaced it with
+    `import 'dart:math' as math` + `math.sqrt`.
+- **Case:** The exit-animation painter accessed board dimensions through confused
+  `_columnas`/`_cols`/`_filas` helper getters that referenced non-existent fields
+  on the animation holder, so it did not compile (ticket 22).
+  - **How it was detected:** Analyzer errors ("getter `_columnas` isn't defined").
+  - **How it was corrected:** Carried `filas`/`columnas` on the `_SalidaEnCurso`
+    holder and scaled cell-units → pixels directly in the painter, removing the
+    junk helpers.
 
 ### Team reflection
 

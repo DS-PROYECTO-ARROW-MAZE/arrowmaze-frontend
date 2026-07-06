@@ -263,6 +263,23 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
         (_sesion.tiempoRestante == null ||
             _sesion.tiempoRestante == Duration.zero);
 
+    // On a valid exit emit the transient snake-gait descriptor built from the
+    // path that just left (carried on the move's delta). It rides on this one
+    // state and is cleared on the next — the domain already removed the arrow,
+    // so this is purely how the View draws that removal over time (AC1/AC3).
+    final trayectoriaSalida = resultado.delta?.trayectoria;
+    final animacionSalida = trayectoriaSalida == null
+        ? null
+        : AnimacionSalida(
+            idFlecha: trayectoriaSalida.id,
+            segmentos: List<Posicion>.unmodifiable(trayectoriaSalida.segmentos),
+            direccionSalida: trayectoriaSalida.direccionCabeza,
+            objetivoBorde: _objetivoBorde(
+              trayectoriaSalida.cabeza,
+              trayectoriaSalida.direccionCabeza,
+            ),
+          );
+
     _estado = _estado.copyWith(
       tablero: invalido ? null : _instantanea(),
       movimientos: resultado.movimientos,
@@ -274,6 +291,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       derrota: derrota,
       derrotaPorTiempo: derrotaPorTiempo,
       tiempoRestante: _sesion.tiempoRestante,
+      animacionSalida: animacionSalida,
     );
     notifyListeners(); // MVVM data-binding: push new state to the View.
   }
@@ -411,6 +429,24 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     _reloj.detener();
     super.dispose();
   }
+
+  /// The first off-board cell reached by stepping from [cabeza] along
+  /// [direccion] — the target the exiting head travels to so the whole body
+  /// clears the board. Walks cell by cell until it lands outside the grid.
+  Posicion _objetivoBorde(Posicion cabeza, Direccion direccion) {
+    var actual = cabeza;
+    while (_dentroDelTablero(actual)) {
+      actual = actual.desplazar(direccion);
+    }
+    return actual;
+  }
+
+  /// Whether [posicion] lies within the board's row/column bounds.
+  bool _dentroDelTablero(Posicion posicion) =>
+      posicion.fila >= 0 &&
+      posicion.columna >= 0 &&
+      posicion.fila < _tablero.filas &&
+      posicion.columna < _tablero.columnas;
 
   /// Reads the current board through the port into a flat UI snapshot.
   TableroUI _instantanea() {
