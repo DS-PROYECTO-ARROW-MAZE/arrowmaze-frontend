@@ -119,6 +119,43 @@ class VictoriaViewState {
   final bool mostrarPuntuacion;
 }
 
+/// A transient descriptor of an arrow **exiting** the board, emitted for the one
+/// state that a valid `FlechaEliminada` produces and cleared on the next.
+///
+/// The domain already removed the path atomically (the board snapshot on the
+/// same state shows it gone); this descriptor is *purely visual* — it tells the
+/// View which cells left, in order, and where they head so it can play the
+/// snake-gait exit over time. It carries the ordered exiting cells (tail → head),
+/// the head's exit [direccionSalida] and an off-board [objetivoBorde] the head
+/// travels to. Because it rides only on the emitting state, a later state (with
+/// no descriptor) means the animation input is spent — the running controller,
+/// not this snapshot, owns the in-flight animation (rule/animation decoupling,
+/// AC3).
+class AnimacionSalida {
+  /// Creates an exit descriptor for path [idFlecha] made of [segmentos]
+  /// (tail → head), exiting along [direccionSalida] toward [objetivoBorde].
+  const AnimacionSalida({
+    required this.idFlecha,
+    required this.segmentos,
+    required this.direccionSalida,
+    required this.objetivoBorde,
+  });
+
+  /// The id of the path that left — selects its colour when the View paints the
+  /// exiting body.
+  final int idFlecha;
+
+  /// The exiting cells in order from tail to head (the head is [segmentos.last]).
+  final List<Posicion> segmentos;
+
+  /// The direction the head travels as it leaves the board.
+  final Direccion direccionSalida;
+
+  /// The off-board cell the head aims for — one step past the board edge along
+  /// [direccionSalida], so the whole body clears the board.
+  final Posicion objetivoBorde;
+}
+
 /// The immutable state the `JuegoViewModel` exposes to its View.
 ///
 /// New states are produced with [copyWith] so the View can rely on instance
@@ -139,6 +176,7 @@ class JuegoViewState {
     this.tiempoRestante,
     this.muted = false,
     this.usosUndoRestantes = 3,
+    this.animacionSalida,
   });
 
   /// The board snapshot to render.
@@ -184,6 +222,13 @@ class JuegoViewState {
   /// How many undos remain this level (starts at 3, capped per Ticket 30).
   final int usosUndoRestantes;
 
+  /// The exit animation to play, or `null` when nothing is exiting.
+  ///
+  /// **Transient**: it is present only on the state a valid move emits and is
+  /// deliberately *not* carried forward by [copyWith], so it clears on the very
+  /// next state and a finished animation never leaks into later frames.
+  final AnimacionSalida? animacionSalida;
+
   /// Returns a copy with the given fields replaced.
   JuegoViewState copyWith({
     TableroUI? tablero,
@@ -198,6 +243,7 @@ class JuegoViewState {
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
     int? usosUndoRestantes,
+    AnimacionSalida? animacionSalida,
   }) {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
@@ -213,6 +259,9 @@ class JuegoViewState {
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,
       usosUndoRestantes: usosUndoRestantes ?? this.usosUndoRestantes,
+      // Transient on purpose: a copy without an explicit descriptor clears it,
+      // so the exit animation input never survives into the next frame.
+      animacionSalida: animacionSalida,
     );
   }
 }
