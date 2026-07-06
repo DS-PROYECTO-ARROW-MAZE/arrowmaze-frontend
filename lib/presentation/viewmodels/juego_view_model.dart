@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 
 import '../../application/ports/consulta_progreso_local.dart';
+import '../../application/ports/haptic_feedback_port.dart';
 import '../../application/ports/i_control_audio.dart';
 import '../../application/ports/i_registro.dart';
 import '../../application/ports/reloj.dart';
@@ -60,11 +61,15 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     IControlAudio? audioControl,
     SincronizarProgresoUseCase? sincronizar,
     IRegistro? registro,
+    HapticFeedbackPort? haptica,
+    DateTime Function()? ahora,
   })  : _idNivel = idNivel,
         _nivelIdRemoto = nivelIdRemoto,
         _progreso = progreso,
         _sincronizar = sincronizar,
         _registro = registro,
+        _haptica = haptica,
+        _ahora = ahora ?? DateTime.now,
         _moverFlecha = moverFlecha,
         _sesion = moverFlecha.sesion,
         _audioControl = audioControl,
@@ -95,6 +100,25 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   final DefinicionNivel _definicionNivel;
   final CalcularPuntuacionUseCase _calcularPuntuacion;
   final IControlAudio? _audioControl;
+
+  /// Optional tactile-feedback port; when present, a **new** invalid-alert pulse
+  /// buzzes the device (Ticket 28). Kept behind the port so no Flutter/haptic
+  /// symbol reaches `domain`/`application` (DIP).
+  final HapticFeedbackPort? _haptica;
+
+  /// Injected clock (`DateTime.now` in production) used to debounce the invalid
+  /// alert; overridable so the debounce window is testable deterministically.
+  final DateTime Function() _ahora;
+
+  /// The debounce window that coalesces a burst of invalid taps into a single
+  /// red-alert pulse and a single haptic buzz: an invalid tap within this span
+  /// of the previous *pulse* is still counted as a move but raises no new pulse,
+  /// so the flash never strobes (Ticket 28, AC1).
+  static const Duration ventanaAlertaInvalida = Duration(milliseconds: 400);
+
+  /// When the last alert pulse fired, or `null` when the current streak of
+  /// invalid taps has been broken (by a valid move or an undo).
+  DateTime? _ultimaAlertaInvalida;
 
   /// The id of the level being played — used to record completion against the
   /// right level for progression/unlocks (Ticket 13).
@@ -165,10 +189,12 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// [alOcurrirEvento] before this method continues) and then publishes a new
   /// [JuegoViewState] via [copyWith] for any tap that counts as a move.
   /// A **valid** move rebuilds the board snapshot; a **penalized invalid** move
-  /// keeps the existing snapshot untouched and only raises
-  /// [JuegoViewState.movimientoInvalido] so the View can play its shake/flash.
-  /// A tap that resolves to no arrow — or one rejected while paused or
-  /// finished — is ignored (no notification).
+  /// keeps the existing snapshot untouched, raises [JuegoViewState.movimientoInvalido]
+  /// (the rule mirror) and — on the *leading* tap of a rapid streak — the
+  /// debounced [JuegoViewState.alertaInvalida] pulse plus a haptic buzz, so the
+  /// View flashes/buzzes exactly once (Ticket 28). A tap that resolves to no
+  /// arrow — or one rejected while paused or finished — is ignored (no
+  /// notification).
   void tocar(Posicion posicion) {
     final resultado = _moverFlecha.ejecutar(posicion);
     // Events were already delivered to alOcurrirEvento via the publisher;
@@ -176,6 +202,17 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     if (!resultado.registrado) return;
 
     final invalido = !resultado.valido;
+    // Debounced red-alert pulse (AC1): only the leading invalid tap of a streak
+    // raises the pulse and buzzes; a valid move ends the streak so the next
+    // invalid tap alerts again. Haptics ride the pulse, so they coalesce too.
+    final bool alerta;
+    if (invalido) {
+      alerta = _registrarAlertaInvalida();
+      if (alerta) _haptica?.vibrar();
+    } else {
+      alerta = false;
+      _ultimaAlertaInvalida = null;
+    }
     _coleccionables += resultado.eventos
         .where((e) => e.tipo == TipoEvento.coleccionableRecogido)
         .length;
@@ -249,6 +286,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       coleccionables: _coleccionables,
       movimientoInvalido: invalido,
+      alertaInvalida: alerta,
       victoria: victoriaState,
       derrota: derrota,
       derrotaPorTiempo: derrotaPorTiempo,
@@ -256,6 +294,20 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       animacionSalida: animacionSalida,
     );
     notifyListeners(); // MVVM data-binding: push new state to the View.
+  }
+
+  /// Decides whether this invalid tap should raise a **new** alert pulse, and
+  /// records the pulse time when it does. Returns `false` for an invalid tap that
+  /// lands within [ventanaAlertaInvalida] of the previous pulse, so a burst of
+  /// rapid invalid taps yields a single clean flash + buzz (Ticket 28, AC1).
+  bool _registrarAlertaInvalida() {
+    final ahora = _ahora();
+    final ultima = _ultimaAlertaInvalida;
+    if (ultima != null && ahora.difference(ultima) < ventanaAlertaInvalida) {
+      return false;
+    }
+    _ultimaAlertaInvalida = ahora;
+    return true;
   }
 
   /// Toggles global audio mute on/off.
@@ -282,11 +334,15 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     final resultado = _deshacerMovimiento.ejecutar();
     if (!resultado.registrado) return;
 
+    // An undo ends the current invalid-tap streak, so a following invalid tap
+    // pulses again rather than being debounced against a pre-undo pulse.
+    _ultimaAlertaInvalida = null;
     _estado = _estado.copyWith(
       tablero: resultado.valido ? _instantanea() : null,
       movimientos: resultado.movimientos,
       movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       movimientoInvalido: false,
+      alertaInvalida: false,
       usosUndoRestantes: _deshacerMovimiento.usosRestantes,
     );
     notifyListeners(); // MVVM data-binding: push the reversed state to the View.

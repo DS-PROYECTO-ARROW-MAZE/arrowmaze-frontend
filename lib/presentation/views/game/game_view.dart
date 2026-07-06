@@ -81,7 +81,7 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
   /// board itself is never mutated here — only the transient affordances.
   void _alCambiarEstado() {
     final estado = widget.viewModel.estado;
-    if (estado.movimientoInvalido) {
+    if (estado.alertaInvalida) {
       _feedback.forward(from: 0);
     }
     final salida = estado.animacionSalida;
