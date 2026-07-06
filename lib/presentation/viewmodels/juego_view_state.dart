@@ -132,6 +132,7 @@ class JuegoViewState {
     this.movimientosRestantes = -1,
     this.coleccionables = 0,
     this.movimientoInvalido = false,
+    this.alertaInvalida = false,
     this.pausado = false,
     this.derrota = false,
     this.derrotaPorTiempo = false,
@@ -158,6 +159,14 @@ class JuegoViewState {
   /// unchanged but the View should play the shake/flash feedback. The flag rides
   /// on each new state instance, so a repeated invalid tap re-triggers it.
   final bool movimientoInvalido;
+
+  /// The **debounced** red-alert pulse: `true` only on the *leading* invalid tap
+  /// of an interaction, so the View flashes/buzzes exactly once even when the
+  /// player taps a blocked arrow rapidly. Distinct from [movimientoInvalido]
+  /// (which mirrors the rule and rides on *every* invalid tap): repeated invalid
+  /// taps within [JuegoViewModel.ventanaAlertaInvalida] leave this `false` so the
+  /// flash cannot strobe (Ticket 28, AC1).
+  final bool alertaInvalida;
 
   /// Whether the session is paused: the View dims the board and shows the resume
   /// overlay while taps are rejected (the domain `EstadoPausado`).
@@ -191,6 +200,7 @@ class JuegoViewState {
     int? movimientosRestantes,
     int? coleccionables,
     bool? movimientoInvalido,
+    bool? alertaInvalida,
     bool? pausado,
     bool? derrota,
     bool? derrotaPorTiempo,
@@ -206,6 +216,7 @@ class JuegoViewState {
           movimientosRestantes ?? this.movimientosRestantes,
       coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
+      alertaInvalida: alertaInvalida ?? this.alertaInvalida,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
       derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,
