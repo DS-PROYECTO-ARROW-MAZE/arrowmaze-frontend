@@ -375,6 +375,10 @@ abstract final class Inyeccion {
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
       restaurarProgreso: restaurarProgresoUseCase,
+      // Validate a persisted token against `GET /auth/me` on startup so a stale
+      // or invalid session drops the user on the login screen instead of
+      // silently auto-forwarding to Level Select.
+      verificarPerfil: obtenerPerfilUseCase,
     );
   }
 
