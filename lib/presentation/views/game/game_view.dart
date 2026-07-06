@@ -69,7 +69,7 @@ class _GameViewState extends State<GameView>
   /// Fires the feedback pulse whenever the published state reports a penalized
   /// invalid tap. The board itself is never mutated here — only the affordance.
   void _alCambiarEstado() {
-    if (widget.viewModel.estado.movimientoInvalido) {
+    if (widget.viewModel.estado.alertaInvalida) {
       _feedback.forward(from: 0);
     }
   }

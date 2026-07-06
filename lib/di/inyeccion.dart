@@ -46,6 +46,7 @@ import '../infrastructure/preferencias/preferencias_usuario_persistente.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
+import '../infrastructure/haptica/haptic_feedback_flutter.dart';
 import '../infrastructure/network/cliente_http_autenticado.dart';
 import '../infrastructure/niveles/catalogo_niveles_archivo.dart';
 import '../infrastructure/niveles/catalogo_niveles_remoto.dart';
@@ -202,6 +203,9 @@ abstract final class Inyeccion {
       // swallowing it, so the leaderboard can warn rather than show stale data.
       registro: registro,
       audioControl: AudioServiceImp.instance,
+      // Ticket 28: buzz the device on an invalid move, behind a port so no
+      // Flutter/haptic symbol reaches domain/application (DIP).
+      haptica: HapticFeedbackFlutter(),
     );
   }
 
