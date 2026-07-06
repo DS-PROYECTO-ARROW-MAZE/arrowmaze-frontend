@@ -175,4 +175,59 @@ void main() {
     expect(viewModel.estado.movimientoInvalido, isTrue);
     expect(viewModel.estado.animacionSalida, isNull);
   });
+
+  test('should_mark_absent_positions_as_non_playable_in_view_state', () {
+    // Arrange — a shaped 2×2 board with one absent corner (outside the shape).
+    final tablero = GrafoTablero.desde(
+      filas: 2,
+      columnas: 2,
+      ausentes: {const Posicion.en(fila: 0, columna: 1)},
+    );
+    final viewModel = JuegoViewModel(
+      tablero: tablero,
+      moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
+    );
+
+    // Assert — the masked board flags the absent corner as non-playable, while
+    // an in-shape cell stays playable (AC1). No UI-side re-derivation: the flag
+    // comes straight from the model's `CeldaAusente`.
+    final ausente = viewModel.estado.tablero
+        .celdaEn(const Posicion.en(fila: 0, columna: 1));
+    expect(ausente.tipo, TipoCeldaUI.ausente);
+    expect(ausente.esJugable, isFalse);
+
+    final presente = viewModel.estado.tablero
+        .celdaEn(const Posicion.en(fila: 0, columna: 0));
+    expect(presente.esJugable, isTrue);
+  });
+
+  test('should_distinguish_absent_from_empty_cell_in_view_state', () {
+    // Arrange — (0,1) is absent; every other cell is present empty space.
+    final tablero = GrafoTablero.desde(
+      filas: 2,
+      columnas: 2,
+      ausentes: {const Posicion.en(fila: 0, columna: 1)},
+    );
+    final viewModel = JuegoViewModel(
+      tablero: tablero,
+      moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
+    );
+
+    final ausente = viewModel.estado.tablero
+        .celdaEn(const Posicion.en(fila: 0, columna: 1));
+    final vacia = viewModel.estado.tablero
+        .celdaEn(const Posicion.en(fila: 0, columna: 0));
+
+    // Assert — absent ≠ empty: distinct kinds and distinct playability, so the
+    // painter draws a dot for the empty cell but nothing for the absent one, and
+    // only the empty cell is a hit-test target (AC2).
+    expect(ausente.tipo, TipoCeldaUI.ausente);
+    expect(vacia.tipo, TipoCeldaUI.vacia);
+    expect(ausente.esJugable, isFalse);
+    expect(vacia.esJugable, isTrue);
+  });
 }

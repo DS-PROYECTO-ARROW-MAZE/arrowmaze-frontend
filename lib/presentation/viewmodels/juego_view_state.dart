@@ -59,6 +59,15 @@ class CeldaUI {
 
   /// For the head segment, which way the arrowhead points; otherwise `null`.
   final Direccion? direccion;
+
+  /// Whether this cell belongs to the board's **playable region** — the single
+  /// named concept that threads the model's absent-mask into the View (ticket
+  /// 26). It is `false` only for [TipoCeldaUI.ausente] positions, which sit
+  /// outside a shaped board: the painter draws nothing for them and hit-testing
+  /// ignores them. Every other kind — including a transparent [TipoCeldaUI.vacia]
+  /// cell — is playable (present), so "absent ≠ empty" (AC2) is one comparison,
+  /// not a scattered null check.
+  bool get esJugable => tipo != TipoCeldaUI.ausente;
 }
 
 /// An immutable UI snapshot of the whole board.
@@ -82,6 +91,26 @@ class TableroUI {
   /// The cell snapshot at [posicion].
   CeldaUI celdaEn(Posicion posicion) =>
       celdas.firstWhere((c) => c.posicion == posicion);
+
+  /// The board's **hit-test seam**: resolves a tapped grid [posicion] to the
+  /// playable cell there, or `null` when the tap lands off the board or on an
+  /// absent (non-playable) position (ticket 26, AC4).
+  ///
+  /// The View maps a touch point to a grid position and asks here whether it
+  /// owns a playable cell — a tap on the void outside a shaped board resolves to
+  /// nothing (no hit-test target), while a present [TipoCeldaUI.vacia] cell
+  /// resolves normally. Because "playable" is read straight from [CeldaUI.esJugable],
+  /// the View never re-derives which cells exist (AC5).
+  CeldaUI? celdaJugableEn(Posicion posicion) {
+    if (posicion.fila < 0 ||
+        posicion.columna < 0 ||
+        posicion.fila >= filas ||
+        posicion.columna >= columnas) {
+      return null;
+    }
+    final celda = celdaEn(posicion);
+    return celda.esJugable ? celda : null;
+  }
 }
 
 /// The UI snapshot shown when the player wins — a **presentation** view state,

@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-029 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-030 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
@@ -1589,17 +1589,29 @@ eloj:
 - **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as the guardrails; the full suite passed on the first green run.
 - **Lessons learned / limitations identified:** (1) Modelling the debounced view/haptic signal (`alertaInvalida`) as a field *separate* from the ticket-02 rule outcome (`movimientoInvalido`) kept the "rule unchanged" guarantee structural — the move still counts and the board stays byte-identical on every invalid tap, while only the *leading* tap of a burst produces feedback. Collapsing the two into one flag would have re-coupled the debounce (a presentation concern) to the rule mirror. (2) The debounce is leading-edge against the last *pulse* timestamp, so haptics ride the same gate as the visual pulse and coalesce together — one buzz per interaction, satisfying "rapid taps don't spam" without a second mechanism. (3) Injecting an overridable `ahora` clock (defaulting to `DateTime.now`) made the "5 rapid taps → 1 pulse" test deterministic with a frozen clock, avoiding a flaky wall-clock dependency. (4) Placing `HapticFeedbackPort` in `application/ports` (not `domain`) mirrors the existing `IControlAudio`/`Reloj` precedent: the port is a Flutter-free abstraction, so AC3 (no haptic symbol in the *rules*) holds — the use cases and entities never reference it; only the ViewModel (presentation) and the adapter (infrastructure) do. (5) The infrastructure adapter's fire-and-forget `.catchError` is essential: `HapticFeedback.mediumImpact()` returns a `Future` whose platform-channel rejection would otherwise surface as an unhandled async error on a device without a vibrator; the test proves the rejection is swallowed by mocking the channel to throw.
 
+### T-030 — Ticket 26 · Render Irregular Board Shapes (client rendering of sparse masks)
+
+- **Task / problem addressed:** Complete the **client rendering** of non-rectangular boards from `.issues/26-feat-frontend-render-irregular-board-shapes.md`: the backend already serves shaped layouts (hearts, triangles, stars) as sparse masks, and ticket 16 (T-018) introduced the **absent-position** concept in the model. This ticket ensures the Flutter UI renders those shapes faithfully — only the playable region is drawn, and an **absent** position paints nothing and is excluded from hit-testing, distinct from a transparent `EmptyCell` (which still draws its dot). Acceptance criteria: (AC1) a sparse-mask board renders only its playable region — absent = no tile/dot/hit-test target; (AC2) **absent ≠ empty** — visibly and behaviourally distinct; (AC3) bending paths/arrowheads/dots draw within the shape; (AC4) tapping inside the shape resolves the owning path, tapping an absent region is a no-op; (AC5) UI consumes ticket 16's masked model without re-deriving geometry.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this tickect `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.issues\26-feat-frontend-render-irregular-board-shapes.md` follow the rules in this skills `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.claude\skills\clean-architecture` `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.claude\skills\tdd-strict`".
+- **Result obtained:** A codebase read first established that the **paint** side was already complete from ticket 16 (T-018): the domain `CeldaAusente`, the `TipoCeldaUI.ausente` render kind, the ViewModel's `_aCeldaUI` mapping of absent cells, and the `_TableroPainter` case that skips absent positions (draws nothing) were all in place, so AC1–AC3 were already satisfied. The remaining gaps were the explicit **"playable vs absent"** concept the ticket's tests pin down and the **hit-test** behaviour (AC4) — the View's `onTapDown` only did a manual bounds check and would have forwarded an absent tap. Strict TDD (red → green → refactor) then produced:
+  `lib/presentation/viewmodels/juego_view_state.dart` — new `CeldaUI.esJugable` getter (the single named concept threaded from the model: `tipo != TipoCeldaUI.ausente`, so "absent ≠ empty" is one comparison, not a scattered null check), and a new `TableroUI.celdaJugableEn(Posicion)` **hit-test seam** that returns the cell only when in-bounds *and* playable, else `null`.
+  `lib/presentation/views/game/game_view.dart` — `_Tablero.onTapDown` now resolves the touch through `tablero.celdaJugableEn(...)` (replacing the manual bounds check); taps off the board or on an absent position return early, so tapping the void outside a shaped board is a no-op (AC4), while geometry stays entirely model-driven (AC5).
+  New tests: `test/presentation/hit_test_test.dart` (4 tests — AC4 `should_ignore_tap_on_absent_position`, AC4 `should_resolve_owning_path_when_tap_inside_shape`, AC2 `should_resolve_empty_cell_inside_shape_as_playable`, plus an off-board-bounds guard — all building `TableroUI` directly as a pure board-mapping unit), and 2 added to the ticket-named `test/presentation/juego_viewmodel_test.dart` (AC1 `should_mark_absent_positions_as_non_playable_in_view_state`, AC2 `should_distinguish_absent_from_empty_cell_in_view_state`, driving a real `GrafoTablero.desde(..., ausentes: {...})` masked board through the ViewModel). Verified: **`flutter test` 370/370 green** (364 prior + 6 new); **`flutter analyze`** clean on both changed files (only the pre-existing repo-wide info-level `prefer_initializing_formals`/deprecation hints remain); the painter stayed a pure consumer of `TableroUI` with a single named absent concept.
+- **Modifications made by the team:** Review only on the implementation — no manual edits to `lib/` were required. One self-inflicted test slip was fixed mid-cycle: the first draft of the two ViewModel tests passed the absent set as `const {Posicion.en(...)}`, but `Posicion` overrides `==`/`hashCode`, so it cannot be a `const` set element (Dart compile error). Corrected to a non-const set `{const Posicion.en(...)}`, caught immediately by the analyzer and the red-phase compile.
+- **Lessons learned / limitations identified:** (1) Reading the codebase *before* writing paid off: most of the ticket's surface (painter skipping absent cells, the `ausente` render kind, the model mapping) was already delivered by ticket 16, so the work reduced to the genuinely missing behaviour (the hit-test seam) plus the tests that lock the whole shape-rendering contract in — avoiding re-implementing settled code. (2) Modelling "playable" as a single named getter (`esJugable`) on `CeldaUI` and routing hit-testing through one `TableroUI.celdaJugableEn` seam satisfied the ticket's refactor note — "keep absent a single named concept threaded from the model, no scattered null checks" — and let the View delegate its bounds/absent logic instead of re-deriving grid geometry (AC5). (3) Testing the hit-test seam against a directly-built `TableroUI` (rather than a widget/painter test) kept the unit pure and behaviour-focused, matching the ticket's "test behaviour/state mapping, not painter pixels" instruction. (4) A latent trap avoided: because absent cells resolve to no arrow, an absent tap was *already* a downstream no-op via the use case; making it an explicit hit-test rejection is the correct, testable expression of "absent = no hit-test target" rather than relying on that incidental behaviour.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 27,
-    28, and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
+    27, 28, and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (360 passing tests, all
+    Rough judgment over the files added across the slices (370 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
     `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
     under `assets/sounds/`).
@@ -1856,6 +1868,15 @@ eloj:
   - **How it was corrected:** Carried `filas`/`columnas` on the `_SalidaEnCurso`
     holder and scaled cell-units → pixels directly in the painter, removing the
     junk helpers.
+- **Case:** The first draft of the two shaped-board ViewModel tests passed the
+  absent mask as a `const` set literal — `ausentes: const {Posicion.en(...)}` —
+  but `Posicion` overrides `==`/`hashCode`, so it cannot be an element of a
+  constant set (ticket 26).
+  - **How it was detected:** `flutter analyze` / red-phase compile error
+    ("An element in a constant set can't override the '==' operator").
+  - **How it was corrected:** Changed to a non-const set with a const element
+    (`{const Posicion.en(...)}`), which is the correct form for a value type with
+    custom equality.
 
 ### Team reflection
 
