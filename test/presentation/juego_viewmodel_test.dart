@@ -104,4 +104,75 @@ void main() {
     expect(viewModel.estado.movimientos, 1);
     expect(notificaciones, 1);
   });
+
+  test(
+    'should_emit_exit_animation_descriptor_with_ordered_path_when_move_valid',
+    () {
+      // Arrange
+      final tablero = construirTablero();
+      final viewModel = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(tablero),
+        definicionNivel: definicion,
+        reloj: _RelojNulo(),
+      );
+
+      // Act — resolve the L-shaped path (head (1,0) exits left).
+      viewModel.tocar(const Posicion.en(fila: 2, columna: 1));
+
+      // Assert — the transient descriptor carries the exiting cells in order
+      // (tail → head), the exit direction and an off-board edge target so the
+      // View can play the snake gait (AC1).
+      final salida = viewModel.estado.animacionSalida;
+      expect(salida, isNotNull);
+      expect(salida!.idFlecha, 1);
+      expect(salida.segmentos, const [
+        Posicion.en(fila: 2, columna: 1),
+        Posicion.en(fila: 1, columna: 1),
+        Posicion.en(fila: 1, columna: 0),
+      ]);
+      expect(salida.direccionSalida, Direccion.izquierda);
+      // Head at (1,0) exiting left ⇒ the edge target is off-board at column -1.
+      expect(salida.objetivoBorde, const Posicion.en(fila: 1, columna: -1));
+
+      // And it is transient: a later state (any other notification) clears it so
+      // a finished animation never leaks into later frames (AC3, refactor note).
+      viewModel.toggleMute();
+      expect(viewModel.estado.animacionSalida, isNull);
+    },
+  );
+
+  test('should_not_emit_exit_descriptor_when_move_invalid', () {
+    // Arrange — a path whose head is boxed in by a wall so its ray is blocked.
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 3,
+      trayectorias: [
+        Trayectoria(
+          id: 1,
+          direccionCabeza: Direccion.arriba,
+          segmentos: const [Posicion.en(fila: 2, columna: 2)],
+        ),
+        Trayectoria(
+          id: 2,
+          direccionCabeza: Direccion.abajo,
+          segmentos: const [Posicion.en(fila: 1, columna: 2)],
+        ),
+      ],
+    );
+    final viewModel = JuegoViewModel(
+      tablero: tablero,
+      moverFlecha: MoverFlechaUseCase(tablero),
+      definicionNivel: definicion,
+      reloj: _RelojNulo(),
+    );
+
+    // Act — tap the arrow at (2,2): its upward ray is blocked by the arrow at
+    // (1,2), so the move is penalized/invalid.
+    viewModel.tocar(const Posicion.en(fila: 2, columna: 2));
+
+    // Assert — an invalid move never emits an exit descriptor (AC3).
+    expect(viewModel.estado.movimientoInvalido, isTrue);
+    expect(viewModel.estado.animacionSalida, isNull);
+  });
 }
