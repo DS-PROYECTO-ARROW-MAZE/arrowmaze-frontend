@@ -1,4 +1,5 @@
 import '../application/decoradores/caso_de_uso_accion.dart';
+import '../application/ports/preferencias_usuario.dart';
 import '../application/decoradores/decorador_metricas_caso_de_uso.dart';
 import '../application/decoradores/decorador_registro_caso_de_uso.dart';
 import '../application/decoradores/decorador_seguridad_caso_de_uso.dart';
@@ -39,7 +40,9 @@ import '../domain/sesion/sesion_juego.dart';
 import '../domain/tablero.dart';
 import '../domain/value_objects/presupuesto_movimientos.dart';
 import '../domain/value_objects/posicion.dart';
+import '../core/configuracion_manager.dart';
 import '../infrastructure/audio/audio_service_imp.dart';
+import '../infrastructure/preferencias/preferencias_usuario_persistente.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
 import '../infrastructure/datasources/fuente_tablero_memoria.dart';
@@ -56,6 +59,7 @@ import '../infrastructure/progreso/progreso_remoto_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../infrastructure/sesion/proveedor_sesion_persistente.dart';
+import '../presentation/viewmodels/ajustes_view_model.dart';
 import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/ranking_view_model.dart';
@@ -67,6 +71,29 @@ import '../presentation/viewmodels/sync_view_model.dart';
 ///
 /// No business logic lives here — only construction and wiring.
 abstract final class Inyeccion {
+  // ---------------------------------------------------------------------------
+  // Settings — sound toggle + language / i18n (Ticket 27)
+  // ---------------------------------------------------------------------------
+
+  /// The single [PreferenciasUsuario] adapter, backed by `shared_preferences`.
+  static PreferenciasUsuario get preferenciasUsuario => _preferenciasUsuario;
+  static final PreferenciasUsuarioPersistente _preferenciasUsuario =
+      PreferenciasUsuarioPersistente();
+
+  /// The DI-lifetime [ConfiguracionManager] (ADR-0002 — **not** a Singleton).
+  ///
+  /// Call [configuracionManager.inicializar] exactly once at app startup
+  /// (before `runApp`) to hydrate saved settings from storage (AC4).
+  static ConfiguracionManager get configuracionManager => _configuracionManager;
+  static final ConfiguracionManager _configuracionManager = ConfiguracionManager(
+    prefs: _preferenciasUsuario,
+    audioControl: AudioServiceImp.instance,
+  );
+
+  /// Builds the [AjustesViewModel] for the Settings screen.
+  static AjustesViewModel construirAjustesViewModel() =>
+      AjustesViewModel(config: _configuracionManager);
+
   /// The default startup level loaded from `assets/levels/level_01.json` — a
   /// real, hand-crafted, fully-dense interlocking puzzle.
   static const idNivelInicial = 1;
@@ -211,7 +238,7 @@ abstract final class Inyeccion {
     baseNivel: 1000,
     kmov: 10,
     ktiempo: 2,
-    umbralesEstrellas: [300, 600, 900],
+
     limiteTiempo: Duration(seconds: 90),
     esBonus: false,
   );
@@ -348,6 +375,10 @@ abstract final class Inyeccion {
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
       restaurarProgreso: restaurarProgresoUseCase,
+      // Validate a persisted token against `GET /auth/me` on startup so a stale
+      // or invalid session drops the user on the login screen instead of
+      // silently auto-forwarding to Level Select.
+      verificarPerfil: obtenerPerfilUseCase,
     );
   }
 

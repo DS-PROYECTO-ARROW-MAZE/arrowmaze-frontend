@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/cadenas.dart';
+import '../../../core/i18n/cadenas_scope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
@@ -11,15 +13,17 @@ import '../../viewmodels/seleccion_niveles_view_state.dart';
 /// Level Selection screen — a thin View that only draws (Ticket 13, DM §10.4).
 ///
 /// Observes [SeleccionNivelesViewModel] and renders one card per level with its
-/// lock affordance and star badge. Tapping an **unlocked** card calls
-/// [alSeleccionar] (injected by the composition root) to open that level — the
-/// View never builds the game itself.
+/// lock affordance and star badge. Every user-facing string is read from
+/// [CadenasScope] — no literals in this View (AC3). Tapping an **unlocked**
+/// card calls [alSeleccionar] (injected by the composition root) to open that
+/// level — the View never builds the game itself.
 class SeleccionNivelesView extends StatefulWidget {
   /// Creates the level-selection screen.
   const SeleccionNivelesView({
     required this.viewModel,
     required this.alSeleccionar,
     this.onLogout,
+    this.onAjustes,
     super.key,
   });
 
@@ -37,6 +41,10 @@ class SeleccionNivelesView extends StatefulWidget {
   /// Called when the user taps the Logout button. The composition root wires
   /// this to clear the session and navigate back to the auth screen.
   final VoidCallback? onLogout;
+
+  /// Called when the user taps the Settings button (AC1 — reachable after
+  /// login). The composition root wires this to push [AjustesView].
+  final VoidCallback? onAjustes;
 
   @override
   State<SeleccionNivelesView> createState() => _SeleccionNivelesViewState();
@@ -60,14 +68,22 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
+
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Level'),
+        title: Text(s.seleccionarNivel),
         actions: [
+          if (widget.onAjustes != null)
+            IconButton(
+              icon: const Icon(Icons.settings_outlined),
+              tooltip: s.ajustes,
+              onPressed: widget.onAjustes,
+            ),
           if (widget.onLogout != null)
             IconButton(
               icon: const Icon(Icons.logout),
-              tooltip: 'Logout',
+              tooltip: s.cerrarSesion,
               onPressed: widget.onLogout,
             ),
         ],
@@ -90,9 +106,8 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
             );
           }
           if (estado.niveles.isEmpty) {
-            return const Center(
-              child: Text('No levels available.',
-                  style: AppTypography.bodyMedium),
+            return Center(
+              child: Text(s.sinNiveles, style: AppTypography.bodyMedium),
             );
           }
 
@@ -132,6 +147,7 @@ class _NivelCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     final gameTheme = Theme.of(context).extension<GameTheme>()!;
     final bloqueado = !nivel.desbloqueado;
 
@@ -149,7 +165,7 @@ class _NivelCard extends StatelessWidget {
             width: 1.5,
           ),
         ),
-        color: bloqueado ? AppColors.surface : AppColors.surface,
+        color: AppColors.surface,
         child: InkWell(
           onTap: onTap,
           borderRadius: AppRadii.cardRadius,
@@ -179,7 +195,7 @@ class _NivelCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _etiquetaDificultad(nivel.dificultad),
+                  _etiquetaDificultad(nivel.dificultad, s),
                   style: AppTypography.bodyMedium.copyWith(
                     fontSize: 10,
                     color: _colorDificultad(nivel.dificultad),
@@ -199,25 +215,19 @@ class _NivelCard extends StatelessWidget {
   }
 
   Color _colorDificultad(Dificultad d) {
-    switch (d) {
-      case Dificultad.facil:
-        return AppColors.primaryNeon;
-      case Dificultad.medio:
-        return AppColors.warningNeon;
-      case Dificultad.dificil:
-        return AppColors.errorNeon;
-    }
+    return switch (d) {
+      Dificultad.facil => AppColors.primaryNeon,
+      Dificultad.medio => AppColors.warningNeon,
+      Dificultad.dificil => AppColors.errorNeon,
+    };
   }
 
-  String _etiquetaDificultad(Dificultad d) {
-    switch (d) {
-      case Dificultad.facil:
-        return 'Easy';
-      case Dificultad.medio:
-        return 'Medium';
-      case Dificultad.dificil:
-        return 'Hard';
-    }
+  String _etiquetaDificultad(Dificultad d, Cadenas cadenas) {
+    return switch (d) {
+      Dificultad.facil => cadenas.facil,
+      Dificultad.medio => cadenas.medio,
+      Dificultad.dificil => cadenas.dificil,
+    };
   }
 }
 

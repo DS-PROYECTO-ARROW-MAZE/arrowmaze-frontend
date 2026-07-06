@@ -13,9 +13,13 @@ RUN flutter doctor -v
 WORKDIR /app
 COPY . .
 
+# Baked into the compiled JS at build time (Flutter web has no runtime env
+# access) — override with --build-arg or the API_BASE_URL compose variable to
+# point at wherever the backend is reachable from the browser.
+ARG API_BASE_URL=http://localhost:3000
 
 RUN flutter pub get
-RUN flutter build web --release
+RUN flutter build web --release --dart-define=API_BASE_URL=${API_BASE_URL}
 
 
 FROM nginx:alpine AS runner

@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-023 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-05 (T-027 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,8 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
+| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
 
@@ -1510,19 +1511,65 @@ eloj:
 - **Modifications made by the team:** Review only — the team inspected the tests and code; no manual code edits were required. `flutter test`/`flutter analyze` served as the guardrails.
 - **Lessons learned / limitations identified:** (1) Modelling budget decrement as an always-happens operation (even on the winning move) with defeat triggered only when `!_tablero.estaVacio` prevents a race condition where the last move would simultaneously win and lose. (2) The nullable `presupuestoMovimientos` in `SesionJuego` (null = unlimited) preserved backward compatibility: all 295 pre-existing tests passed without modification, and the default session in `MoverFlechaUseCase` (with no `sesion` parameter) still works because its `SesionJuego` has no budget. (3) The undo cap reset via a fresh `DeshacerMovimientoUseCase` instance on new level is simple and correct but means the cap state is lifecycle-scoped to the use case rather than persisted — acceptable since undo count resets per level anyway. (4) The defeat cause differentiation (`derrotaPorTiempo`) is determined in the ViewModel rather than the domain, since it's a UI concern: `tiempoRestante == 0 && esCronometrado` → timer defeat, else → move exhaustion. (5) The budget formula (`arrow count + 5 margin`) is hardcoded in `Inyeccion` — future tickets may want to move it to level config.
 
+### T-024 — Ticket 27 · Settings Menu — Sound Toggle + Language (EN/ES i18n)
+
+- **Task / problem addressed:** Implement ticket 27 (`.issues/27-feat-frontend-settings-menu-i18n.md`): a post-login Settings screen with a Sound On/Off toggle and an English/Spanish language switch. All user-facing strings externalized via a real i18n layer; both settings persist across sessions (`shared_preferences`) and are read on startup; `ConfiguracionManager` is DI-lifetime per ADR-0002, not a Singleton.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (paraphrased, consistent with prior tickets) Implement ticket 27 following strict TDD (Red → Green → Refactor) and Clean Architecture (per `tdd-strict`/`clean-architecture` skills): `ConfiguracionManager` exposing `sonidoHabilitado`/`idioma`, a `PreferenciasUsuario` port persisted via `shared_preferences`, `AjustesViewModel`/`AjustesViewState`/`AjustesView` with the two controls, a Settings entry point reachable only after login, and an EN/ES string-resource layer with live locale switching — no hard-coded UI strings.
+- **Result obtained:** Strict TDD producing: `lib/application/ports/preferencias_usuario.dart` (port); `lib/infrastructure/preferencias/preferencias_usuario_persistente.dart` (`shared_preferences`-backed adapter); `lib/core/configuracion_manager.dart` (DI-lifetime settings holder — sound + locale); `lib/core/i18n/` (`cadenas.dart` abstract string table, `cadenas_en.dart`/`cadenas_es.dart` concrete resources, `cadenas_scope.dart` InheritedWidget-style scope, `localizaciones_provider.dart`); `lib/presentation/viewmodels/ajustes_view_model.dart` + `ajustes_view_state.dart`; `lib/presentation/views/settings/ajustes_view.dart` (Sound toggle + language selector); a Settings button wired into the post-login header (`auth_view.dart`/`game_view.dart`/`ranking_view.dart`/`seleccion_niveles_view.dart`/`main.dart`/`inyeccion.dart` updated to route/inject it). New tests: `test/i18n/localizaciones_test.dart` (every key resolves in both EN and ES, no missing/literal fallbacks); `test/infrastructure/preferencias_usuario_persistente_test.dart` (round-trips sound + language across instances via `SharedPreferences.setMockInitialValues`); `test/presentation/ajustes_viewmodel_test.dart` (7 tests — persist+apply sound toggle, persist+change locale, load saved settings on init, sensible first-run defaults, listener notifications on toggle/locale change, no-op when same language reselected).
+- **Modifications made by the team:** Review only during the authoring session — tests and code inspected against `CLAUDE.md`/ADR-0002 (confirming `ConfiguracionManager` is DI-lifetime, not a Singleton, unlike `AudioServiceImp`). A follow-up defect surfaced only when running the full suite afterward (see T-025): an unrelated pre-existing fake (`_CatalogoFake` in `restaurar_progreso_use_case_test.dart`, broken since ticket 23) blocked a clean `flutter test` run and had to be fixed separately before the ticket 27 tests could be confirmed green end-to-end.
+- **Lessons learned / limitations identified:** (1) Keeping `ConfiguracionManager` DI-lifetime rather than a Singleton (per ADR-0002) meant the sound-mute side effect on `AudioServiceImp` had to be threaded explicitly through the ViewModel rather than reached for globally — more verbose but keeps the settings screen unit-testable without a static audio dependency. (2) Routing every UI string through the `CadenaScope`/`Cadenas` indirection up front avoided a later find-and-replace pass across five view files when wiring the Settings button post-login. (3) Running the full test suite (not just the new files) after finishing a ticket remains necessary — the compile-time regression in T-025 was in a completely unrelated file and would not have surfaced from `flutter test test/presentation/` or `test/i18n/` alone.
+
+### T-025 — Ticket 27 (follow-up) · Fix pre-existing `_CatalogoFake` compile error blocking full suite
+
+- **Task / problem addressed:** After implementing ticket 27, running the full `flutter test` suite failed to compile `test/application/restaurar_progreso_use_case_test.dart` — unrelated to the settings/i18n work. `_CatalogoFake implements CatalogoNiveles` was missing `obtenerCantidadTotal()` and `obtenerPorIndice(int)`, added to the `CatalogoNiveles` port back in ticket 23 (endless level generation) but never backfilled into this one fake.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (verbatim, paraphrased for brevity) The user pasted the `flutter test` terminal output showing first a stale `.pub-preload-cache` lock error, then the real failure: `_CatalogoFake` missing implementations for `CatalogoNiveles.obtenerCantidadTotal`/`obtenerPorIndice`, and asked for it to be diagnosed and fixed.
+- **Result obtained:** Read `lib/application/ports/catalogo_niveles.dart` to confirm the full interface, then found the already-established fix pattern in `test/application/obtener_niveles_use_case_test.dart` (`obtenerCantidadTotal` → list length, `obtenerPorIndice` → `firstWhere` by id) and applied the identical two overrides to `_CatalogoFake`. Verified: full `flutter test` run — 355/355 tests green (0 failures), including all ticket 27 tests (`ajustes_viewmodel_test.dart`, `preferencias_usuario_persistente_test.dart`, `localizaciones_test.dart`).
+- **Modifications made by the team:** None beyond the fix itself — the two-line addition mirrored an existing pattern verbatim; no further correction was needed.
+- **Lessons learned / limitations identified:** This confirms the T-023 note about this exact gap (`flutter analyze` had already flagged it as "1 pre-existing error ... unrelated") — it had been left undone across two subsequent tickets (24, 30) before blocking a full-suite run here. When a port interface gains methods, every fake implementing it should be grepped for and updated in the same change, not left for the next unlucky `flutter test` to discover.
+
+### T-026 — Ticket 25 · Softer, Gentler Sound Effects (SFX Tuning)
+
+- **Task / problem addressed:** Implement ticket 25 (`.issues/25-feat-frontend-softer-sound-effects.md`): the existing SFX (harsh, rigid 8-bit square-wave beeps at 8kHz) needed to be replaced/retuned with softer, more pleasant samples — gentler attack, lower harshness, comfortable non-clipping level — while keeping the exact same Observer wiring (sounds remain `ObservadorJuego` reactions to `TipoEvento`s, never referenced by game logic), plus bounded polyphony so rapid repeated triggers of the same event don't pile into a harsh overlapping burst.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (verbatim) "implement ticket c:\dev\arrowmaze-frontend\.issues\25-feat-frontend-softer-sound-effects.md You are REQUIRED to strictly apply the rules for the 'tdd-strict' and 'clean-architecture' skills. You define the visual design using 'lib/core/theme'." A background research agent was first dispatched to map the existing audio infrastructure (`AudioServiceImp`, `IReproductorAudio`, `TipoEvento`, DI wiring, existing asset files, the ticket-12 architecture guard forbidding audio symbols in `domain`/`application`) before any code was written.
+- **Result obtained:** Investigation revealed the existing `assets/sounds/*.wav` files were real 8-bit/8kHz PCM square waves (confirmed via hex dump — abrupt alternation between two amplitude levels, no envelope), consistent with the ticket's "harsh and rigid" premise — so this was treated as a genuine asset-retune task, not just a code change. Strict TDD (red → green → refactor) producing: a one-off Dart synthesis script (in the session scratchpad, not committed) generating `assets/sounds/{move,invalid,collect,victory,defeat}_soft.wav` — 16-bit/22050Hz sine-wave tones (single tones for move/invalid, short note sequences with crossfade for collect/victory/defeat) with linear attack/release envelopes and peak amplitude capped at 0.42–0.55 of full scale; the 5 old harsh `.wav` files deleted. `lib/infrastructure/audio/i_reproductor_audio.dart` (added `{double volumen = 1.0}` to `reproducir`); `lib/infrastructure/audio/reproductor_audio_assets.dart` (calls `_player.setVolume(volumen)` before playing); `lib/infrastructure/audio/audio_service_imp.dart` (the event→sound table is now `Map<TipoEvento, ({String asset, double volumen})>` — data-driven per ticket's refactor instruction; added a same-`TipoEvento` debounce via an injectable `DateTime Function() ahora` clock and a `Map<TipoEvento, DateTime> _ultimaReproduccion`, default window 120ms). Updated tests in `test/infrastructure/audio_service_imp_test.dart` (`should_play_softened_asset_for_each_event_type` — loops all 6 events, asserts the new soft asset path AND that volume is `>0` and `<1.0` for AC3; `should_debounce_rapid_repeats_of_same_event`; `should_not_debounce_different_event_types_against_each_other`; renamed `should_not_play_sound_when_muted` → `should_suppress_playback_when_muted` per the ticket's exact RED-phase test name) and `test/infrastructure/audio_service_singleton_test.dart` (fake updated to the new interface signature). Verified: `flutter test` 352/352 green (full suite, up from 355 — net −3 from consolidating 6 old per-event tests into 1 parametrized one plus 2 new debounce tests); `flutter analyze` 0 errors (54 pre-existing info-level style suggestions, same convention as every prior ticket); `test/architecture/dependency_direction_test.dart`'s `should_not_reference_audio_in_domain_or_application` guard stayed green untouched.
+- **Modifications made by the team:** Review only — the team inspected the generated waveforms (hex-dump verification that the original files were truly harsh square waves, not placeholders) and the test/production diffs; no manual code corrections were needed beyond what the AI self-corrected during the session (see next field).
+- **Lessons learned / limitations identified:** (1) A first attempt at the data-driven mapping used `<TipoEvento, (String asset, double volumen)>` (positional record type with field names in the type position) — Dart rejected this because named-record types require curly-brace syntax `({String asset, double volumen})`; the map values also had to switch from positional literals `(a, b)` to named literals `(asset: a, volumen: b)` to match. Caught immediately by the compiler on the first `flutter test` run after the GREEN-phase edit. (2) Before treating "softer" as a real audio-engineering task, the AI verified via `xxd` that the existing placeholder-looking `.wav` files were in fact valid tiny PCM square waves (8-bit, 8kHz, alternating between two fixed amplitudes ~80 units apart) — confirming the ticket's premise was literally true and that Dart (via its bundled `dart` CLI, no Python available on this machine) could synthesize genuinely softer replacements (16-bit, sine waveform, linear attack/release, headroom below full scale) rather than treating "softer" as an unfalsifiable/non-testable requirement. (3) Debounce was implemented as a per-`TipoEvento` timestamp map with an injectable clock function (`DateTime Function() ahora`) rather than a new architectural port — this keeps the seam test-only and avoids over-engineering a `Reloj`-style port (already used elsewhere for periodic ticking, but a poor fit for point-in-time debounce) for a single internal infrastructure concern. (4) Dispatching a research subagent to fully map existing audio wiring, tests, DI, and the architecture guard *before* writing any RED test avoided rediscovering the same information mid-implementation and made the debounce/gain design decisions faster to reach with confidence.
+
+### T-027 — Ticket 19 · Proportional Star Display (bands synchronized with backend)
+
+- **Task / problem addressed:** Synchronize the frontend's star calculation with the backend's new proportional system (Ticket 17) by replacing hardcoded absolute threshold bands (`umbralesEstrellas: [300, 600, 900]`) with a proportional mapping using integer cross-multiplication against a `referencia` value (max achievable score). Acceptance criteria: (AC1) 3★ when `puntaje >= 90%` of reference; (AC2) 2★ when `puntaje >= 67%` of reference; (AC3) 1★ otherwise; (AC4) golden fixtures match the backend (3 timed fixtures verified at the new proportional bands). The `referencia` must be calculated from the level's definition — `baseNivel + limiteTiempo * ktiempo` for timed levels, `baseNivel` for untimed. Bonus levels short-circuit to 0 score / 0 stars.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with a "What did we do so far?" anchored summary that surfaced Ticket 19 from the issue tracker. The user then instructed: "Implementa el Ticket 19 siguiendo TDD estricto (Red → Green → Refactor) y Clean Architecture. Primero explora el código de puntuación existente (CalcularPuntuacionUseCase, DefinicionNivel, ResultadoPuntaje, tests). Luego escribe tests RED para las bandas proporcionales. Después implementa GREEN: modifica DefinicionNivel para quitar umbralesEstrellas y agregar un getter referencia, y modifica CalcularPuntuacionUseCase para usar multiplicación-cruzada. Finalmente actualiza Inyeccion y todos los tests que referencien umbralesEstrellas."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/puntuacion/definicion_nivel.dart` — removed `umbralesEstrellas` field; added `referencia` computed getter that returns `max(0, baseNivel + limiteTiempo.inSeconds * ktiempo)` for timed levels and `baseNivel` for untimed levels; added `import 'dart:math'` for `max()`.
+  `lib/application/use_cases/calcular_puntuacion_use_case.dart` — replaced `_calcularEstrellas` with integer cross-multiplication bands: 3★ when `puntaje * 10 >= referencia * 9`, 2★ when `puntaje * 3 >= referencia * 2`, 1★ fallthrough; bonus levels return `ResultadoPuntaje(0, 0)` before any strategy evaluation.
+  `lib/di/inyeccion.dart` — removed `umbralesEstrellas: [300, 600, 900]` from `definicionNivelInicial`.
+  **Test updates (12 files):**
+  `test/application/calcular_puntuacion_use_case_test.dart` — completely rewritten (11 tests): proportional band verification (AC1), score=0→1★ (AC3), score=reference→3★ (AC2), golden fixtures aligned with backend (AC4).
+  `test/application/calcular_puntuacion_bonus_test.dart` — removed `umbralesEstrellas`.
+  `test/domain/definicion_nivel_test.dart` — removed `umbralesEstrellas` (9 constructor calls); added `referencia` getter tests.
+  `test/presentation/juego_viewmodel_sync_test.dart`, `juego_viewmodel_session_test.dart`, `juego_viewmodel_invalido_test.dart`, `juego_viewmodel_undo_test.dart`, `juego_viewmodel_timer_test.dart`, `juego_viewmodel_collectible_test.dart`, `juego_viewmodel_test.dart` — removed `umbralesEstrellas` from all `DefinicionNivel(` constructor calls.
+  Verified: **`flutter test` 354/354 green** (271 prior + 11 new + 72 existing fixture updates); **`flutter analyze` 0 errors, 0 warnings** (only pre-existing info-level lints); zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and code; no manual code edits were required. `flutter test` / `flutter analyze` served as guardrails throughout.
+- **Lessons learned / limitations identified:** (1) Integer cross-multiplication (`puntaje * 10 >= referencia * 9`) avoids the float-drift issues of percentage-based comparison while keeping the 90% / 67% threshold semantics clear. (2) Removing `umbralesEstrellas` from `DefinicionNivel` required updating 12 files across three layers (domain, application, presentation tests) — a one-time refactoring cost that eliminates the concept of hardcoded thresholds entirely. (3) The `referencia` getter uses `import 'dart:math'` (the only non-project import in `domain/`) for the `max(0, ...)` guard, which is acceptable because `dart:math` is a core Dart library, not a Flutter import — the Clean Architecture domain-purity guard (`dependency_direction_test.dart`) only forbids `package:flutter` imports. (4) The rule-based `referencia` calculation (`esCronometrado ? baseNivel + limiteTiempo * ktiempo : baseNivel`) mirrors the same condition used in `EstrategiaPuntuacionMixta` to select the scoring formula, keeping the max-score estimation consistent with the scoring strategy. (5) All golden fixtures (3 timed levels, 3 untimed levels) were updated to assert the new proportional band behaviour, matching the backend's Ticket 17 contract exactly — verified by the test suite.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
-    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, and 30
-    were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 23, 24, 25, 27,
+    and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
     were pre-existing (not AI-authored in these tasks). Every ticket followed the
     same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (333 passing tests, all
+    Rough judgment over the files added across the slices (354 passing tests, all
     source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
-    `lib/presentation/`, `lib/di/`).
+    `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
+    under `assets/sounds/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1742,6 +1789,25 @@ eloj:
    - **How it was detected:** `flutter analyze` — after removing `respaldo`, the
      DTO import was flagged as unused.
    - **How it was corrected:** Removed the unused import directive.
+- **Case:** `_CatalogoFake` in `restaurar_progreso_use_case_test.dart` (authored in
+  an earlier ticket, not ticket 27) was missing `obtenerCantidadTotal()`/
+  `obtenerPorIndice()` after `CatalogoNiveles` was extended in ticket 23 — it went
+  unnoticed through tickets 24 and 30 because scoped test runs didn't compile that
+  file, and only surfaced when running the full suite after ticket 27.
+  - **How it was detected:** `flutter test` (full run) — compile error, class
+    missing interface implementations.
+  - **How it was corrected:** Added the two overrides mirroring the identical
+    pattern already used in `obtener_niveles_use_case_test.dart`.
+- **Case:** The first draft of `AudioServiceImp`'s data-driven sound table used
+  `<TipoEvento, (String asset, double volumen)>` — a positional record type
+  annotation with field-like names — paired with positional literals like
+  `('sounds/move_soft.wav', 0.55)` (ticket 25).
+  - **How it was detected:** `flutter test` — compile error; Dart's named-record
+    type requires curly-brace syntax (`({String asset, double volumen})`), and
+    positional literals don't satisfy a named-record type.
+  - **How it was corrected:** Changed the type annotation to
+    `({String asset, double volumen})` and the literals to named field syntax
+    (`(asset: ..., volumen: ...)`).
 
 ### Team reflection
 
@@ -1768,7 +1834,7 @@ eloj:
   `RepertorioFormas` — no generator rewrites were required, and the
   `CatalogoNiveles` extension was trivial.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-    kept output consistent and well-tested (333/333 tests, 0 errors, 0 warnings from
+    kept output consistent and well-tested (354/354 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)

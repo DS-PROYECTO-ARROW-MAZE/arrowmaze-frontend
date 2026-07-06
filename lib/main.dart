@@ -1,15 +1,32 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 
+import 'core/i18n/cadenas_scope.dart';
+import 'core/i18n/localizaciones_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'di/inyeccion.dart';
 import 'presentation/viewmodels/juego_view_model.dart';
 import 'presentation/views/auth/auth_view.dart';
 import 'presentation/views/game/game_view.dart';
-import 'presentation/viewmodels/seleccion_niveles_view_state.dart';
 import 'presentation/views/ranking/ranking_view.dart';
 import 'presentation/views/seleccion/seleccion_niveles_view.dart';
+import 'presentation/views/settings/ajustes_view.dart';
+import 'presentation/viewmodels/seleccion_niveles_view_state.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+
+  // Detect device locale and default to it on first run (AC5).
+  final deviceLocale =
+      SchedulerBinding.instance.platformDispatcher.locale.languageCode;
+  final idiomaFallback = ['en', 'es'].contains(deviceLocale) ? deviceLocale : 'en';
+
+  // Hydrate saved settings before the first frame so the locale and mute flag
+  // are correct from frame 1 (AC4).
+  await Inyeccion.configuracionManager.inicializar(
+    idiomaFallback: idiomaFallback,
+  );
+
   runApp(const MyApp());
 }
 
@@ -24,6 +41,10 @@ class MyApp extends StatelessWidget {
       title: 'ArrowMaze',
       theme: AppTheme.darkTheme,
       debugShowCheckedModeBanner: false,
+      // Wrap all content in a locale-reactive CadenasScope so every View can
+      // call CadenasScope.of(context) for i18n strings. Rebuilds only the
+      // scope (not the Navigator) when the locale changes (AC3).
+      builder: (context, child) => _LocaleScope(child: child!),
       // Meta-game loop (Ticket 13): Auth → Level Select → Game → (Next/Retry/
       // Menu). Each builder below is the composition root for its route — it asks
       // [Inyeccion] for fresh ViewModels so the Views never touch the DI graph.
@@ -35,8 +56,34 @@ class MyApp extends StatelessWidget {
   }
 }
 
+/// Reactive locale wrapper placed inside MaterialApp.builder.
+///
+/// Listens to [ConfiguracionManager] for idioma changes and rebuilds the
+/// [CadenasScope] in the tree, triggering live string refresh in all Views
+/// that depend on [CadenasScope.of] (AC3). The Navigator and route stack are
+/// unaffected by the rebuild — only string values change.
+class _LocaleScope extends StatelessWidget {
+  const _LocaleScope({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: Inyeccion.configuracionManager,
+      builder: (context, _) => CadenasScope(
+        cadenas: LocalizacionesProvider.cadenasPara(
+          Inyeccion.configuracionManager.idioma,
+        ),
+        child: child,
+      ),
+    );
+  }
+}
+
 /// Builds the Level Selection menu and kicks off the catalog load (with locks
 /// and stars). Tapping an unlocked level opens it via [_abrirNivel].
+/// The Settings button opens [AjustesView] (AC1 — reachable after login).
 Widget _construirSeleccion(BuildContext context) {
   final viewModel = Inyeccion.construirSeleccionNivelesViewModel();
   viewModel.cargar();
@@ -44,6 +91,18 @@ Widget _construirSeleccion(BuildContext context) {
     viewModel: viewModel,
     alSeleccionar: _abrirNivel,
     onLogout: () => _cerrarSesionYVolverALogin(context),
+    onAjustes: () => _abrirAjustes(context),
+  );
+}
+
+/// Pushes the Settings screen (AC1).
+void _abrirAjustes(BuildContext context) {
+  Navigator.of(context).push(
+    MaterialPageRoute(
+      builder: (_) => AjustesView(
+        viewModel: Inyeccion.construirAjustesViewModel(),
+      ),
+    ),
   );
 }
 
@@ -168,6 +227,7 @@ class _JuegoHostState extends State<_JuegoHost> {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
@@ -178,12 +238,12 @@ class _JuegoHostState extends State<_JuegoHost> {
         builder: (context, snapshot) {
           if (snapshot.hasError) {
             return Scaffold(
-              appBar: AppBar(title: const Text('ArrowMaze')),
+              appBar: AppBar(title: Text(s.pantallaJuego)),
               body: Center(
                 child: Padding(
                   padding: const EdgeInsets.all(24),
                   child: Text(
-                    'Could not load level ${widget.nivel.id}.',
+                    s.noPudoCargarNivel(widget.nivel.id),
                     textAlign: TextAlign.center,
                   ),
                 ),

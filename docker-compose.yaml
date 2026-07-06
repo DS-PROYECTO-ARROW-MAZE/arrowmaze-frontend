@@ -1,0 +1,24 @@
+services:
+  frontend:
+    build:
+      context: .
+      args:
+        # Baked into the compiled web bundle at build time — the browser must
+        # be able to reach this address directly, so it's the backend's
+        # *host-published* port (localhost:3000), not the internal Docker
+        # service name. Override via API_BASE_URL if the backend is deployed
+        # elsewhere (e.g. a real domain in production).
+        API_BASE_URL: ${API_BASE_URL:-http://localhost:3000}
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    networks:
+      - arrowmaze-net
+
+networks:
+  # Same fixed name as the backend's compose file — joining it lets this
+  # project run standalone (network is created on first `up`) while still
+  # being able to reach the backend container by service name when both
+  # projects are deployed together.
+  arrowmaze-net:
+    name: arrowmaze-net

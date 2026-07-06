@@ -26,7 +26,7 @@ void main() {
     baseNivel: 1000,
     kmov: 10,
     ktiempo: 2,
-    umbralesEstrellas: [300, 600, 900],
+
     limiteTiempo: null,
   );
   // 3x3: arrow at (1,0) aims right but a wall at (1,2) blocks its ray.

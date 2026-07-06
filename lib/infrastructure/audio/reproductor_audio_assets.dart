@@ -10,11 +10,14 @@ final class ReproductorAudioAssets implements IReproductorAudio {
   final AudioPlayer _player = AudioPlayer();
 
   @override
-  void reproducir(String assetPath) {
+  void reproducir(String assetPath, {double volumen = 1.0}) {
     _player.stop();
-    _player.play(AssetSource(assetPath)).onError(
-      (_, _) => null, // graceful degradation
-    );
+    _player.setVolume(volumen);
+    _player
+        .play(AssetSource(assetPath))
+        .onError(
+          (_, _) => null, // graceful degradation
+        );
   }
 
   @override

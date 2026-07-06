@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import '../../application/ports/proveedor_sesion.dart';
 import '../../application/use_cases/cerrar_sesion_use_case.dart';
 import '../../application/use_cases/iniciar_sesion_use_case.dart';
+import '../../application/use_cases/obtener_perfil_use_case.dart';
 import '../../application/use_cases/registrar_usuario_use_case.dart';
 import '../../application/use_cases/restaurar_progreso_use_case.dart';
 import '../../application/use_cases/resultado_inicio_sesion.dart';
@@ -23,11 +24,13 @@ class AuthViewModel extends ChangeNotifier {
     RegistrarUsuarioUseCase? registrarUsuario,
     IniciarSesionUseCase? iniciarSesion,
     RestaurarProgresoUseCase? restaurarProgreso,
+    ObtenerPerfilUseCase? verificarPerfil,
   })  : _proveedorSesion = proveedorSesion,
         _cerrarSesion = cerrarSesion,
         _registroUseCase = registrarUsuario,
         _loginUseCase = iniciarSesion,
-        _restaurarProgreso = restaurarProgreso {
+        _restaurarProgreso = restaurarProgreso,
+        _verificarPerfil = verificarPerfil {
     _verificarSesion();
   }
 
@@ -36,6 +39,7 @@ class AuthViewModel extends ChangeNotifier {
   final RegistrarUsuarioUseCase? _registroUseCase;
   final IniciarSesionUseCase? _loginUseCase;
   final RestaurarProgresoUseCase? _restaurarProgreso;
+  final ObtenerPerfilUseCase? _verificarPerfil;
 
   AuthViewState _estado = const AuthViewState();
 
@@ -95,12 +99,35 @@ class AuthViewModel extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Checks on construction whether a session already exists.
+  /// Checks on construction whether a *valid* session already exists.
+  ///
+  /// A stored token is necessary but not sufficient: it may be expired or
+  /// otherwise stale. When a [ObtenerPerfilUseCase] validator is injected, the
+  /// token is confirmed against the backend (`GET /auth/me`) before the user is
+  /// auto-forwarded past the login screen. If validation fails, the dead token
+  /// is cleared and the user stays on login — closing the "skips straight to
+  /// Level Select on a garbage token" gap. When no validator is injected the
+  /// legacy behaviour (token present ⇒ authenticated) is kept for callers/tests
+  /// that do not wire one.
   Future<void> _verificarSesion() async {
     final token = await _proveedorSesion.obtenerToken();
-    if (token != null) {
+    if (token == null) return;
+
+    final validador = _verificarPerfil;
+    if (validador == null) {
       _estado = _estado.copyWith(autenticado: true);
       notifyListeners();
+      return;
+    }
+
+    try {
+      await validador.ejecutar();
+      _estado = _estado.copyWith(autenticado: true);
+      notifyListeners();
+    } catch (_) {
+      // Expired/invalid token: drop it so the interceptor stops sending it and
+      // the user is presented the login screen instead of a broken session.
+      await _proveedorSesion.cerrarSesion();
     }
   }
 

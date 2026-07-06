@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../core/i18n/cadenas_scope.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_dimens.dart';
 import '../../../core/theme/app_typography.dart';
@@ -11,7 +12,8 @@ import '../../viewmodels/ranking_view_model.dart';
 /// Leaderboard screen — a thin View that only draws (DM-B5, E3).
 ///
 /// Observes [RankingViewModel] and renders the top-N ranking rows.
-/// No write path — read-only client (AC2).
+/// Every user-facing string is read from [CadenasScope] — no literals in this
+/// View (AC3). No write path — read-only client (AC2).
 class RankingView extends StatefulWidget {
   /// Creates the ranking view.
   const RankingView({required this.viewModel, super.key});
@@ -41,19 +43,22 @@ class _RankingViewState extends State<RankingView> {
 
   @override
   Widget build(BuildContext context) {
+    final s = CadenasScope.of(context);
     final gameTheme = Theme.of(context).extension<GameTheme>()!;
 
     return Scaffold(
-      appBar: AppBar(title: const Text('Leaderboard')),
+      appBar: AppBar(title: Text(s.tableroDeClasificacion)),
       body: ListenableBuilder(
         listenable: widget.viewModel,
         builder: (context, _) {
           final estado = widget.viewModel.estado;
 
           return switch (estado.status) {
-            RankingStatus.inicial => const Center(
-                child: Text('Select a level to view scores',
-                    style: AppTypography.bodyMedium),
+            RankingStatus.inicial => Center(
+                child: Text(
+                  s.seleccionaNivelParaPuntuaciones,
+                  style: AppTypography.bodyMedium,
+                ),
               ),
             RankingStatus.cargando => const Center(
                 child: CircularProgressIndicator(),
@@ -66,7 +71,7 @@ class _RankingViewState extends State<RankingView> {
                         size: 48, color: gameTheme.syncError),
                     const SizedBox(height: AppSpacing.md),
                     Text(
-                      estado.mensajeError ?? 'Could not load leaderboard.',
+                      estado.mensajeError ?? s.noPudoCargarse,
                       style: const TextStyle(color: AppColors.errorNeon),
                       textAlign: TextAlign.center,
                     ),
@@ -79,9 +84,11 @@ class _RankingViewState extends State<RankingView> {
                     _AdvertenciaBanner(mensaje: estado.mensajeAdvertencia!),
                   Expanded(
                     child: estado.entradas.isEmpty
-                        ? const Center(
-                            child: Text('No scores yet for this level.',
-                                style: AppTypography.bodyMedium),
+                        ? Center(
+                            child: Text(
+                              s.sinPuntuaciones,
+                              style: AppTypography.bodyMedium,
+                            ),
                           )
                         : ListView.separated(
                             padding: const EdgeInsets.all(AppSpacing.md),
