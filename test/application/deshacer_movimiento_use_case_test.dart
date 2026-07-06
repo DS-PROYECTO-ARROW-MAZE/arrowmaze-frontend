@@ -6,6 +6,7 @@ import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
+import 'package:arrowmaze/domain/value_objects/presupuesto_movimientos.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -119,5 +120,130 @@ void main() {
     expect(resultado.movimientos, 0);
     expect(mover.movimientos, 0);
     expect(historial.longitud, 0);
+  });
+
+  // ---------------------------------------------------------------------------
+  // Ticket 30 — undo cap (AC4) + budget restore (AC5)
+  // ---------------------------------------------------------------------------
+
+  test('should_block_fourth_undo_in_a_level', () {
+    // Arrange — a board with many arrows so 4 distinct moves can be made.
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 3,
+      trayectorias: [
+        flecha(1, 2, 0, Direccion.arriba),
+        flecha(2, 2, 2, Direccion.arriba),
+        flecha(3, 0, 0, Direccion.abajo),
+        flecha(4, 0, 2, Direccion.abajo),
+      ],
+    );
+    final historial = CommandHistory();
+    final sesion = SesionJuego(tablero: tablero);
+    final mover =
+        MoverFlechaUseCase(tablero, historial: historial, sesion: sesion);
+    final deshacer = DeshacerMovimientoUseCase(
+      sesion: sesion,
+      historial: historial,
+      contador: mover.contador,
+    );
+
+    // Act — make 4 moves, undo 3 times (the cap), then try a 4th undo.
+    for (var i = 0; i < 4; i++) {
+      mover.ejecutar(Posicion.en(fila: 2, columna: 0));
+    }
+    expect(deshacer.puedeDeshacer, isTrue);
+    expect(deshacer.usosRestantes, 3);
+
+    deshacer.ejecutar();
+    expect(deshacer.usosRestantes, 2);
+    expect(deshacer.puedeDeshacer, isTrue);
+
+    deshacer.ejecutar();
+    expect(deshacer.usosRestantes, 1);
+    expect(deshacer.puedeDeshacer, isTrue);
+
+    deshacer.ejecutar();
+    expect(deshacer.usosRestantes, 0);
+
+    // Assert — the 4th undo is blocked (no-op) and the control is disabled.
+    expect(deshacer.puedeDeshacer, isFalse);
+    final cuartoIntento = deshacer.ejecutar();
+    expect(cuartoIntento.registrado, isFalse);
+    expect(deshacer.usosRestantes, 0);
+  });
+
+  test('should_restore_one_budget_unit_when_undo', () {
+    // Arrange — session with a move budget of 3.
+    const presupuesto = PresupuestoMovimientos(3);
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 3,
+      trayectorias: [
+        flecha(1, 2, 0, Direccion.arriba),
+        flecha(2, 2, 2, Direccion.arriba),
+      ],
+    );
+    final historial = CommandHistory();
+    final sesion = SesionJuego(
+      tablero: tablero,
+      presupuestoMovimientos: presupuesto,
+    );
+    final mover =
+        MoverFlechaUseCase(tablero, historial: historial, sesion: sesion);
+    final deshacer = DeshacerMovimientoUseCase(
+      sesion: sesion,
+      historial: historial,
+      contador: mover.contador,
+    );
+
+    // Act — make a move (budget 3→2), then undo (budget 2→3).
+    mover.ejecutar(const Posicion.en(fila: 2, columna: 0));
+    expect(sesion.presupuestoMovimientos!.restante, 2);
+
+    deshacer.ejecutar();
+
+    // Assert — budget is restored by one unit.
+    expect(sesion.presupuestoMovimientos!.restante, 3);
+  });
+
+  test('should_reset_undo_count_on_new_level', () {
+    // Arrange — make 2 undos on one use case, then verify a fresh instance
+    // resets the counter (simulates level restart / new level).
+    final tablero = GrafoTablero.desde(
+      filas: 3,
+      columnas: 3,
+      trayectorias: [
+        flecha(1, 2, 0, Direccion.arriba),
+        flecha(2, 2, 2, Direccion.arriba),
+      ],
+    );
+    final historial = CommandHistory();
+    final sesion = SesionJuego(tablero: tablero);
+    final mover =
+        MoverFlechaUseCase(tablero, historial: historial, sesion: sesion);
+    final deshacer = DeshacerMovimientoUseCase(
+      sesion: sesion,
+      historial: historial,
+      contador: mover.contador,
+    );
+
+    // Use 2 undos on the first instance.
+    for (var i = 0; i < 2; i++) {
+      mover.ejecutar(const Posicion.en(fila: 2, columna: 0));
+      deshacer.ejecutar();
+    }
+    expect(deshacer.usosRestantes, 1);
+
+    // Act — a fresh use case (simulating a new level) starts with 3 undos.
+    final deshacer2 = DeshacerMovimientoUseCase(
+      sesion: sesion,
+      historial: historial,
+      contador: mover.contador,
+    );
+
+    // Assert — the counter is reset to 3. (puedeDeshacer is still false
+    // because the shared history is empty after undoing all moves.)
+    expect(deshacer2.usosRestantes, 3);
   });
 }

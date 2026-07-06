@@ -23,6 +23,10 @@ class CalcularPuntuacionUseCase {
     required int movimientos,
     required int segundosRestantes,
   }) {
+    if (definicion.esBonus) {
+      return const ResultadoPuntaje(puntaje: 0, estrellas: 0);
+    }
+
     final EstrategiaPuntuacion estrategia = definicion.esCronometrado
         ? PuntuacionMixta(
             baseNivel: definicion.baseNivel,

@@ -4,6 +4,7 @@ import '../../application/ports/proveedor_sesion.dart';
 import '../../application/use_cases/cerrar_sesion_use_case.dart';
 import '../../application/use_cases/iniciar_sesion_use_case.dart';
 import '../../application/use_cases/registrar_usuario_use_case.dart';
+import '../../application/use_cases/restaurar_progreso_use_case.dart';
 import '../../application/use_cases/resultado_inicio_sesion.dart';
 import '../../application/use_cases/resultado_registro.dart';
 import 'auth_view_state.dart';
@@ -11,18 +12,22 @@ import 'auth_view_state.dart';
 /// The View's only collaborator for authentication flows.
 ///
 /// Wraps [RegistrarUsuarioUseCase] and [IniciarSesionUseCase], manages form
-/// field state, and publishes [AuthViewState] snapshots. Everything is driven
-/// through the injected ports — no static accessors, no global state.
+/// field state, and publishes [AuthViewState] snapshots. On a successful login
+/// it also invokes [RestaurarProgresoUseCase] to hydrate local progression from
+/// the server (Ticket 24). Everything is driven through the injected ports — no
+/// static accessors, no global state.
 class AuthViewModel extends ChangeNotifier {
   AuthViewModel({
     required ProveedorSesion proveedorSesion,
     required CerrarSesionUseCase cerrarSesion,
     RegistrarUsuarioUseCase? registrarUsuario,
     IniciarSesionUseCase? iniciarSesion,
+    RestaurarProgresoUseCase? restaurarProgreso,
   })  : _proveedorSesion = proveedorSesion,
         _cerrarSesion = cerrarSesion,
         _registroUseCase = registrarUsuario,
-        _loginUseCase = iniciarSesion {
+        _loginUseCase = iniciarSesion,
+        _restaurarProgreso = restaurarProgreso {
     _verificarSesion();
   }
 
@@ -30,6 +35,7 @@ class AuthViewModel extends ChangeNotifier {
   final CerrarSesionUseCase _cerrarSesion;
   final RegistrarUsuarioUseCase? _registroUseCase;
   final IniciarSesionUseCase? _loginUseCase;
+  final RestaurarProgresoUseCase? _restaurarProgreso;
 
   AuthViewState _estado = const AuthViewState();
 
@@ -125,6 +131,15 @@ class AuthViewModel extends ChangeNotifier {
       email: _estado.email,
       password: _estado.password,
     );
+    if (resultado is InicioSesionExitoso) {
+      // Restore server-side progression into local store on login (Ticket 24
+      // AC2), so the Level Select renders the player's real unlocked levels.
+      // Failure degrades gracefully — the player reaches Level Select with
+      // whatever local progress exists (AC4).
+      try {
+        await _restaurarProgreso?.ejecutar();
+      } catch (_) {}
+    }
     return switch (resultado) {
       InicioSesionExitoso() => const AuthResultado(exitoso: true),
       InicioSesionCredencialesInvalidas() => const AuthResultado(

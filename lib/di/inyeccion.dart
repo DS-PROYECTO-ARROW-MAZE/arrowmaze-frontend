@@ -11,6 +11,7 @@ import '../application/ports/catalogo_niveles.dart';
 import '../application/ports/consulta_progreso_local.dart';
 import '../application/ports/fuente_autenticacion.dart';
 import '../application/ports/i_caso_de_uso.dart';
+import '../application/ports/i_consulta_progreso_remoto.dart';
 import '../application/ports/i_consulta_ranking.dart';
 import '../application/ports/i_medidor_metricas.dart';
 import '../application/ports/i_registro.dart';
@@ -26,7 +27,9 @@ import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/obtener_niveles_use_case.dart';
 import '../application/use_cases/obtener_perfil_use_case.dart';
 import '../application/use_cases/registrar_usuario_use_case.dart';
+import '../application/use_cases/restaurar_progreso_use_case.dart';
 import '../application/use_cases/sincronizar_progreso_use_case.dart';
+import '../domain/entities/celda.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
 import '../domain/progreso/i_cola_sincronizacion.dart';
@@ -34,6 +37,8 @@ import '../domain/puntuacion/definicion_nivel.dart';
 import '../domain/ranking/ranking_dto.dart';
 import '../domain/sesion/sesion_juego.dart';
 import '../domain/tablero.dart';
+import '../domain/value_objects/presupuesto_movimientos.dart';
+import '../domain/value_objects/posicion.dart';
 import '../infrastructure/audio/audio_service_imp.dart';
 import '../infrastructure/datasources/cargador_nivel_archivo.dart';
 import '../infrastructure/datasources/fuente_autenticacion_http.dart';
@@ -47,6 +52,7 @@ import '../infrastructure/observabilidad/registro_consola.dart';
 import '../infrastructure/progreso/cola_sincronizacion_local.dart';
 import '../infrastructure/progreso/progreso_local_persistente.dart';
 import '../infrastructure/progreso/progreso_data_source_http.dart';
+import '../infrastructure/progreso/progreso_remoto_data_source_http.dart';
 import '../infrastructure/ranking/ranking_data_source_http.dart';
 import '../infrastructure/reloj/reloj_timer.dart';
 import '../infrastructure/sesion/proveedor_sesion_persistente.dart';
@@ -104,10 +110,28 @@ abstract final class Inyeccion {
     return _construirJuegoViewModel(_generarTableroAleatorio());
   }
 
+  /// Margin added to the move budget (Ticket 30): extra moves beyond the exact
+  /// arrow count so the player has some room for error.
+  static const _margenMovimientos = 5;
+
+  /// Counts unique arrow paths on [tablero].
+  static int _contarFlechas(Tablero tablero) {
+    final ids = <int>{};
+    for (var f = 0; f < tablero.filas; f++) {
+      for (var c = 0; c < tablero.columnas; c++) {
+        final celda = tablero.celdaEn(Posicion.en(fila: f, columna: c));
+        if (celda is CeldaFlecha) {
+          ids.add(celda.idFlecha);
+        }
+      }
+    }
+    return ids.length;
+  }
+
   /// Shared wiring for both entry points: opens a **timed** [SesionJuego] from
-  /// [definicionNivelInicial], builds the use case, restores the Observer chain
-  /// ([AudioServiceImp] subscribes to the publisher, ticket 07) and returns the
-  /// ViewModel (which auto-subscribes itself).
+  /// [definicionNivelInicial] with a move budget, builds the use case, restores
+  /// the Observer chain ([AudioServiceImp] subscribes to the publisher, ticket
+  /// 07) and returns the ViewModel (which auto-subscribes itself).
   static JuegoViewModel _construirJuegoViewModel(
     Tablero tablero, {
     int idNivel = idNivelInicial,
@@ -115,11 +139,16 @@ abstract final class Inyeccion {
   }) {
     const definicion = definicionNivelInicial;
 
+    // Move budget = arrows + error margin (Ticket 30).
+    final flechas = _contarFlechas(tablero);
+    final presupuesto = PresupuestoMovimientos(flechas + _margenMovimientos);
+
     // Open the session here (instead of letting the use case default to an
-    // untimed one) so the level carries the time limit from its definition.
+    // untimed one) so the level carries the time limit and move budget.
     final sesion = SesionJuego(
       tablero: tablero,
       limiteTiempo: definicion.limiteTiempo,
+      presupuestoMovimientos: presupuesto,
     );
 
     final moverFlecha = MoverFlechaUseCase(tablero, sesion: sesion);
@@ -178,11 +207,13 @@ abstract final class Inyeccion {
   /// level timed, driving the HUD clock and enabling the defeat transition.
   static const definicionNivelInicial = DefinicionNivel(
     id: 1,
+    numero: 1,
     baseNivel: 1000,
     kmov: 10,
     ktiempo: 2,
     umbralesEstrellas: [300, 600, 900],
     limiteTiempo: Duration(seconds: 90),
+    esBonus: false,
   );
 
   static GeneradorNivelBase get generadorAleatorio =>
@@ -233,6 +264,15 @@ abstract final class Inyeccion {
       ObtenerNivelesUseCase(
         catalogo: catalogoNiveles,
         progreso: progresoLocal,
+      );
+
+  /// Use case that reads server-side progression on login and merges it into
+  /// the local store keeping the best per-level (Ticket 24, AC2/AC3).
+  static RestaurarProgresoUseCase get restaurarProgresoUseCase =>
+      RestaurarProgresoUseCase(
+        consultaRemoto: fuenteProgresoRemoto,
+        progresoLocal: progresoLocal,
+        catalogo: catalogoNiveles,
       );
 
   /// Builds the [SeleccionNivelesViewModel] for the Level Selection screen.
@@ -307,6 +347,7 @@ abstract final class Inyeccion {
       cerrarSesion: cerrarSesionUseCase,
       registrarUsuario: registrarUsuarioUseCase,
       iniciarSesion: iniciarSesionUseCase,
+      restaurarProgreso: restaurarProgresoUseCase,
     );
   }
 
@@ -321,6 +362,12 @@ abstract final class Inyeccion {
   static IRepositorioProgreso get repositorioProgreso => _repositorioProgreso;
   static final ProgresoDataSourceHttp _repositorioProgreso =
       ProgresoDataSourceHttp(client: _clienteHttp);
+
+  /// Remote progression read port — `GET /progress` (Ticket 24). Used by
+  /// [RestaurarProgresoUseCase] to fetch server-side unlocks on login.
+  static IConsultaProgresoRemoto get fuenteProgresoRemoto => _fuenteProgresoRemoto;
+  static final ProgresoRemotoDataSourceHttp _fuenteProgresoRemoto =
+      ProgresoRemotoDataSourceHttp(client: _clienteHttp);
 
   static SincronizarProgresoUseCase get sincronizarProgresoUseCase =>
       SincronizarProgresoUseCase(

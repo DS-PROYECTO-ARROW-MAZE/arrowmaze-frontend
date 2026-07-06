@@ -98,6 +98,12 @@ class MoverFlechaUseCase {
     // (the anti-cheat invariant).
     _contador.incrementar();
 
+    // Decrement the move budget (Ticket 30). If the budget hits zero before
+    // the board is cleared, the session transitions to EstadoDerrota. Victory
+    // wins ties: if the board was cleared on this same tap, the session is
+    // already in a terminal state and this is a no-op.
+    _sesion.registrarMovimiento();
+
     if (!toque.valido) {
       // Invalid (penalized): no board mutation, arrow not consumed, no delta.
       _historial.push(PlayerMoveCommand(posicion: posicion));

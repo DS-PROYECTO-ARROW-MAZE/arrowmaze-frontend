@@ -91,14 +91,18 @@ class TableroUI {
 /// rules; this immutable snapshot is what the victory overlay renders, and it
 /// never leaks the domain type into the View (nor the reverse). It carries the
 /// final HUD figures plus the scoring result (`puntaje` and `estrellas`) from
-/// [CalcularPuntuacionUseCase] (ticket 06).
+/// [CalcularPuntuacionUseCase] (ticket 06). For bonus levels
+/// [mostrarPuntuacion] is `false`, so the overlay omits the score/stars section
+/// without the View branching on level type.
 class VictoriaViewState {
   /// Creates the victory snapshot with the final [movimientos] count and the
-  /// computed [puntaje] and [estrellas].
+  /// computed [puntaje] and [estrellas]. Set [mostrarPuntuacion] to `false`
+  /// for bonus-level clears where score/stars are suppressed.
   const VictoriaViewState({
     required this.movimientos,
     this.puntaje = 0,
     this.estrellas = 0,
+    this.mostrarPuntuacion = true,
   });
 
   /// The move count the level was cleared in.
@@ -109,6 +113,10 @@ class VictoriaViewState {
 
   /// The star rating: 0, 1, 2, or 3, determined by level thresholds.
   final int estrellas;
+
+  /// Whether the overlay should display the score and star rating.
+  /// `false` for bonus levels (Ticket 18), which carry no score/stars.
+  final bool mostrarPuntuacion;
 }
 
 /// The immutable state the `JuegoViewModel` exposes to its View.
@@ -121,20 +129,26 @@ class JuegoViewState {
   const JuegoViewState({
     required this.tablero,
     required this.movimientos,
+    this.movimientosRestantes = -1,
     this.coleccionables = 0,
     this.movimientoInvalido = false,
     this.pausado = false,
     this.derrota = false,
+    this.derrotaPorTiempo = false,
     this.victoria,
     this.tiempoRestante,
     this.muted = false,
+    this.usosUndoRestantes = 3,
   });
 
   /// The board snapshot to render.
   final TableroUI tablero;
 
-  /// The move counter shown in the HUD.
+  /// The move counter shown in the HUD (total registered taps).
   final int movimientos;
+
+  /// Remaining moves before game over (countdown), or -1 when unlimited.
+  final int movimientosRestantes;
 
   /// How many collectibles the player has picked up so far, shown in the HUD as
   /// the bonus-time tally.
@@ -149,9 +163,13 @@ class JuegoViewState {
   /// overlay while taps are rejected (the domain `EstadoPausado`).
   final bool pausado;
 
-  /// Whether the level was lost on the clock: the View shows the defeat overlay
+  /// Whether the level was lost: the View shows the defeat overlay
   /// (the domain `EstadoDerrota`).
   final bool derrota;
+
+  /// Whether defeat was caused by timer timeout (as opposed to move
+  /// exhaustion). Meaningful only when [derrota] is `true`.
+  final bool derrotaPorTiempo;
 
   /// Whether audio is globally muted (the View shows a mute/unmute icon).
   final bool muted;
@@ -163,28 +181,38 @@ class JuegoViewState {
   /// Time left on the HUD clock for a timed level, or `null` when untimed.
   final Duration? tiempoRestante;
 
+  /// How many undos remain this level (starts at 3, capped per Ticket 30).
+  final int usosUndoRestantes;
+
   /// Returns a copy with the given fields replaced.
   JuegoViewState copyWith({
     TableroUI? tablero,
     int? movimientos,
+    int? movimientosRestantes,
     int? coleccionables,
     bool? movimientoInvalido,
     bool? pausado,
     bool? derrota,
+    bool? derrotaPorTiempo,
     bool? muted,
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
+    int? usosUndoRestantes,
   }) {
     return JuegoViewState(
       tablero: tablero ?? this.tablero,
       movimientos: movimientos ?? this.movimientos,
+      movimientosRestantes:
+          movimientosRestantes ?? this.movimientosRestantes,
       coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
+      derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,
       muted: muted ?? this.muted,
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,
+      usosUndoRestantes: usosUndoRestantes ?? this.usosUndoRestantes,
     );
   }
 }

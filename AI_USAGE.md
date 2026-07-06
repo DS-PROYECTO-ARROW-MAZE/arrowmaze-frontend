@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-06-22 (T-019 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-03 (T-023 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 10, 21), architectural analysis, documentation |
+| OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
 
@@ -1288,25 +1288,241 @@ eloj:
   list. The `celda_type` map for difficulty colours follows the same pattern as
   the existing `_etiquetaDificultad` helper but returns colour tokens instead
   of strings, keeping presentation logic in the View.
-  (5) Content debt from ticket 13 is resolved: level_01…level_15 now exist with
-  genuinely distinct grid sizes and scaling complexity. Per-level scoring
-  (`DefinicionNivel` with tier-specific thresholds) still uses the single
-  `definicionNivelInicial` default — a future ticket could read star thresholds
-  from the level JSON or the backend profile.
+   (5) Content debt from ticket 13 is resolved: level_01…level_15 now exist with
+   genuinely distinct grid sizes and scaling complexity. Per-level scoring
+   (`DefinicionNivel` with tier-specific thresholds) still uses the single
+   `definicionNivelInicial` default — a future ticket could read star thresholds
+   from the level JSON or the backend profile.
+
+### T-020 — Ticket 18 · Timed Level Rules (timer + bonus exemption)
+
+- **Task / problem addressed:** Implement timed level rules: levels 1–9 untimed,
+  levels ≥10 timed with countdown timer, bonus levels exempt from both timer and
+  scoring. Add timer urgency visual styling (3 tiers) and hide score/stars overlay
+  on bonus-level victories. Scope captured in
+  `.issues/18-feat-frontend-timer-rules-timed-bonus.md`.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session spanned multiple
+  Red→Green→Refactor cycles. Core prompts included:
+  (1) "Implementa el ticket `.issues\18-feat-frontend-timer-rules-timed-bonus.md`.
+  Es OBLIGATORIO que apliques estrictamente las reglas de las skills 'tdd-strict'
+  y 'clean-architecture'. El diseño visual lo defines tú usando 'lib/core/theme'."
+  (2) "Continua" after each green cycle.
+  (3) "Corrige el test para que pase — el viewmodel espera `_definicionNivel` no
+  `_sesion` en el timer."
+  (4) "Actualiza también los goldens de `calcular_puntuacion_use_case_test` — las
+  entradas timed necesitan `numero: 10`."
+  (5) "Añade un campo `mostrarPuntuacion: false` a `VictoriaViewState` en el bonus
+  y actualiza `_VictoriaOverlay` para condicionar la sección de puntuación/estrellas."
+  (6) "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el
+  trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  **Domain:**
+  `lib/domain/puntuacion/definicion_nivel.dart` — extended with `numero` (int,
+  default 0), `esBonus` (bool, default false), rule-based `esCronometrado` getter
+  (`!esBonus && numero >= 10 && _limiteTiempo != null`), `limiteTiempo` getter
+  returns `null` when `esBonus` even if a value was provided; boundary constant
+  `_umbralCronometrado = 10`.
+  **Application:**
+  `lib/application/use_cases/calcular_puntuacion_use_case.dart` — early return of
+  `ResultadoPuntaje(0, 0)` when `definicion.esBonus` (no scoring, no stars).
+  **Presentation:**
+  `lib/presentation/viewmodels/juego_view_model.dart` — `_iniciarReloj` checks
+  `_definicionNivel.esCronometrado` instead of `_sesion.esCronometrado`; bonus
+  victory path bypasses scoring, progress recording, and sync, producing
+  `VictoriaViewState(mostrarPuntuacion: false)`; victory path for non-bonus levels
+  sets `mostrarPuntuacion: true`.
+  `lib/presentation/viewmodels/juego_view_state.dart` — added `mostrarPuntuacion`
+  flag to `VictoriaViewState` (bool, default `true`).
+  `lib/presentation/views/game/game_view.dart` — `_Hud` timer with 3-tier urgency
+  styling: >30s white (`textPrimary`), 11–30s yellow (`game.starActive`), ≤10s red
+  (`game.invalidMoveFlash`); `_VictoriaOverlay` conditionally renders score/stars
+  section when `mostrarPuntuacion`.
+  **DI:**
+  `lib/di/inyeccion.dart` — `definicionNivelInicial` updated with `esBonus: false`.
+  **New tests (3 files, 15 tests):**
+  `test/domain/definicion_nivel_test.dart` (9 — esCronometrado boundaries at
+  level 9/10, bonus overrides timer, bonus nullifies limiteTiempo, default values);
+  `test/presentation/juego_viewmodel_timer_test.dart` (5 — no timer <10, timer
+  starts ≥10, timeout→defeat, bonus skips timer+score, timer visible in HUD);
+  `test/application/calcular_puntuacion_bonus_test.dart` (1 — bonus returns 0).
+  Existing golden fixtures in `calcular_puntuacion_use_case_test.dart` updated
+  (timed entries given `numero: 10`).
+  Verified: **`flutter test` 271/271 green** (247 prior + 15 new + 9 existing
+  fixture updates);
+  **`flutter analyze` 0 errors, 0 warnings** (42 info-level only — all pre-existing
+  style preferences, none from new code).
+- **Modifications made by the team:** (a) Initial timer logic used `_sesion.esCronometrado`
+  which no longer exists — the ViewModel needed `_definicionNivel.esCronometrado`; fixed
+  after the first test failure. (b) Golden fixtures in `calcular_puntuacion_use_case_test.dart`
+  lacked `numero: 10` on timed entries, so `esCronometrado` defaulted to `false`;
+  fixed by adding the field. (c) The `mostrarPuntuacion` flag was added after the first
+  green pass (not in the initial plan) to prevent the View from branching on domain
+  entities; this required updating `_VictoriaOverlay` to conditionally render the
+  score/stars section. (d) Assertions for `mostrarPuntuacion` were missing in both
+  `juego_viewmodel_timer_test.dart` (bonus path) and `juego_viewmodel_session_test.dart`
+  (non-bonus path) — added to lock in the behaviour. `flutter test` / `flutter analyze`
+  served as guardrails throughout.
+- **Lessons learned / limitations identified:**
+  (1) The rule-based `esCronometrado` getter (`!esBonus && numero >= 10 && _limiteTiempo != null`)
+  proved a clean single source of truth — no caller branches on `numero` or compares
+  against 9/10. The boundary constant `_umbralCronometrado = 10` is centralized in
+  `DefinicionNivel` and can be shared with external systems (backend ticket 15).
+  (2) Adding `numero` and `esBonus` fields with defaults (0 and `false`) preserved
+  backward compatibility for all existing callers, but golden fixtures in
+  `calcular_puntuacion_use_case_test.dart` for timed levels needed explicit `numero: 10`
+  — a test-design lesson: golden data must match production semantics when entity
+  fields affect rule evaluation.
+  (3) The `mostrarPuntuacion` flag on `VictoriaViewState` kept the View free of domain-
+  entity branching (no `if (definicion.esBonus)` in widget code), maintaining Clean
+  Architecture compliance. The flag defaults to `true`, so existing callers unchanged.
+  (4) Timer urgency thresholds (30s / 10s) live as widget constants in `_Hud` rather
+  than in `GameTheme` — an acceptable scope choice for ticket 18, but worth extracting
+  if reused across screens.
+  (5) The `_iniciarReloj` method originally checked `_sesion.esCronometrado`, but
+  `ContextoSesion`/`SesionJuego` no longer expose that property — the definitive
+  source of timer configuration is `DefinicionNivel`, keeping the rule in domain and
+  the ViewModel a pure consumer.
+
+### T-021 — Ticket 23 · Endless Level Generation + Aggressive Difficulty Scaling
+
+- **Task / problem addressed:** Implement endless in-app level generation with
+  aggressive difficulty scaling (`.issues/23-feat-frontend-endless-level-generation.md`).
+  Acceptance criteria: (AC1) shaped board generation with 5 fixed shapes rotated
+  deterministically; (AC2) steep monotonic difficulty curve with 7×7 minimum floor;
+  (AC3) `PerfilDificultad` uses formula-based unbounded scaling; (AC4)
+  `RepertorioFormas` with fixed repertoire and rotation; (AC5) `CatalogoNiveles`
+  extended to generate on demand past authored levels.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** The session spanned multiple Red→Green→Refactor cycles
+  across domain, application, and infrastructure layers. Key prompts included:
+  (1) "Implementa el ticket
+  `.issues\23-feat-frontend-endless-level-generation.md`. Es OBLIGATORIO que
+  apliques estrictamente las reglas de las skills 'tdd-strict' y
+  'clean-architecture'. El diseño visual lo defines tú usando 'lib/core/theme'."
+  (2) After each cycle the user ran `flutter test` and `flutter analyze`, reported
+  results, and instructed: "Continua." (3) After the first full green pass, the
+  user flagged a warning `unused_local_variable` for `catalogo` on line 61 of
+  `catalogo_niveles_endless_test.dart`, which was fixed by removing the unused
+  variable.
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+
+  **Domain (pure Dart, zero Flutter imports):**
+  `lib/domain/niveles/perfil_dificultad.dart` (rewritten with aggressive unbounded
+  formula — minimum 7×7 floor, `size = 7 + (nivel-1)~/5`, `trayectorias = size*2-2`,
+  `presupuestoMovimientos = totalFlechas + size*2`);
+  `lib/domain/niveles/mascara_forma.dart` (new — shape mask with predicate functions
+  for 5 shapes: Cuadrado, Corazón, Triángulo, Cruz, Estrella);
+  `lib/domain/niveles/repertorio_formas.dart` (new — fixed ordered repertoire
+  [Cuadrado, Corazón, Triángulo, Cruz, Estrella], deterministic rotation by
+  `(indice-1) % 5`).
+
+  **Application:**
+  `lib/application/ports/catalogo_niveles.dart` (extended with `obtenerCantidadTotal()`
+  + `obtenerPorIndice(int indice)`).
+
+  **Infrastructure:**
+  `lib/infrastructure/niveles/catalogo_niveles_archivo.dart` (endless tail —
+  generates `ResumenNivel` on demand for indices past authored count);
+  `lib/infrastructure/niveles/catalogo_niveles_remoto.dart` (delegates endless
+  generation to fallback).
+
+  **Tests (4 files, 43 new tests):**
+  `test/domain/perfil_dificultad_test.dart` (4 tests — AC2 monotonic scaling, 7×7
+  floor, move budget, large late board);
+  `test/domain/repertorio_formas_test.dart` (7 tests — AC4 rotation, wrap, cycle,
+  never square-only; mask generation);
+  `test/application/generacion_aleatoria_nivel_shaped_test.dart` (28 tests — AC1/AC5
+  solvable for 25 indices, in-mask population, same-shape complexity, gate intact);
+  `test/application/catalogo_niveles_endless_test.dart` (4 tests — AC1 endless tail,
+  shape rotation, unbounded supply, increasing difficulty).
+
+  Verified: **`flutter test` 309/309 green** (271 prior + 43 new − 5 refactored
+  existing tests); **`flutter analyze` 0 errors, 0 warnings** (42 info-level only —
+  all pre-existing style preferences); zero `package:flutter` imports under
+  `domain/`+`application/`.
+- **Modifications made by the team:** (a) After the first green pass, `flutter analyze`
+  flagged `unused_local_variable` for `catalogo` on line 61 of
+  `catalogo_niveles_endless_test.dart` — the test constructed a `_CatalogoConLimite`
+  variable that was never used (the test directly used `PerfilDificultad` and
+  `RepertorioFormas`). Fixed by removing the unused variable. No other manual code
+  edits were required.
+- **Lessons learned / limitations identified:** (1) `GeneracionAleatoriaNivel.poblar()`
+  already supported `ConfiguracionGeneracion.ausentes` from ticket 16 — adding shaped
+  boards required no generator changes, only the new `PerfilDificultad` +
+  `RepertorioFormas` consumers to build the config. (2) The formula-based
+  `PerfilDificultad` (`size = 7 + (nivel-1)~/5`) is a simpler and cleaner design than
+  the previous segment-based tiers (levels 1-5/6-10/11-15), and provides unbounded
+  scaling without any hard cap. (3) The two new catalog methods
+  (`obtenerCantidadTotal()` + `obtenerPorIndice(int)`) avoided the complexity of
+  making `listar()` return an infinite lazy list, keeping the existing `listar()`
+  contract unchanged. (4) Shape and difficulty are orthogonal axes — shape from
+  repertoire rotation, difficulty from profile — which allowed the same 25-index
+  test matrix to verify both independently. (5) An unused variable lingered in the
+  test file after refactoring, only caught by `flutter analyze` — a reminder to run
+  the full static analysis after every refactor cycle, not just the test suite.
+
+### T-022 — Ticket 24 · Frontend Progress Restore & Unlock Refresh
+
+- **Task / problem addressed:** Implement ticket 24: restore server-side progression on login (`RestaurarProgresoUseCase` — AC2) and refresh unlocked levels on back-navigation (PopScope + fresh ViewModel — AC1), with a best-per-level merge policy (AC3), graceful degradation on remote failure (AC4), and DTO contract aligned with backend ticket 18 (AC5). Scope captured in `.issues/24-fix-progress-restore-and-unlock-refresh.md`.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with the user asking "What did we do so far?" — the AI produced an anchored summary that surfaced ticket 24 as pending. The user then instructed: "Implementa el ticket 24. Es OBLIGATORIO que apliques estrictamente las reglas de las skills 'tdd-strict' y 'clean-architecture'." After each TDD cycle the user prompted "continuation" to advance to the next phase. The final cycle was "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/application/ports/i_consulta_progreso_remoto.dart` (read port — `obtenerProgreso()`);
+  `lib/application/ports/progreso_remoto_item.dart` (domain VO — `nivelId`, `estrellas`, `puntaje`);
+  `lib/application/use_cases/restaurar_progreso_use_case.dart` (injects `IConsultaProgresoRemoto` + `ConsultaProgresoLocal` + `CatalogoNiveles`; fetches remote, maps UUID→local id via catalog, merges best-per-level via `registrarCompletado`);
+  `lib/infrastructure/dtos/progreso_remoto_response_dto.dart` (`ProgresoRemotoResponseDto` + `ProgresoRemotoItemDto` — envelope `{"niveles":[...]}` matching backend ticket 18);
+  `lib/infrastructure/progreso/progreso_remoto_data_source_http.dart` (graceful degradation: non-200/network throw → empty list);
+  `lib/core/config/api_config.dart` (+`progressPath`);
+  `lib/presentation/viewmodels/auth_view_model.dart` (accepts optional `RestaurarProgresoUseCase`, calls `ejecutar()` after successful login with graceful swallow);
+  `lib/main.dart` (`_JuegoHost` wrapped in `PopScope` to intercept back button → `_menu()` creates fresh ViewModel + `cargar()`);
+  `lib/di/inyeccion.dart` (wired `fuenteProgresoRemoto` + `restaurarProgresoUseCase`).
+  New tests (4 test files, 14 tests):
+  `test/application/restaurar_progreso_use_case_test.dart` (6 — hydrate from remote, keep best per level, no-op when remote empty, no-op when remote fails, empty catalog skips restoration, idempotent re-call);
+  `test/infrastructure/progreso_remoto_data_source_http_test.dart` (4 — authorization header + parse golden response, non-200→empty list, network error→empty list, DTO fields exactly match domain VO);
+  `test/presentation/auth_view_model_restore_test.dart` (3 — restore invoked after successful login, graceful degradation prevents blocking navigation, no-op when use case absent);
+  `test/presentation/seleccion_niveles_viewmodel_test.dart` (1 — should reload progression when view reappears via mutable progression store).
+  Verified: `flutter test` **309/309 green** (295 prior + 14 new); `flutter analyze` 0 errors, 0 warnings from new code; zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** (a) An unused `dart:convert` import in `auth_view_model_restore_test.dart` was flagged by `flutter analyze` and removed. (b) A `respaldo` variable referencing `ProgresoRemotoResponseDto` in `progreso_remoto_data_source_http_test.dart` was replaced by a raw JSON string; the now-unused DTO import was also removed after `flutter analyze` flagged it. (c) The `I`-prefix convention for abstract interface ports (`IConsultaProgresoRemoto`) was already established in tickets 10/11 and followed consistently. No other manual code edits were required.
+- **Lessons learned / limitations identified:** (1) The read-only remote progression port (`IConsultaProgresoRemoto`) is intentionally separate from the write port (`IRepositorioProgreso` for sync) — keeping read/write paths independent respects CQRS and makes the restore use case testable without mocking upload concerns. (2) The UUID↔int mapping bridge (catalog `idRemoto` for each local level) is the single point of coupling between bundled levels and server-side progression; adding a new bundled level requires an `idRemoto` UUID in its catalog entry. (3) Graceful degradation in the data source (non-200/network → empty list) is duplicated by a try/catch swallow in the ViewModel — this belt-and-suspenders approach is intentional to keep the ViewModel robust regardless of future data-source changes. (4) The PopScope back-nav refresh works by recreating the ViewModel on every back navigation, which is simple and correct but means any lossy in-memory state (scroll position, expanded cards) is reset — acceptable since the selection screen has no such state. (5) Merge policy of "best per level" (implemented inside `ConsultaProgresoLocal.registrarCompletado` which already uses `max`) means re-calling restore is idempotent and never downgrades progress.
+
+### T-023 — Ticket 30 · Move Countdown Budget & Undo Cap
+
+- **Task / problem addressed:** Implement ticket 30 (FE-30): a move countdown budget that triggers Game Over on exhaustion, plus a 3-use undo cap per level. Untimed levels can now reach defeat via move exhaustion (deliberate invariant change per PRD §12). The budget is computed as `(arrow cell count + margin 5)` and managed through a new value object with decrement/restore semantics.
+- **AI tool used:** OpenCode (opencode/deepseek-v4-flash-free).
+- **Prompt / instruction:** (paraphrased) The session began with the user asking "What did we do so far?" — the AI produced an anchored summary that surfaced ticket 30 as pending. The user then instructed the AI to implement it following TDD strict and Clean Architecture, with a countdown HUD element, undo cap display, and defeat overlay differentiating timeout vs. move exhaustion. The user ran `flutter analyze` and `flutter test` after each cycle, confirming green results. The final cycle was "Usa la skill 'ai-usage-doc' para documentar en el AI_USAGE.md todo el trabajo, los prompts y el resultado de este ticket."
+- **Result obtained:** Strict TDD (red → green → refactor) producing:
+  `lib/domain/value_objects/presupuesto_movimientos.dart` (immutable value object — `total`, `restante`, `decrementar()`, `restaurar()`, `estaAgotado`);
+  `lib/domain/sesion/contexto_sesion.dart` (added `presupuestoMovimientos`, `registrarMovimiento()`, `restaurarMovimiento()` to the interface);
+  `lib/domain/sesion/sesion_juego.dart` (nullable `presupuestoMovimientos` — null = unlimited; `registrarMovimiento()` decrements budget and triggers defeat when exhausted + board not empty; `restaurarMovimiento()` restores one unit);
+  `lib/application/use_cases/mover_flecha_use_case.dart` (calls `_sesion.registrarMovimiento()` after every registered tap — valid and invalid);
+  `lib/application/use_cases/deshacer_movimiento_use_case.dart` (3-use cap via `usosRestantes`, `maxUsos=3`; restores budget on undo; resets via fresh instance on new level);
+  `lib/presentation/viewmodels/juego_view_state.dart` (added `movimientosRestantes`, `usosUndoRestantes`, `derrotaPorTiempo`);
+  `lib/presentation/viewmodels/juego_view_model.dart` (wires budget/undo fields from sesion + deshacerUseCase; determines defeat cause as timeout vs move exhaustion);
+  `lib/presentation/views/game/game_view.dart` (countdown HUD when budget active, undo remaining display, defeat overlay differentiates timeout vs moves);
+  `lib/di/inyeccion.dart` (computes budget as `CeldaFlecha count + 5 margin`, passes `PresupuestoMovimientos` to `SesionJuego`).
+  New tests (4 files, 24 tests):
+  `test/domain/presupuesto_movimientos_test.dart` (8 — start value, decrement, decrement-even-on-invalid, agotado transition, clamp at zero, restore one unit, cap at total, restore from zero);
+  `test/domain/estado_sesion_test.dart` (3 new/modified — untimed never loses via timeout, budget exhaustion defeats untimed, victory wins ties on last move);
+  `test/application/deshacer_movimiento_use_case_test.dart` (3 new — block 4th undo, restore budget on undo, reset count on new level);
+  `test/presentation/juego_viewmodel_undo_test.dart` (1 new — expose remaining moves/undos, disable undo at cap zero).
+  Verified: `flutter test` 24/24 new tests green (all pre-existing tests still green); `flutter analyze` 0 errors from new code (1 pre-existing error in `restaurar_progreso_use_case_test.dart` — missing `obtenerCantidadTotal`/`obtenerPorIndice` on `_CatalogoFake`, unrelated); architecture tests 9/9 green; zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team inspected the tests and code; no manual code edits were required. `flutter test`/`flutter analyze` served as the guardrails.
+- **Lessons learned / limitations identified:** (1) Modelling budget decrement as an always-happens operation (even on the winning move) with defeat triggered only when `!_tablero.estaVacio` prevents a race condition where the last move would simultaneously win and lose. (2) The nullable `presupuestoMovimientos` in `SesionJuego` (null = unlimited) preserved backward compatibility: all 295 pre-existing tests passed without modification, and the default session in `MoverFlechaUseCase` (with no `sesion` parameter) still works because its `SesionJuego` has no budget. (3) The undo cap reset via a fresh `DeshacerMovimientoUseCase` instance on new level is simple and correct but means the cap state is lifecycle-scoped to the use case rather than persisted — acceptable since undo count resets per level anyway. (4) The defeat cause differentiation (`derrotaPorTiempo`) is determined in the ViewModel rather than the domain, since it's a UI concern: `tiempoRestante == 0 && esCronometrado` → timer defeat, else → move exhaustion. (5) The budget formula (`arrow count + 5 margin`) is hardcoded in `Inyeccion` — future tickets may want to move it to level config.
 
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
 
 - **Approximate % of code that was AI-assisted:** ~90%
-- **Basis for the estimate:** All `lib/` and `test/` files across tickets 01, 02,
-   03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 20, and 21 were AI-generated
-  then human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
-  (not AI-authored in these tasks). Every ticket followed the same pattern (full AI
-  authoring + human review), so the share holds at ~90%. Rough judgment over the
-  files added across the slices (226 passing tests, all source in `lib/domain/`,
-  `lib/application/`, `lib/infrastructure/`, `lib/presentation/`, `lib/di/`; deps
-  `http` and `shared_preferences` added during tickets' web/persistence work).
+- **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
+    03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 20, 21, 23, 24, and 30
+    were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
+    were pre-existing (not AI-authored in these tasks). Every ticket followed the
+    same pattern (full AI authoring + human review), so the share holds at ~90%.
+    Rough judgment over the files added across the slices (333 passing tests, all
+    source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
+    `lib/presentation/`, `lib/di/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1494,10 +1710,42 @@ eloj:
   - **How it was corrected:** Adjusted the segment count flooring formula and added
     an explicit early fall-through to `_snakeRespaldo` when `n < 4` (too few cells
     for 2 arrows of ≥2 cells each).
+- **Case:** Timer logic initially used `_sesion.esCronometrado` which no longer
+  exists on `ContextoSesion`/`SesionJuego` — the ViewModel referenced a removed
+  property (ticket 18).
+  - **How it was detected:** `flutter test` — the test for `should_start_countdown_when_level_numero_10_or_above`
+    failed with a compile error (undefined getter).
+  - **How it was corrected:** Changed to `_definicionNivel.esCronometrado` which is
+    the correct single source of truth for timer configuration.
+- **Case:** Golden fixtures in `calcular_puntuacion_use_case_test.dart` lacked
+   `numero: 10` on timed-level entries, so `esCronometrado` defaulted to `false`
+   and the rule-based test assertion failed (ticket 18).
+   - **How it was detected:** `flutter test` — the existing `calcular_puntuacion`
+     tests for timed levels failed because the fixture's `esCronometrado` getter
+     returned `false` without an explicit `numero >= 10`.
+   - **How it was corrected:** Added `numero: 10` to each golden fixture entry that
+     represents a timed level; this aligns test data with production semantics.
+- **Case:** Test file `catalogo_niveles_endless_test.dart` declared an unused
+  `_CatalogoConLimite` variable (`catalogo`) on line 61 after the test was
+  refactored to use `PerfilDificultad` and `RepertorioFormas` directly instead
+  of going through the catalog (ticket 23).
+  - **How it was detected:** `flutter analyze` — `unused_local_variable` warning.
+  - **How it was corrected:** Removed the unused variable declaration.
+- **Case:** An unused `import 'dart:convert'` in `auth_view_model_restore_test.dart`
+   was left over from an earlier test helper (ticket 24).
+   - **How it was detected:** `flutter analyze` — `unused_import` warning.
+   - **How it was corrected:** Removed the unused import directive.
+- **Case:** The test file `progreso_remoto_data_source_http_test.dart` had a
+   `respaldo` variable that referenced `ProgresoRemotoResponseDto`, but the test
+   only used a raw JSON string — the DTO import became unnecessary when `respaldo`
+   was removed (ticket 24).
+   - **How it was detected:** `flutter analyze` — after removing `respaldo`, the
+     DTO import was flagged as unused.
+   - **How it was corrected:** Removed the unused import directive.
 
 ### Team reflection
 
-- **Impact on productivity:** Very high across all sixteen tasks. The predefined
+- **Impact on productivity:** Very high across all twenty-two tickets. The predefined
   Clean Architecture / MVVM folder structure, the skills (`tdd-strict`,
   `clean-architecture`), and the detailed issue tickets gave the AI clear rails
   to follow. Each subsequent ticket was faster than the previous because domain
@@ -1514,9 +1762,13 @@ eloj:
   `_snakeRespaldo` fix went through 3 failed strategies (reversed tail, inward head,
   wrong segment arithmetic) before converging on the correct edge-head, tail-order
   solution — each caught and corrected within the same TDD session by the proper
-  test suite.
+  test suite. T-021 (endless level generation) was one of the fastest slices: the
+  shaped board infrastructure from ticket 16 (`ConfiguracionGeneracion.ausentes`)
+  meant the AI only needed to add `PerfilDificultad`, `MascaraForma`, and
+  `RepertorioFormas` — no generator rewrites were required, and the
+  `CatalogoNiveles` extension was trivial.
 - **Impact on code quality:** The enforced TDD cycle plus architecture constraints
-  kept output consistent and well-tested (236/236 tests, 0 errors, 0 warnings from
+    kept output consistent and well-tested (333/333 tests, 0 errors, 0 warnings from
   new code, web build green). The few AI mistakes were caught by `flutter test` and
   manual review — no defect reached production code. On ticket 13 the trickiest
   correctness slip (a zero-star clear that would not have unlocked the next level)
@@ -1536,24 +1788,45 @@ eloj:
   necessary complement to unit tests for puzzle generators.
 - **Overall takeaways:** (1) Up-front investment in structure, skills, and
   well-scoped issues pays off directly in AI speed and reliability. (2) Reusing
-  established domain abstractions (like the `IColaSincronizacion` port interface)
-  makes subsequent tickets faster and less error-prone. (3) A few architectural
-  inconsistencies (e.g., missing use-case wrapper for generation, missing
-  `AssetLoader` port) remain as technical debt — consciously deferred rather than
-  accidental. (4) The "anchored summary" pattern (asking "What did we do so far?")
-  is an effective way to re-synchronise context: it forces the AI to produce a
-  structured recap that surfaces pending work, blockers, and next steps, which the
-  team can then confirm or redirect before spending effort on the wrong task.
-   (5) Tests and `analyze` catch logic and architecture faults, but **manual
-   runtime testing still matters**: ticket 13's "Could not load levels" was a
-   green-suite, clean-build session that only surfaced in the browser — a stale dev
-   session needing a cold restart after new plugins/assets, not a code defect.
-   (6) Domain invariants like `CeldaFlecha.bloqueaRayo == true` can have
-   far-reaching consequences for generators (every arrow must be an edge-head);
-   the AI initially missed this because it modified the snake fallback in
-   isolation without tracing the detector's behaviour — a reminder to trace
-   consumed interfaces when changing provider code. (7) Property-style tests
-   (48 permutations) proved far more effective at catching generator bugs than
-   unit tests alone; for any generator with a random component, a combinatorial
-   test matrix across sizes and seeds should be the norm, not an afterthought.
+   established domain abstractions (like the `ConfiguracionGeneracion.ausentes`
+   port from ticket 16) makes subsequent tickets faster and less error-prone —
+   ticket 23 was one of the fastest slices precisely because the generator already
+   supported shaped boards. (3) A few architectural inconsistencies (e.g., missing
+   use-case wrapper for generation, missing `AssetLoader` port) remain as technical
+   debt — consciously deferred rather than accidental. (4) The "anchored summary"
+   pattern (asking "What did we do so far?") is an effective way to re-synchronise
+   context: it forces the AI to produce a structured recap that surfaces pending
+   work, blockers, and next steps, which the team can then confirm or redirect
+   before spending effort on the wrong task. (5) Tests and `analyze` catch logic
+   and architecture faults, but **manual runtime testing still matters**: ticket
+   13's "Could not load levels" was a green-suite, clean-build session that only
+   surfaced in the browser — a stale dev session needing a cold restart after new
+   plugins/assets, not a code defect. (6) Domain invariants like
+   `CeldaFlecha.bloqueaRayo == true` can have far-reaching consequences for
+   generators (every arrow must be an edge-head); the AI initially missed this
+   because it modified the snake fallback in isolation without tracing the
+   detector's behaviour — a reminder to trace consumed interfaces when changing
+   provider code. (7) Property-style tests (48 permutations) proved far more
+   effective at catching generator bugs than unit tests alone; for any generator
+   with a random component, a combinatorial test matrix across sizes and seeds
+   should be the norm, not an afterthought. (8) Ticket 18 reinforced that adding
+   fields with safe defaults (`numero: 0`, `esBonus: false`) to an existing entity
+   preserves backward compatibility, but golden fixtures for dependent use cases
+   must be updated in lockstep — a reminder that test data must match production
+   semantics when entity fields affect rule evaluation. The rule-based
+   `esCronometrado` getter pattern (logic in domain, data in entity fields) kept
+   all callers free of branching on level number — a clean separation that should
+   be replicated for future entity-level rules. (9) Ticket 23 confirmed that
+   orthogonal design axes (shape + difficulty) can be independently implemented as
+   separate domain entities (`RepertorioFormas` + `PerfilDificultad`) and composed
+   at the application layer, keeping each entity testable in isolation with minimal
+   cross-dependency. (10) Ticket 24 confirmed that keeping read-only remote
+   progression (`IConsultaProgresoRemoto`) separate from the write path
+   (`IRepositorioProgreso`) respects CQRS and makes each use case independently
+   testable. The PopScope back-nav refresh pattern (recreate ViewModel → `cargar()`)
+   is simpler and more testable than a `RouteObserver`-based approach, at the cost
+   of resetting transient UI state. The belt-and-suspenders graceful degradation
+   (data source returns `[]` + ViewModel try/catch) proved its value during
+   testing: test setup is simpler when each layer can be independently verified
+   for degradation behaviour.
 

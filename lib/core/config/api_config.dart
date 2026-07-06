@@ -25,6 +25,9 @@ abstract final class ApiConfig {
   /// Level creation endpoint — `POST /levels` (protected).
   static const String levelsPath = '/levels';
 
+  /// Progress read endpoint — `GET /progress` (protected, Ticket 24).
+  static const String progressPath = '/progress';
+
   /// Progress batch-sync endpoint — `POST /progress/sync` (protected).
   static const String syncPath = '/progress/sync';
 

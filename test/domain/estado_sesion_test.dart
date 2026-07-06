@@ -5,6 +5,7 @@ import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/sesion/estado_sesion.dart';
 import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
+import 'package:arrowmaze/domain/value_objects/presupuesto_movimientos.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:flutter_test/flutter_test.dart';
 
@@ -77,27 +78,58 @@ void main() {
     expect(sesion.estaTerminada, isTrue);
   });
 
-  test('should_never_reach_EstadoDerrota_when_level_is_untimed', () {
-    // Arrange — an untimed session and a deterministic move/time sequence.
+  test('should_never_reach_EstadoDerrota_via_time_on_untimed_level', () {
+    // Arrange — an untimed session with a deterministic time sequence.
     final sesion = SesionJuego(tablero: tableroDeDosFlechas());
     final aleatorio = Random(7);
-    const posiciones = <Posicion>[
-      Posicion.en(fila: 0, columna: 0),
-      Posicion.en(fila: 2, columna: 0),
-      Posicion.en(fila: 1, columna: 1),
-      Posicion.en(fila: 2, columna: 2),
-    ];
 
-    // Act + Assert — over arbitrary interleavings of taps and elapsed time, an
-    // untimed level can NEVER enter defeat (PRD §3 B2 negative property).
+    // Act + Assert — arbitrary elapsed time never triggers defeat on an
+    // untimed level (PRD §3 B2). Defeat via move exhaustion is tested
+    // separately (Ticket 30 — AC3).
     for (var i = 0; i < 500; i++) {
-      if (aleatorio.nextBool()) {
-        sesion.avanzarTiempo(Duration(seconds: aleatorio.nextInt(10_000)));
-      } else {
-        sesion.tocarCelda(posiciones[aleatorio.nextInt(posiciones.length)]);
-      }
+      sesion.avanzarTiempo(Duration(seconds: aleatorio.nextInt(10_000)));
       expect(sesion.estado, isNot(isA<EstadoDerrota>()));
     }
+  });
+
+  test(
+      'should_transition_to_EstadoDerrota_on_untimed_level_when_budget_exhausted',
+      () {
+    // Arrange — an untimed session with a finite move budget on a two-arrow
+    // board, and only one registered tap possible (the other positions are
+    // not on arrows and are ignored).
+    const presupuesto = PresupuestoMovimientos(1);
+    final sesion = SesionJuego(
+      tablero: tableroDeDosFlechas(),
+      presupuestoMovimientos: presupuesto,
+    );
+
+    // Act — one valid tap clears one arrow; the budget is now 0 but the
+    // board still has one arrow left.
+    sesion.tocarCelda(const Posicion.en(fila: 2, columna: 0));
+    sesion.registrarMovimiento();
+
+    // Assert — budget exhausted with non-empty board → defeat (AC3).
+    expect(sesion.estado, isA<EstadoDerrota>());
+    expect(sesion.estaTerminada, isTrue);
+  });
+
+  test('should_win_when_board_cleared_on_last_allowed_move', () {
+    // Arrange — one-arrow board with budget of exactly 1.
+    const presupuesto = PresupuestoMovimientos(1);
+    final sesion = SesionJuego(
+      tablero: tableroDeUnaFlecha(),
+      presupuestoMovimientos: presupuesto,
+    );
+
+    // Act — the only arrow exits, emptying the board (victory). Then the
+    // budget would be exhausted, but victory already happened.
+    sesion.tocarCelda(const Posicion.en(fila: 2, columna: 1));
+    sesion.registrarMovimiento();
+
+    // Assert — victory, not defeat (victory wins ties, AC2).
+    expect(sesion.estado, isA<EstadoVictoria>());
+    expect(sesion.estaTerminada, isTrue);
   });
 
   test('should_reject_tap_when_EstadoPausado', () {
