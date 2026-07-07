@@ -21,7 +21,7 @@ class CargadorNivelArchivo implements CargadorNivel {
       columnas: json['cols'] as int,
       trayectorias: _extraerTrayectorias(json),
       celdas: _extraerCeldasFijas(json),
-      ausentes: _extraerAusentes(json),
+      ausentes: derivarAusentes(json),
     );
   }
 
@@ -70,17 +70,37 @@ class CargadorNivelArchivo implements CargadorNivel {
         .toList();
   }
 
-  /// Extracts absent cells (outside the playable region of a shaped board).
-  List<Map<String, dynamic>> _extraerAusentes(Map<String, dynamic> json) {
-    final celdas = json['cells'] as List<dynamic>;
-    return celdas
-        .cast<Map<String, dynamic>>()
-        .where((c) => c['type'] == 'absent')
-        .map((c) => <String, dynamic>{
-              'row': c['row'],
-              'col': c['col'],
-              'type': c['type'],
-            })
-        .toList();
+  /// Extracts absent positions (outside the playable region of a shaped board).
+  ///
+  /// Shaped boards are stored **sparse**: a position outside the shape is simply
+  /// omitted from `cells` (no filler, no `type: "absent"` marker — Ticket 31,
+  /// FE-16/FE-26). Any grid position with no present cell is therefore absent —
+  /// a void the renderer draws as nothing and the ray treats like the board edge
+  /// (distinct from a transparent `CeldaVacia`). An explicit `type: "absent"`
+  /// marker is still honoured for backward compatibility. Fully-dense
+  /// rectangular boards yield no absent positions, so this is a no-op for them.
+  ///
+  /// Pure and static so the sparse → absent rule can be unit-tested offline
+  /// without the Flutter asset bundle.
+  static List<Map<String, dynamic>> derivarAusentes(Map<String, dynamic> json) {
+    final filas = json['rows'] as int;
+    final columnas = json['cols'] as int;
+    final celdas = (json['cells'] as List<dynamic>).cast<Map<String, dynamic>>();
+
+    final presentes = <int>{};
+    for (final celda in celdas) {
+      if (celda['type'] == 'absent') continue;
+      presentes.add((celda['row'] as int) * columnas + (celda['col'] as int));
+    }
+
+    final ausentes = <Map<String, dynamic>>[];
+    for (var f = 0; f < filas; f++) {
+      for (var c = 0; c < columnas; c++) {
+        if (!presentes.contains(f * columnas + c)) {
+          ausentes.add(<String, dynamic>{'row': f, 'col': c, 'type': 'absent'});
+        }
+      }
+    }
+    return ausentes;
   }
 }
