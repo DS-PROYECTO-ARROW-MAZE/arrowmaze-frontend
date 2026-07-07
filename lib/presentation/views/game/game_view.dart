@@ -772,13 +772,12 @@ class _Tablero extends StatelessWidget {
           onTapDown: (detalle) {
             final columna = (detalle.localPosition.dx / anchoCelda).floor();
             final fila = (detalle.localPosition.dy / altoCelda).floor();
-            if (fila < 0 ||
-                columna < 0 ||
-                fila >= tablero.filas ||
-                columna >= tablero.columnas) {
-              return;
-            }
-            onTap(Posicion.en(fila: fila, columna: columna));
+            // Resolve the touch to a playable cell; taps off the board or on an
+            // absent position (outside a shaped board) are ignored (AC4).
+            final celda =
+                tablero.celdaJugableEn(Posicion.en(fila: fila, columna: columna));
+            if (celda == null) return;
+            onTap(celda.posicion);
           },
           child: Stack(
             fit: StackFit.expand,

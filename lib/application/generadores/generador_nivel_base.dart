@@ -58,11 +58,15 @@ abstract class GeneradorNivelBase {
   bool validarSolvencia(Tablero tablero) {
     final trayectorias = <int, Trayectoria>{};
     final celdas = <Celda>[];
+    final ausentes = <Posicion>{};
     for (var f = 0; f < tablero.filas; f++) {
       for (var c = 0; c < tablero.columnas; c++) {
         final pos = Posicion.en(fila: f, columna: c);
         final celda = tablero.celdaEn(pos);
-        if (celda is CeldaAusente) continue;
+        if (celda is CeldaAusente) {
+          ausentes.add(pos);
+          continue;
+        }
         if (celda is CeldaFlecha) {
           final t = tablero.trayectoriaEn(pos);
           if (t != null && !trayectorias.containsKey(t.id)) {
@@ -73,11 +77,15 @@ abstract class GeneradorNivelBase {
         }
       }
     }
+    // Validate the actual shaped board: absent positions stay void so a ray
+    // exits through them exactly as on the real board (not as transparent
+    // empty space, which would let rays travel past the shape's boundary).
     final copia = GrafoTablero.desde(
       filas: tablero.filas,
       columnas: tablero.columnas,
       trayectorias: trayectorias.values.toList(),
       celdas: celdas,
+      ausentes: ausentes,
     );
     return Solver.esSolvable(copia);
   }
