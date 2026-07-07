@@ -301,7 +301,11 @@ class JuegoViewState {
           movimientosRestantes ?? this.movimientosRestantes,
       coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
-      alertaInvalida: alertaInvalida ?? this.alertaInvalida,
+      // Transient one-shot: a copy that doesn't explicitly raise it clears the
+      // pulse, so the red flash never survives into a later state (e.g. a timer
+      // tick) and re-fires. It is true only on the state the leading invalid tap
+      // produces (Ticket 28/29).
+      alertaInvalida: alertaInvalida ?? false,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
       derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,

@@ -270,7 +270,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
 
     final derrota = _sesion.estado is EstadoDerrota;
     final derrotaPorTiempo = derrota &&
-        _definicionNivel.esCronometrado &&
+        _sesion.esCronometrado &&
         (_sesion.tiempoRestante == null ||
             _sesion.tiempoRestante == Duration.zero);
 
@@ -376,9 +376,15 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   }
 
   /// Starts the one-second tick that advances a timed level's clock; a no-op on
-  /// an untimed level or once the session is finished.
+  /// an untimed session or once the session is finished.
+  ///
+  /// Whether the level is timed is owned by the **session** (the composition root
+  /// opens it with a `limiteTiempo` only for medium/hard levels), not by the
+  /// scoring [DefinicionNivel]. Keying off the session guarantees the clock the
+  /// HUD shows (`tiempoRestante`, also session-derived) actually ticks — the two
+  /// can never disagree and leave a frozen countdown on screen.
   void _iniciarReloj() {
-    if (!_definicionNivel.esCronometrado || _sesion.estaTerminada) return;
+    if (!_sesion.esCronometrado || _sesion.estaTerminada) return;
     _reloj.detener();
     _reloj.iniciar(const Duration(seconds: 1), _tic);
   }
