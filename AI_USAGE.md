@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-06 (T-030 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-07 (T-031…T-034 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, `develop` merge/conflict resolution |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
@@ -1601,6 +1601,42 @@ eloj:
 - **Modifications made by the team:** Review only on the implementation — no manual edits to `lib/` were required. One self-inflicted test slip was fixed mid-cycle: the first draft of the two ViewModel tests passed the absent set as `const {Posicion.en(...)}`, but `Posicion` overrides `==`/`hashCode`, so it cannot be a `const` set element (Dart compile error). Corrected to a non-const set `{const Posicion.en(...)}`, caught immediately by the analyzer and the red-phase compile.
 - **Lessons learned / limitations identified:** (1) Reading the codebase *before* writing paid off: most of the ticket's surface (painter skipping absent cells, the `ausente` render kind, the model mapping) was already delivered by ticket 16, so the work reduced to the genuinely missing behaviour (the hit-test seam) plus the tests that lock the whole shape-rendering contract in — avoiding re-implementing settled code. (2) Modelling "playable" as a single named getter (`esJugable`) on `CeldaUI` and routing hit-testing through one `TableroUI.celdaJugableEn` seam satisfied the ticket's refactor note — "keep absent a single named concept threaded from the model, no scattered null checks" — and let the View delegate its bounds/absent logic instead of re-deriving grid geometry (AC5). (3) Testing the hit-test seam against a directly-built `TableroUI` (rather than a widget/painter test) kept the unit pure and behaviour-focused, matching the ticket's "test behaviour/state mapping, not painter pixels" instruction. (4) A latent trap avoided: because absent cells resolve to no arrow, an absent tap was *already* a downstream no-op via the use case; making it an explicit hit-test rejection is the correct, testable expression of "absent = no hit-test target" rather than relying on that incidental behaviour.
 
+### T-031 — Ticket 29 · 15-second timer warning (distinct visual + audio) + `develop` merge
+
+- **Task / problem addressed:** Implement `.issues/29-feat-frontend-timer-15s-warning.md`: on **timed** levels, when the countdown reaches **exactly 15 seconds remaining**, fire a **distinct visual and audio warning once** as the timer crosses 15s (must not re-fire each tick), never on untimed or bonus levels, and reset per run (retry/replay), pause-safe. Additionally, the feature branch had been cut from `develop` before pulling, so the latest `develop` had to be merged into the branch.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "implement this ticket `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.issues\29-feat-frontend-timer-15s-warning.md` follow the rules on these skills `…\.claude\skills\clean-architecture` `…\.claude\skills\tdd-strict`" and, later, (verbatim) "i forgot to pull whats on develop right now before creating the branch, can you please help me merge on this branch whats on develop?".
+- **Result obtained:** Strict TDD (red → green → refactor) producing: `lib/domain/evento_juego.dart` — new `TipoEvento.avisoTiempo` (a *record* of the crossing, carrying no audio symbol); `lib/infrastructure/audio/audio_service_imp.dart` — maps `avisoTiempo` → a dedicated warning SFX; `assets/sounds/warning_soft.wav` — a synthesized distinct two-tone alert; `lib/presentation/viewmodels/juego_view_model.dart` — a single named `umbralAvisoTiempo` (15s) threshold and a one-shot `_avisoTiempoEmitido` guard that publishes the `avisoTiempo` event through the move use case's **Observer publisher** (keeping `domain`/`application` audio-free) exactly once per run; `lib/presentation/viewmodels/juego_view_state.dart` — a latching `avisoTiempo` HUD flag; `lib/presentation/views/game/game_view.dart` — a new `_RelojHud` widget giving the clock a distinct pulsing danger style in the final window. New tests: VM (fire once at 15s, not on untimed/bonus, resets on retry, pause-safe) and audio (distinct warning SFX). Then merged `origin/develop` (5 commits ahead — shape-rotation / irregular-board rendering) into the branch, resolving one conflict in `test/presentation/juego_viewmodel_test.dart` where both branches had appended tests to `main()` — kept **both** test sets. Verified: full suite green (416), `flutter analyze` clean.
+- **Modifications made by the team:** Review only on the implementation. The `develop` merge required conflict resolution (both branches appended tests at the same location); resolved by keeping both branches' tests and reconciling the closing braces. No manual `lib/` edits.
+- **Lessons learned / limitations identified:** (1) Publishing the warning as a **domain event through the existing Observer publisher** kept the audio reaction entirely in infrastructure — the ViewModel and domain never reference an audio symbol (AC4 structural). (2) A latched HUD flag plus a separate one-shot emit guard cleanly separates "show the warning style for the whole final window" from "play the cue once". (3) The merge conflict was purely additive (two independent test appends), so keeping both sets — rather than choosing a side — was the correct resolution.
+
+### T-032 — Timer fixes · Difficulty-gated countdown (medium/hard) + one-shot invalid alert
+
+- **Task / problem addressed:** Post-ticket-29 bug reports surfaced by playing the app: (a) the countdown clock **displayed but never ticked**; (b) the timer should exist **only on medium and hard** levels (easy = no clock); (c) after tapping an arrow that cannot yet exit, the **red invalid-move alert "kept beating"** every second instead of firing once per mistake.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "timer is not working i dont now why, also timer should only exist when the level es medium and hard." · (verbatim) "i want that in mediums levels time is 1:30 and for hard 1min. Additional, when i touch an arrow that cant get out yet, the red alert keeps beating without stop, it should only appear once for mistake, no more than that." · (verbatim) "i lied, i want for medium 1 minute and for hard 40 seconds".
+- **Result obtained:** Three root causes fixed with strict TDD. (1) **Frozen clock:** the session was opened *timed* (a hardcoded 90s) for every level while the ViewModel gated its tick on `DefinicionNivel.esCronometrado` (`numero >= 10`, but `numero` was hardcoded to 1) — so the visible clock and its ticking never agreed. Fixed by gating the VM's clock (`_iniciarReloj`, `derrotaPorTiempo`) on `_sesion.esCronometrado`, the session-owned truth, so display and behaviour can't drift. (2) **Difficulty gating:** added `Inyeccion.limiteTiempoPorDificultad(Dificultad)` which opens the session timed only for medium/hard; difficulty is threaded from `NivelResumenUI` through `main.dart` into the composition root. Final durations: **medium 1:00, hard 0:40** (revised from an initial 1:30 / 1:00 at the team's request). (3) **Runaway red alert:** `alertaInvalida` was carried forward by `JuegoViewState.copyWith` (`?? this.alertaInvalida`); once the now-working timer ticked, each `_tic` republished a state still holding the pulse, re-triggering the flash every second. Made `alertaInvalida` a **transient one-shot** (`?? false`), matching the existing `animacionSalida` pattern. New tests: VM starts the timer from a timed session even when the definition is untimed; `Inyeccion.limiteTiempoPorDificultad` (easy none / medium+hard timed); the invalid alert does not repeat on a later timer tick. Verified: full suite green, `flutter analyze` clean.
+- **Modifications made by the team:** The team drove the requirements iteratively — reported both runtime bugs by playing the app, and **revised the timer durations mid-task** (from medium 1:30 / hard 1:00 to medium 1:00 / hard 0:40). Review only on the code.
+- **Lessons learned / limitations identified:** (1) "Is this level timed?" must have a **single source of truth** (the session); duplicating the decision across the session and the scoring definition let them drift into a displayed-but-frozen clock. (2) Transient one-shot UI signals **must be cleared by `copyWith`** — persisting them is latent until some *other* notifier (here, the timer) starts publishing states and exposes the stale flag. (3) Two independently-correct-looking AI-authored pieces (the timer gate and the alert-persistence) combined into a single visible defect that **only manual runtime testing** caught — tests and `analyze` were green throughout.
+
+### T-033 — Ticket 24 follow-up · Per-user local progress (login unlock restore)
+
+- **Task / problem addressed:** Logging in did **not** show the levels a user had previously unlocked. Diagnosis: local progression used **global** `shared_preferences` keys and was **wiped on every login** (to stop one account seeing another's unlocks), then re-hydrated **only** from backend `GET /progress`. When that read returned nothing — backend not running (`localhost:3000` default), or the catalog fell back to the offline bundle which has no backend UUIDs to map — the user was left fully locked.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "when I log in with a user i does not shows me unlocked the levels that were unlocked before with that user. It should show me the progress that the user has done before." The AI diagnosed the architecture and presented three fix directions (per-user local / fix backend restore / stop wiping) via a clarifying question; the team chose **per-user local persistence**.
+- **Result obtained:** Reworked progression to be **namespaced per user** (strict TDD): `lib/infrastructure/progreso/progreso_local_persistente.dart` — keys become `arrowmaze.progreso.<usuario>.estrellas.<id>` with the active user persisted (`arrowmaze.progreso.usuarioActivo`) so restart/auto-login reads the right namespace; `lib/application/ports/selector_usuario_progreso.dart` — new small `SelectorUsuarioProgreso` port (kept separate from `ConsultaProgresoLocal` so the five existing fakes stay untouched); `lib/application/use_cases/activar_progreso_usuario_use_case.dart` — new use case that switches the namespace + clears the in-memory sync queue. Login/register now **activate** the account's namespace (`IniciarSesionUseCase`/`RegistrarUsuarioUseCase`) instead of wiping; logout (`CerrarSesionUseCase`) now clears **only the token**, retaining progress. Deleted the now-unused `LimpiarProgresoLocalUseCase`; `limpiar()` scoped to the active user. `RestaurarProgresoUseCase` still merges backend progress on top (best-per-level, cross-device). New/updated tests: per-user store isolation + restore-after-relogin, login/register activation, logout-retains-progress. Verified: full suite green (420), `flutter analyze` clean.
+- **Modifications made by the team:** The team made the **key design decision** (chose per-user local persistence from the three presented options). Review only on the code.
+- **Lessons learned / limitations identified:** (1) A "wipe-on-login + remote-restore-only" model **silently loses progress** whenever the remote read fails for any reason; namespacing per user makes device-local progress the reliable source and keeps the backend as an *additive* cross-device layer. (2) Introducing a **small dedicated port** (`SelectorUsuarioProgreso`) for the new capability avoided modifying the five existing `ConsultaProgresoLocal` fakes — a lower-churn seam than widening the existing port. (3) Known limitation: progress saved under the **old global keys** before this change is orphaned (a one-time reset); a migration was consciously not implemented.
+
+### T-034 — Level Selection · Remove automatic back button
+
+- **Task / problem addressed:** Remove the "go back" button on the Level Selection screen.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "delet the go back bottom on the select level interface".
+- **Result obtained:** The button was **not** explicit code — it was the `AppBar`'s **automatic leading back arrow** (Flutter adds it when it thinks the route can be popped). Set `automaticallyImplyLeading: false` on the Level Selection `AppBar` in `lib/presentation/views/seleccion/seleccion_niveles_view.dart`, so no back arrow toward the login screen; the Settings and Logout actions on the right are untouched. `flutter analyze` clean on the file; no tests referenced it.
+- **Modifications made by the team:** Review only.
+- **Lessons learned / limitations identified:** An unwanted back arrow on a post-login "home" screen is usually Flutter's automatic `AppBar` *leading* widget, not written code; `automaticallyImplyLeading: false` is the intent-explicit fix and works regardless of how the route was pushed.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1608,13 +1644,15 @@ eloj:
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
     03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, and 30 were AI-generated then human-reviewed; the theme tokens under `lib/core/theme`
-    were pre-existing (not AI-authored in these tasks). Every ticket followed the
-    same pattern (full AI authoring + human review), so the share holds at ~90%.
-    Rough judgment over the files added across the slices (370 passing tests, all
-    source in `lib/domain/`, `lib/application/`, `lib/infrastructure/`,
-    `lib/presentation/`, `lib/di/`, `lib/core/`, plus synthesized binary assets
-    under `assets/sounds/`).
+    27, 28, 29, and 30 — plus the post-29 timer/invalid-alert fixes, the per-user
+    local-progress rework (T-033), and the Level-Selection back-button change
+    (T-034) — were AI-generated then human-reviewed; the theme tokens under
+    `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every
+    ticket followed the same pattern (full AI authoring + human review), so the
+    share holds at ~90%. Rough judgment over the files added across the slices
+    (420 passing tests, all source in `lib/domain/`, `lib/application/`,
+    `lib/infrastructure/`, `lib/presentation/`, `lib/di/`, `lib/core/`, plus
+    synthesized binary assets under `assets/sounds/`).
 
 ### Incorrect or suboptimal AI results
 
@@ -1877,6 +1915,28 @@ eloj:
   - **How it was corrected:** Changed to a non-const set with a const element
     (`{const Posicion.en(...)}`), which is the correct form for a value type with
     custom equality.
+- **Case:** The countdown clock displayed but never counted down — the session
+  was opened *timed* (a hardcoded 90s) for every level, while the ViewModel gated
+  its tick on `DefinicionNivel.esCronometrado` (`numero >= 10`, but `numero` was
+  hardcoded to 1), so the "is timed" decision disagreed between the session and
+  the definition (T-032).
+  - **How it was detected:** Manual runtime testing — the user played the app and
+    saw a frozen clock; the full test suite and `flutter analyze` were green.
+  - **How it was corrected:** Gated the ViewModel's clock on `_sesion.esCronometrado`
+    (the session-owned truth), so the visible clock and its ticking can never
+    drift; timer presence is then decided once, per difficulty, in the
+    composition root.
+- **Case:** The invalid-move red alert "kept beating" every second — `alertaInvalida`
+  was carried forward by `JuegoViewState.copyWith` (`?? this.alertaInvalida`), so
+  once the (newly working) timer ticked, each tick republished a state still
+  holding the pulse and re-fired the flash (T-032).
+  - **How it was detected:** Manual runtime testing (the user reported the
+    strobing after tapping a blocked arrow); this latent bug was invisible until
+    the timer started emitting periodic states.
+  - **How it was corrected:** Made `alertaInvalida` a transient one-shot in
+    `copyWith` (`?? false`), matching the existing `animacionSalida` pattern, so
+    the pulse rides only the state its leading invalid tap produces; added a test
+    that a later timer tick does not re-raise it.
 
 ### Team reflection
 
