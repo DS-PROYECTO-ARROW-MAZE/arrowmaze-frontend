@@ -78,6 +78,9 @@ class AudioServiceImp implements ObservadorJuego, IControlAudio {
       volumen: 0.6,
     ),
     TipoEvento.victoria: (asset: 'sounds/victory_soft.wav', volumen: 0.7),
+    // A dedicated, attention-grabbing cue for the 15-second heads-up (ticket 29,
+    // AC4) — deliberately its *own* sample, not a reused move/invalid sound.
+    TipoEvento.avisoTiempo: (asset: 'sounds/warning_soft.wav', volumen: 0.65),
     TipoEvento.derrota: (asset: 'sounds/defeat_soft.wav', volumen: 0.6),
   };
 
