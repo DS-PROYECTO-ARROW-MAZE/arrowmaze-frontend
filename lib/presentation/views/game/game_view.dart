@@ -236,6 +236,7 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
                     esCountdown: estado.movimientosRestantes >= 0,
                     coleccionables: estado.coleccionables,
                     tiempoRestante: estado.tiempoRestante,
+                    avisoTiempo: estado.avisoTiempo,
                     usosUndoRestantes: estado.usosUndoRestantes,
                     game: game,
                   ),
@@ -565,7 +566,9 @@ class _FeedbackInvalido extends StatelessWidget {
 ///
 /// The countdown clock shifts from neutral → warning → danger as the remaining
 /// time drops below 30 and 10 seconds respectively, using [GameTheme] tokens
-/// so the visual tuning stays in one place.
+/// so the visual tuning stays in one place. In the final-warning window
+/// ([avisoTiempo], ticket 29) the clock adopts a **distinct** style — a danger
+/// colour and a steady pulse — so the player registers the heads-up at a glance.
 class _Hud extends StatelessWidget {
   const _Hud({
     required this.movimientos,
@@ -573,6 +576,7 @@ class _Hud extends StatelessWidget {
     required this.coleccionables,
     required this.game,
     this.tiempoRestante,
+    this.avisoTiempo = false,
     this.usosUndoRestantes = 3,
   });
 
@@ -587,6 +591,10 @@ class _Hud extends StatelessWidget {
   final int coleccionables;
   final GameTheme game;
   final Duration? tiempoRestante;
+
+  /// Whether the timed level is inside its final 15-second warning window: the
+  /// clock then pulses in the danger colour (ticket 29, AC2).
+  final bool avisoTiempo;
   final int usosUndoRestantes;
 
   /// Formats the remaining time as `m:ss` for the HUD clock.
@@ -605,8 +613,11 @@ class _Hud extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final s = CadenasScope.of(context);
-    final timerColor =
-        tiempoRestante != null ? _timerColor(tiempoRestante!) : null;
+    // In the final-warning window the clock takes the danger colour outright so
+    // the pulsing cue reads as urgent, distinct from the steady 30 s/10 s tints.
+    final timerColor = tiempoRestante == null
+        ? null
+        : (avisoTiempo ? game.invalidMoveFlash : _timerColor(tiempoRestante!));
     return Padding(
       padding: const EdgeInsets.all(AppSpacing.md),
       child: Row(
@@ -625,11 +636,10 @@ class _Hud extends StatelessWidget {
           ],
           if (tiempoRestante != null) ...[
             const SizedBox(width: AppSpacing.xl),
-            Icon(Icons.timer_outlined, size: 18, color: timerColor),
-            const SizedBox(width: AppSpacing.xs),
-            Text(
-              _formatear(tiempoRestante!),
-              style: AppTypography.hudNumber.copyWith(color: timerColor),
+            _RelojHud(
+              texto: _formatear(tiempoRestante!),
+              color: timerColor!,
+              aviso: avisoTiempo,
             ),
           ],
           // The bonus tally only appears once something has been collected.
@@ -642,6 +652,90 @@ class _Hud extends StatelessWidget {
               style: AppTypography.hudNumber.copyWith(color: game.cellCollectible),
             ),
           ],
+        ],
+      ),
+    );
+  }
+}
+
+/// The HUD countdown clock: the timer icon and `m:ss` text, which **pulse** in
+/// unison while [aviso] is set (the final 15 seconds, ticket 29, AC2).
+///
+/// The pulse is a purely presentational affordance driven by a repeating
+/// controller; it carries no game logic. Outside the warning window it rests at
+/// its natural size, so the distinct urgent look appears only when the ViewModel
+/// says the run has crossed the threshold.
+class _RelojHud extends StatefulWidget {
+  const _RelojHud({
+    required this.texto,
+    required this.color,
+    required this.aviso,
+  });
+
+  /// The formatted remaining time (`m:ss`).
+  final String texto;
+
+  /// The colour of the icon and text (danger colour while [aviso]).
+  final Color color;
+
+  /// Whether to play the final-warning pulse.
+  final bool aviso;
+
+  @override
+  State<_RelojHud> createState() => _RelojHudState();
+}
+
+class _RelojHudState extends State<_RelojHud>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _pulso;
+
+  @override
+  void initState() {
+    super.initState();
+    _pulso = AnimationController(vsync: this, duration: AppDurations.slow);
+    _sincronizarPulso();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RelojHud anterior) {
+    super.didUpdateWidget(anterior);
+    if (anterior.aviso != widget.aviso) _sincronizarPulso();
+  }
+
+  /// Runs the pulse only inside the warning window; otherwise it rests at its
+  /// natural scale so the effect appears exactly when the warning is active.
+  void _sincronizarPulso() {
+    if (widget.aviso) {
+      _pulso.repeat(reverse: true);
+    } else {
+      _pulso
+        ..stop()
+        ..value = 0;
+    }
+  }
+
+  @override
+  void dispose() {
+    _pulso.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final escala = Tween<double>(begin: 1, end: 1.15).animate(
+      CurvedAnimation(parent: _pulso, curve: Curves.easeInOut),
+    );
+    return ScaleTransition(
+      scale: escala,
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.timer_outlined, size: 18, color: widget.color),
+          const SizedBox(width: AppSpacing.xs),
+          Text(
+            widget.texto,
+            style: AppTypography.hudNumber.copyWith(color: widget.color),
+          ),
         ],
       ),
     );

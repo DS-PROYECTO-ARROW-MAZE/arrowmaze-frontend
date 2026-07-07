@@ -169,6 +169,9 @@ class _JuegoHostState extends State<_JuegoHost> {
     _viewModel = Inyeccion.construirJuegoViewModelDesdeArchivo(
       widget.nivel.id,
       nivelIdRemoto: widget.nivel.idRemoto,
+      // Timer presence follows the level's difficulty (medium/hard timed, easy
+      // untimed) — decided in the composition root from this metadata.
+      dificultad: widget.nivel.dificultad,
     );
     _viewModel.then((vm) => _juego = vm);
   }

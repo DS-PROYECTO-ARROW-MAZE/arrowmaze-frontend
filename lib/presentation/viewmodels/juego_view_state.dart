@@ -202,6 +202,7 @@ class JuegoViewState {
     this.pausado = false,
     this.derrota = false,
     this.derrotaPorTiempo = false,
+    this.avisoTiempo = false,
     this.victoria,
     this.tiempoRestante,
     this.muted = false,
@@ -247,6 +248,14 @@ class JuegoViewState {
   /// exhaustion). Meaningful only when [derrota] is `true`.
   final bool derrotaPorTiempo;
 
+  /// Whether the timed level is inside its final-warning window (≤ 15 s left):
+  /// the HUD clock adopts a distinct, pulsing warning style while this is `true`
+  /// (ticket 29, AC2). Latches on when the clock first crosses 15 s and stays on
+  /// for the rest of the run; always `false` on untimed and bonus levels (AC3).
+  /// Distinct from the one-shot `TipoEvento.avisoTiempo` audio cue, which the
+  /// ViewModel emits exactly once as the threshold is crossed.
+  final bool avisoTiempo;
+
   /// Whether audio is globally muted (the View shows a mute/unmute icon).
   final bool muted;
 
@@ -278,6 +287,7 @@ class JuegoViewState {
     bool? pausado,
     bool? derrota,
     bool? derrotaPorTiempo,
+    bool? avisoTiempo,
     bool? muted,
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
@@ -291,10 +301,15 @@ class JuegoViewState {
           movimientosRestantes ?? this.movimientosRestantes,
       coleccionables: coleccionables ?? this.coleccionables,
       movimientoInvalido: movimientoInvalido ?? this.movimientoInvalido,
-      alertaInvalida: alertaInvalida ?? this.alertaInvalida,
+      // Transient one-shot: a copy that doesn't explicitly raise it clears the
+      // pulse, so the red flash never survives into a later state (e.g. a timer
+      // tick) and re-fires. It is true only on the state the leading invalid tap
+      // produces (Ticket 28/29).
+      alertaInvalida: alertaInvalida ?? false,
       pausado: pausado ?? this.pausado,
       derrota: derrota ?? this.derrota,
       derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,
+      avisoTiempo: avisoTiempo ?? this.avisoTiempo,
       muted: muted ?? this.muted,
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,

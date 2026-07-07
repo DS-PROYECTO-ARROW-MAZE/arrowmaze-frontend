@@ -1,8 +1,11 @@
 import 'package:arrowmaze/application/ports/reloj.dart';
 import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
+import 'package:arrowmaze/domain/evento_juego.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
+import 'package:arrowmaze/domain/observador_juego.dart';
 import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
+import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_model.dart';
@@ -14,6 +17,37 @@ class _RelojNulo implements Reloj {
   void iniciar(Duration intervalo, void Function() tic) {}
   @override
   void detener() {}
+}
+
+/// A clock whose one-second tick is driven **manually** from the test, so the
+/// countdown can be advanced deterministically one second at a time. It captures
+/// the callback the ViewModel arms so [tic] fires exactly one `_tic`.
+class _RelojControlable implements Reloj {
+  void Function()? _callback;
+  bool iniciado = false;
+
+  @override
+  void iniciar(Duration intervalo, void Function() tic) {
+    iniciado = true;
+    _callback = tic;
+  }
+
+  @override
+  void detener() {}
+
+  /// Fires one countdown tick (advancing the session clock by a second).
+  void tic() => _callback?.call();
+}
+
+/// A game-event observer that counts how many time-warning events it received,
+/// standing in for the audio service subscribed to the same publisher.
+class _ObservadorAviso implements ObservadorJuego {
+  int avisos = 0;
+
+  @override
+  void alOcurrirEvento(EventoJuego evento) {
+    if (evento.tipo == TipoEvento.avisoTiempo) avisos++;
+  }
 }
 
 /// Verifies the MVVM binding: a tap on the VM runs the use case and publishes a
@@ -174,6 +208,142 @@ void main() {
     // Assert — an invalid move never emits an exit descriptor (AC3).
     expect(viewModel.estado.movimientoInvalido, isTrue);
     expect(viewModel.estado.animacionSalida, isNull);
+  });
+
+  group('15-second time warning (ticket 29)', () {
+    // A timed level (numero >= 10, non-bonus, with a limit) — the only kind on
+    // which the warning may fire (AC3).
+    const definicionCronometrada = DefinicionNivel(
+      id: 10,
+      numero: 10,
+      baseNivel: 1000,
+      kmov: 10,
+      ktiempo: 2,
+      limiteTiempo: Duration(seconds: 17),
+    );
+
+    /// Builds a timed ViewModel wired to a manual clock and a warning observer,
+    /// with the session opened at [limite] so the test can tick down to 15s.
+    ({
+      JuegoViewModel vm,
+      _RelojControlable reloj,
+      _ObservadorAviso observador,
+    }) construirCronometrado({
+      Duration limite = const Duration(seconds: 17),
+    }) {
+      final tablero = construirTablero();
+      final sesion = SesionJuego(tablero: tablero, limiteTiempo: limite);
+      final mover = MoverFlechaUseCase(tablero, sesion: sesion);
+      final observador = _ObservadorAviso();
+      mover.publicador.suscribir(observador);
+      final reloj = _RelojControlable();
+      final vm = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: mover,
+        definicionNivel: definicionCronometrada,
+        reloj: reloj,
+      );
+      return (vm: vm, reloj: reloj, observador: observador);
+    }
+
+    test('should_fire_time_warning_once_when_remaining_reaches_15', () {
+      // Arrange — a timed run starting at 17s.
+      final ctx = construirCronometrado();
+
+      // Act — 17→16: above threshold, no warning yet.
+      ctx.reloj.tic();
+      expect(ctx.observador.avisos, 0);
+      expect(ctx.vm.estado.avisoTiempo, isFalse);
+
+      // 16→15: crosses the threshold — the warning fires exactly once.
+      ctx.reloj.tic();
+      expect(ctx.observador.avisos, 1);
+      expect(ctx.vm.estado.avisoTiempo, isTrue);
+
+      // 15→14→13: the HUD stays in warning but no new event is emitted (AC1).
+      ctx.reloj.tic();
+      ctx.reloj.tic();
+      expect(ctx.observador.avisos, 1);
+      expect(ctx.vm.estado.avisoTiempo, isTrue);
+    });
+
+    test('should_not_warn_when_level_untimed_or_bonus', () {
+      // Two non-timed shapes that must never warn (AC3): an untimed level (no
+      // limit) and a bonus level (a limit is present but bonus levels aren't
+      // timed). Both must leave the clock un-armed so no tick can ever occur.
+      const sinTiempo = DefinicionNivel(
+        id: 1,
+        baseNivel: 1000,
+        kmov: 10,
+        ktiempo: 2,
+        limiteTiempo: null,
+      );
+      const bonus = DefinicionNivel(
+        id: 12,
+        numero: 12,
+        baseNivel: 1000,
+        kmov: 10,
+        ktiempo: 2,
+        limiteTiempo: Duration(seconds: 17),
+        esBonus: true,
+      );
+
+      for (final definicion in const [sinTiempo, bonus]) {
+        final tablero = construirTablero();
+        final mover = MoverFlechaUseCase(tablero);
+        final observador = _ObservadorAviso();
+        mover.publicador.suscribir(observador);
+        final reloj = _RelojControlable();
+
+        final vm = JuegoViewModel(
+          tablero: tablero,
+          moverFlecha: mover,
+          definicionNivel: definicion,
+          reloj: reloj,
+        );
+
+        // Assert — the clock is never armed and the warning never fires.
+        expect(reloj.iniciado, isFalse, reason: 'nivel ${definicion.id}');
+        expect(observador.avisos, 0, reason: 'nivel ${definicion.id}');
+        expect(vm.estado.avisoTiempo, isFalse, reason: 'nivel ${definicion.id}');
+      }
+    });
+
+    test('should_reset_warning_on_retry', () {
+      // Arrange — first run: drive it across 15s so the warning fires once.
+      final primera = construirCronometrado();
+      primera.reloj.tic(); // 17→16
+      primera.reloj.tic(); // 16→15 (warns)
+      expect(primera.observador.avisos, 1);
+
+      // Act — a retry is a *fresh run* (a new session + ViewModel). The one-shot
+      // guard must be per-run, not a leaked latch, so the new run warns again.
+      final segunda = construirCronometrado();
+      segunda.reloj.tic(); // 17→16
+      segunda.reloj.tic(); // 16→15 (warns again)
+
+      // Assert — the second run fires its own warning independently.
+      expect(segunda.observador.avisos, 1);
+      expect(segunda.vm.estado.avisoTiempo, isTrue);
+    });
+
+    test('should_not_refire_warning_across_pause_and_resume', () {
+      // Arrange — cross the threshold so the warning has already fired once.
+      final ctx = construirCronometrado();
+      ctx.reloj.tic(); // 17→16
+      ctx.reloj.tic(); // 16→15 (warns)
+      expect(ctx.observador.avisos, 1);
+
+      // Act — pause then resume while already inside the final 15 seconds.
+      ctx.vm.pausar();
+      ctx.vm.reanudar();
+      ctx.reloj.tic(); // 15→14
+
+      // Assert — resuming re-arms the clock but never re-fires the warning (AC5),
+      // and the HUD stays in its warning state throughout.
+      expect(ctx.observador.avisos, 1);
+      expect(ctx.vm.estado.avisoTiempo, isTrue);
+    });
   });
 
   test('should_mark_absent_positions_as_non_playable_in_view_state', () {

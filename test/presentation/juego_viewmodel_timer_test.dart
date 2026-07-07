@@ -181,6 +181,36 @@ void main() {
   });
 
   test(
+      'should_start_timer_from_session_even_when_definicion_untimed', () {
+    // The timer's existence is decided by the **session** (opened timed by the
+    // composition root for medium/hard levels), not by DefinicionNivel's numeric
+    // rule. A timed session must drive the countdown even when the scoring
+    // definition is untimed, so the two can never disagree and freeze the clock.
+    final reloj = _RelojGrabbed();
+    final tablero = tableroDeUnaFlecha();
+    final sesion =
+        SesionJuego(tablero: tablero, limiteTiempo: const Duration(seconds: 90));
+    const definicion = DefinicionNivel(
+      id: 1,
+      numero: 1,
+      baseNivel: 1000,
+      kmov: 10,
+      ktiempo: 2,
+    );
+
+    final viewModel = JuegoViewModel(
+      tablero: tablero,
+      moverFlecha: MoverFlechaUseCase(tablero, sesion: sesion),
+      definicionNivel: definicion,
+      reloj: reloj,
+    );
+
+    expect(reloj.iniciado, isTrue);
+    expect(reloj.intervalo, const Duration(seconds: 1));
+    expect(viewModel.estado.tiempoRestante, const Duration(seconds: 90));
+  });
+
+  test(
       'should_show_timer_in_HUD_when_level_numero_10_or_above', () {
     final tablero = tableroDeUnaFlecha();
     final sesion = SesionJuego(tablero: tablero, limiteTiempo: const Duration(seconds: 90));

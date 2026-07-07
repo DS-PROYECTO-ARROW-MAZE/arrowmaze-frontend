@@ -65,6 +65,27 @@ void main() {
     });
   });
 
+  group('AudioServiceImp — time warning (ticket 29, AC4)', () {
+    test('should_play_distinct_warning_sound_when_notified_of_aviso_tiempo', () {
+      // Act — the 15-second time warning arrives as a game event via the Observer.
+      audioService.alOcurrirEvento(EventoJuego(TipoEvento.avisoTiempo, posicion));
+
+      // Assert — a single sound plays, and it is *distinct* from every other
+      // event's asset (a dedicated warning cue, not a reused move/invalid sound).
+      final reproducido = reproductor.assetsReproducidos.single;
+      const otros = <String>{
+        'sounds/move_soft.wav',
+        'sounds/invalid_soft.wav',
+        'sounds/collect_soft.wav',
+        'sounds/victory_soft.wav',
+        'sounds/defeat_soft.wav',
+      };
+      expect(otros, isNot(contains(reproducido)));
+      expect(reproductor.volumenesReproducidos.single, greaterThan(0));
+      expect(reproductor.volumenesReproducidos.single, lessThan(1.0));
+    });
+  });
+
   group('AudioServiceImp — bounded polyphony (AC3)', () {
     test('should_debounce_rapid_repeats_of_same_event', () {
       var ahora = DateTime(2026, 1, 1);

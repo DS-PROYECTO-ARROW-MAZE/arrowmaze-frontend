@@ -108,4 +108,59 @@ void main() {
       expect(await otra.mejorEstrellas(2), 1);
     });
   });
+
+  group('ProgresoLocalPersistente — per-user isolation (Ticket 24)', () {
+    setUp(() => SharedPreferences.setMockInitialValues({}));
+
+    test('should_isolate_progress_between_users', () async {
+      // Arrange — user A clears levels 1 and 2.
+      final store = ProgresoLocalPersistente();
+      await store.establecerUsuario('alice@test.com');
+      await store.registrarCompletado(idNivel: 1, estrellas: 3);
+      await store.registrarCompletado(idNivel: 2, estrellas: 1);
+
+      // Act — switch to a different user.
+      await store.establecerUsuario('bob@test.com');
+
+      // Assert — Bob starts empty; Alice's unlocks are not visible to him.
+      expect(await store.nivelesCompletados(), isEmpty);
+
+      // And switching back to Alice restores her progress intact.
+      await store.establecerUsuario('alice@test.com');
+      expect(await store.nivelesCompletados(), {1, 2});
+      expect(await store.mejorEstrellas(1), 3);
+    });
+
+    test('should_restore_active_user_progress_after_relogin', () async {
+      // Arrange — Alice plays, then a fresh store instance simulates a re-login
+      // on the same device (the active user is persisted).
+      await (ProgresoLocalPersistente()
+            ..establecerUsuario('alice@test.com'))
+          .registrarCompletado(idNivel: 1, estrellas: 2);
+
+      // Act — a brand-new instance (app restart / re-login) reads storage.
+      final store = ProgresoLocalPersistente();
+
+      // Assert — Alice's progress is still there without any remote restore.
+      expect(await store.nivelesCompletados(), {1});
+      expect(await store.mejorEstrellas(1), 2);
+    });
+
+    test('should_only_clear_active_user_when_limpiar_called', () async {
+      // Arrange — two users each with progress.
+      final store = ProgresoLocalPersistente();
+      await store.establecerUsuario('alice@test.com');
+      await store.registrarCompletado(idNivel: 1, estrellas: 3);
+      await store.establecerUsuario('bob@test.com');
+      await store.registrarCompletado(idNivel: 1, estrellas: 1);
+
+      // Act — clear only the active user (Bob).
+      await store.limpiar();
+
+      // Assert — Bob is wiped, Alice is untouched.
+      expect(await store.nivelesCompletados(), isEmpty);
+      await store.establecerUsuario('alice@test.com');
+      expect(await store.nivelesCompletados(), {1});
+    });
+  });
 }
