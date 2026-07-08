@@ -13,7 +13,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// unlocked levels.
 void main() {
   group('AuthViewModel — restore on login (Ticket 24 AC2)', () {
-    test('should_invoke_restore_after_successful_login_before_navigation',
+    test('should_invoke_restore_before_navigation_when_login_succeeds',
         () async {
       // Arrange — a fake auth source that returns a token.
       final sesion = _ProveedorSesionFake();

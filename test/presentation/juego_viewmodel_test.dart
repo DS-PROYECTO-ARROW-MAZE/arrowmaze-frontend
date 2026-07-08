@@ -83,7 +83,7 @@ void main() {
     );
   }
 
-  test('should_expose_path_geometry_in_the_initial_snapshot', () {
+  test('should_expose_path_geometry_when_building_initial_snapshot', () {
     // Arrange
     final tablero = construirTablero();
     final viewModel = JuegoViewModel(
@@ -309,7 +309,7 @@ void main() {
       }
     });
 
-    test('should_reset_warning_on_retry', () {
+    test('should_reset_warning_when_retrying', () {
       // Arrange — first run: drive it across 15s so the warning fires once.
       final primera = construirCronometrado();
       primera.reloj.tic(); // 17→16
@@ -327,7 +327,7 @@ void main() {
       expect(segunda.vm.estado.avisoTiempo, isTrue);
     });
 
-    test('should_not_refire_warning_across_pause_and_resume', () {
+    test('should_not_refire_warning_when_paused_and_resumed', () {
       // Arrange — cross the threshold so the warning has already fired once.
       final ctx = construirCronometrado();
       ctx.reloj.tic(); // 17→16
@@ -346,7 +346,7 @@ void main() {
     });
   });
 
-  test('should_mark_absent_positions_as_non_playable_in_view_state', () {
+  test('should_mark_absent_positions_as_non_playable_when_building_view_state', () {
     // Arrange — a shaped 2×2 board with one absent corner (outside the shape).
     final tablero = GrafoTablero.desde(
       filas: 2,
@@ -373,7 +373,7 @@ void main() {
     expect(presente.esJugable, isTrue);
   });
 
-  test('should_distinguish_absent_from_empty_cell_in_view_state', () {
+  test('should_distinguish_absent_from_empty_cell_when_building_view_state', () {
     // Arrange — (0,1) is absent; every other cell is present empty space.
     final tablero = GrafoTablero.desde(
       filas: 2,

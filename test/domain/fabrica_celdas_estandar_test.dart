@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   const fabrica = FabricaCeldasEstandar();
 
-  test('should_build_a_trayectoria_with_head_direction_for_each_token', () {
+  test('should_build_a_trayectoria_with_head_direction_when_parsing_each_token', () {
     // Arrange
     const casos = {
       'UP': Direccion.arriba,

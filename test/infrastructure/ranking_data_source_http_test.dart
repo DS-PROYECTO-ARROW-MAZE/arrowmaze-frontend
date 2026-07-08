@@ -10,7 +10,7 @@ import 'package:http/testing.dart';
 /// Issue 14 — RankingDataSourceHttp (`GET /leaderboard`, protected) (AC2/AC3).
 void main() {
   group('RankingDataSourceHttp (Issue 14)', () {
-    test('should_query_leaderboard_with_nivelId_and_limite', () async {
+    test('should_query_leaderboard_when_given_nivelId_and_limite', () async {
       // Arrange
       late Uri pedida;
       late http.BaseRequest enviada;

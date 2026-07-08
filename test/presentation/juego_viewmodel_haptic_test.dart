@@ -120,7 +120,7 @@ void main() {
     expect(viewModel.estado.alertaInvalida, isTrue);
   });
 
-  test('should_not_repeat_invalid_alert_on_later_state_updates', () {
+  test('should_not_repeat_invalid_alert_when_later_state_updates', () {
     // Arrange — a timed level, so the countdown publishes new states after the
     // mistake (this is when the alert used to "keep beating" each second).
     final tablero = construirTablero();

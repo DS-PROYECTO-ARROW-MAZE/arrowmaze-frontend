@@ -13,7 +13,7 @@ import '../../tool/generador_catalogo.dart';
 /// (deterministic, Flutter-free), before any asset is written.
 void main() {
   group('generador_catalogo — authored catalog generation', () {
-    test('should_assign_shape_by_rotation_for_each_authored_numero', () {
+    test('should_assign_shape_by_rotation_when_iterating_authored_numeros', () {
       // AC1 — the tool consumes ticket 23's RepertorioFormas as the single
       // source of truth for shape order; it never re-defines the repertoire.
       final repertorio = RepertorioFormas();
@@ -34,7 +34,7 @@ void main() {
       expect(formaDeNivel(6).nombre, 'Cuadrado');
     });
 
-    test('should_ramp_grid_size_aggressively_from_a_7x7_floor', () {
+    test('should_ramp_grid_size_aggressively_when_starting_from_7x7_floor', () {
       // Level 1 sits on the raised 7×7 floor (PRD §12 req 2)…
       expect(perfilNivel(1).lado, 7, reason: 'floor');
       // …no authored level is smaller than the floor…
@@ -54,7 +54,7 @@ void main() {
     });
 
     test(
-        'should_produce_solvable_masked_board_with_no_length_1_arrow_for_each_authored_level',
+        'should_produce_solvable_masked_board_with_no_length_1_arrow_when_iterating_authored_levels',
         () {
       // AC4 — every regenerated board is solvable and free of length-1 arrows.
       for (var numero = 1; numero <= totalNivelesCatalogo; numero++) {
@@ -79,7 +79,7 @@ void main() {
       }
     });
 
-    test('should_omit_absent_positions_from_serialized_cells', () {
+    test('should_omit_absent_positions_when_serializing_cells', () {
       // AC4 — shaped boards are sparse: absent positions are omitted entirely
       // (no `type: "absent"` filler), and the omitted set matches the mask.
       const numeroCorazon = 2; // Corazón excludes some cells on a 7×7 grid.

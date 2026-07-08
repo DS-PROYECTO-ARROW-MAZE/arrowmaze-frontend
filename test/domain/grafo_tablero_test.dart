@@ -29,7 +29,7 @@ void main() {
           isA<CeldaAusente>());
     });
 
-    test('should_return_normal_cells_for_non_absent_positions', () {
+    test('should_return_normal_cells_when_positions_are_not_absent', () {
       final tablero = GrafoTablero.desde(
         filas: 3,
         columnas: 3,
@@ -41,7 +41,7 @@ void main() {
           isA<CeldaVacia>());
     });
 
-    test('should_not_link_nodes_to_absent_positions', () {
+    test('should_not_link_nodes_when_positions_are_absent', () {
       final tablero = GrafoTablero.desde(
         filas: 3,
         columnas: 2,

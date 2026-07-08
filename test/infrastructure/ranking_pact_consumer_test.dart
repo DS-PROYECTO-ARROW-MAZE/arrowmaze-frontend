@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Leaderboard DTO shape (Issue 14)', () {
     test(
-      'should_match_ranking_dto_contract',
+      'should_match_ranking_dto_contract_when_serialized',
       () {
         // Arrange
         final entrada = FilaRankingDto(
@@ -52,7 +52,7 @@ void main() {
     );
 
     test(
-      'should_produce_valid_empty_ranking_contract',
+      'should_produce_valid_empty_ranking_contract_when_ranking_is_empty',
       () {
         // Arrange
         final responseDto = RankingResponseDto(entradas: const []);

@@ -15,7 +15,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Sync DTO shape', () {
     test(
-      'should_match_sync_dto_contract',
+      'should_match_sync_dto_contract_when_serialized',
       () {
         // Arrange — a single progress item matching the contract.
         final item = ProgresoSyncDto(
@@ -52,7 +52,7 @@ void main() {
     );
 
     test(
-      'should_produce_valid_empty_batch_contract',
+      'should_produce_valid_empty_batch_contract_when_batch_is_empty',
       () {
         // Arrange
         final syncDto = SyncRequestDto(progresos: const []);

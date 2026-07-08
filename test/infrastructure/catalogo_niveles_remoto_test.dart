@@ -57,7 +57,7 @@ void main() {
       expect(niveles[1].dificultad, Dificultad.dificil);
     });
 
-    test('should_map_difficulty_tokens_correctly', () async {
+    test('should_map_difficulty_tokens_when_parsing_response', () async {
       // Arrange — all difficulty variants (backend FACIL/MEDIO/DIFICIL tokens).
       (client as _HttpClientFake).respuesta = http.Response(
         jsonEncode([
@@ -109,7 +109,7 @@ void main() {
       expect(niveles[0].nombre, 'Fallback One');
     });
 
-    test('should_order_results_by_id_ascending', () async {
+    test('should_order_results_by_id_ascending_when_listing', () async {
       // Arrange — unordered response.
       (client as _HttpClientFake).respuesta = http.Response(
         jsonEncode([

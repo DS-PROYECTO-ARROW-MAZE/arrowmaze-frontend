@@ -152,19 +152,19 @@ Tablero tableroShapedInsolvable() {
 
 void main() {
   group('Solver.esSolvable', () {
-    test('should_return_true_for_known_solvable_golden_board', () {
+    test('should_return_true_when_board_is_known_solvable_golden', () {
       final tablero = tableroSolvable();
       final resultado = Solver.esSolvable(tablero);
       expect(resultado, isTrue);
     });
 
-    test('should_return_false_for_known_unsolvable_golden_board', () {
+    test('should_return_false_when_board_is_known_unsolvable_golden', () {
       final tablero = tableroInsolvable();
       final resultado = Solver.esSolvable(tablero);
       expect(resultado, isFalse);
     });
 
-    test('should_return_same_verdict_across_shuffled_removal_orders', () {
+    test('should_return_same_verdict_when_removal_orders_shuffled', () {
       final resultados = <bool>[];
       for (var i = 0; i < 10; i++) {
         final copia = GrafoTablero.desde(
@@ -234,7 +234,7 @@ void main() {
       expect(resultados.first, isTrue);
     });
 
-    test('should_return_true_for_empty_board', () {
+    test('should_return_true_when_board_is_empty', () {
       final tablero = GrafoTablero.desde(filas: 3, columnas: 3);
       final resultado = Solver.esSolvable(tablero);
       expect(resultado, isTrue);
@@ -255,7 +255,7 @@ void main() {
       expect(resultado, isFalse);
     });
 
-    test('should_skip_absent_positions_during_raycast', () {
+    test('should_skip_absent_positions_when_raycasting', () {
       // Arrow at (0,0) pointing left; (0,1) is absent so the left ray
       // should see the absent position as a non-node (like board edge).
       final tablero = GrafoTablero.desde(
@@ -272,17 +272,17 @@ void main() {
       expect(resultado.despejadoHastaBorde, isTrue);
     });
 
-    test('should_return_true_for_shaped_solvable_golden_board', () {
+    test('should_return_true_when_shaped_board_is_solvable_golden', () {
       final tablero = tableroShapedSolvable();
       expect(Solver.esSolvable(tablero), isTrue);
     });
 
-    test('should_return_false_for_shaped_unsolvable_golden_board', () {
+    test('should_return_false_when_shaped_board_is_unsolvable_golden', () {
       final tablero = tableroShapedInsolvable();
       expect(Solver.esSolvable(tablero), isFalse);
     });
 
-    test('should_return_true_for_shaped_empty_board', () {
+    test('should_return_true_when_shaped_board_is_empty', () {
       final tablero = GrafoTablero.desde(
         filas: 3,
         columnas: 3,

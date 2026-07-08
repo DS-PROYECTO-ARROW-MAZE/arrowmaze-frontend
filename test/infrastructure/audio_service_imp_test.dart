@@ -42,7 +42,7 @@ void main() {
   });
 
   group('AudioServiceImp — softened event-to-sound mapping (AC1/AC3)', () {
-    test('should_play_softened_asset_for_each_event_type', () {
+    test('should_play_softened_asset_when_notified_of_each_event_type', () {
       const esperado = <TipoEvento, String>{
         TipoEvento.movimientoRealizado: 'sounds/move_soft.wav',
         TipoEvento.flechaEliminada: 'sounds/move_soft.wav',
@@ -87,7 +87,7 @@ void main() {
   });
 
   group('AudioServiceImp — bounded polyphony (AC3)', () {
-    test('should_debounce_rapid_repeats_of_same_event', () {
+    test('should_debounce_when_same_event_repeats_rapidly', () {
       var ahora = DateTime(2026, 1, 1);
       audioService = AudioServiceImp(
         reproductor: reproductor,
@@ -117,7 +117,7 @@ void main() {
       expect(reproductor.assetsReproducidos, hasLength(2));
     });
 
-    test('should_not_debounce_different_event_types_against_each_other', () {
+    test('should_not_debounce_when_event_types_differ', () {
       var ahora = DateTime(2026, 1, 1);
       audioService = AudioServiceImp(
         reproductor: reproductor,
@@ -177,7 +177,7 @@ void main() {
       );
     });
 
-    test('should_handle_all_event_types_without_error', () {
+    test('should_handle_all_event_types_when_notified_without_error', () {
       for (final tipo in TipoEvento.values) {
         expect(
           () => audioService.alOcurrirEvento(EventoJuego(tipo, posicion)),
@@ -188,7 +188,7 @@ void main() {
   });
 
   group('AudioServiceImp — IControlAudio', () {
-    test('should_expose_muted_state', () {
+    test('should_expose_muted_state_when_queried', () {
       expect(audioService.muted, isFalse);
 
       audioService.toggleMute();

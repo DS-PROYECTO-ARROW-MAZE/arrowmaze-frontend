@@ -101,7 +101,7 @@ void main() {
       expect(resultado.estrellas, 2);
     });
 
-    test('should_return_2_stars_at_exact_2_3_boundary', () {
+    test('should_return_2_stars_when_score_at_exact_2_3_boundary', () {
       // 33 moves => 1000 - 33*10 = 670.
       // 670*3 = 2010 >= 2000 → 2★
       final resultado = useCase.calcular(
@@ -179,7 +179,7 @@ void main() {
 
   // --- AC4: Golden fixture parity (client/backend agree, Ticket 19) ----------
 
-  test('should_match_golden_fixture_scores', () {
+  test('should_match_golden_fixture_scores_when_scoring_shared_fixtures', () {
     // Golden fixtures shared with backend (Ticket 17).
     // Star counts use proportional bands from referencia:
     //

@@ -11,7 +11,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// data (GET /progress) on login, merging with the best-per-level policy.
 void main() {
   group('RestaurarProgresoUseCase', () {
-    test('should_hydrate_local_progress_from_remote_on_login', () async {
+    test('should_hydrate_local_progress_from_remote_when_login_succeeds', () async {
       // Arrange
       final local = _ProgresoLocalSpy();
       final remote = _ProgresoRemotoFake(items: const [
@@ -87,7 +87,7 @@ void main() {
       expect(local.registros, isEmpty);
     });
 
-    test('should_skip_items_with_unmapped_uuid', () async {
+    test('should_skip_items_when_uuid_is_unmapped', () async {
       // Arrange — a remote item references a UUID not in the catalog.
       final local = _ProgresoLocalSpy();
       final remote = _ProgresoRemotoFake(items: const [

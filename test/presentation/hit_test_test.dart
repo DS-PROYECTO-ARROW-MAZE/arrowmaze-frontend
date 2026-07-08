@@ -40,7 +40,7 @@ void main() {
     );
   }
 
-  test('should_ignore_tap_on_absent_position', () {
+  test('should_ignore_tap_when_position_is_absent', () {
     // Arrange
     final tablero = construirTablero();
 
@@ -65,7 +65,7 @@ void main() {
     expect(celda!.idFlecha, 7);
   });
 
-  test('should_resolve_empty_cell_inside_shape_as_playable', () {
+  test('should_resolve_empty_cell_as_playable_when_inside_shape', () {
     // Arrange — an EmptyCell is present (transparent), distinct from absent.
     final tablero = construirTablero();
 
@@ -78,7 +78,7 @@ void main() {
     expect(celda!.tipo, TipoCeldaUI.vacia);
   });
 
-  test('should_ignore_tap_outside_board_bounds', () {
+  test('should_ignore_tap_when_outside_board_bounds', () {
     // Arrange
     final tablero = construirTablero();
 

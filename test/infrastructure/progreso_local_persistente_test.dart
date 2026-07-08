@@ -112,7 +112,7 @@ void main() {
   group('ProgresoLocalPersistente — per-user isolation (Ticket 24)', () {
     setUp(() => SharedPreferences.setMockInitialValues({}));
 
-    test('should_isolate_progress_between_users', () async {
+    test('should_isolate_progress_when_users_differ', () async {
       // Arrange — user A clears levels 1 and 2.
       final store = ProgresoLocalPersistente();
       await store.establecerUsuario('alice@test.com');
@@ -131,7 +131,7 @@ void main() {
       expect(await store.mejorEstrellas(1), 3);
     });
 
-    test('should_restore_active_user_progress_after_relogin', () async {
+    test('should_restore_active_user_progress_when_relogin', () async {
       // Arrange — Alice plays, then a fresh store instance simulates a re-login
       // on the same device (the active user is persisted).
       await (ProgresoLocalPersistente()

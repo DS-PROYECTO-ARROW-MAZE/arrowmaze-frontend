@@ -92,7 +92,7 @@ void main() {
       expect(resultado, isNull);
     });
 
-    test('should_call_validarSolvencia_before_entregar', () {
+    test('should_call_validarSolvencia_before_entregar_when_generating', () {
       final ordenLlamadas = <String>[];
       final generador = _GeneradorSolvable(ordenLlamadas);
       final config = ConfiguracionGeneracion(filas: 4, columnas: 4);

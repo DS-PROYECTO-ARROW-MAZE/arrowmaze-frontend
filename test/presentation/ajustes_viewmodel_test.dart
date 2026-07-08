@@ -87,7 +87,7 @@ void main() {
     });
 
     // ── AC4 ──────────────────────────────────────────────────────────────────
-    test('should_load_saved_settings_on_init', () async {
+    test('should_load_saved_settings_when_initialized', () async {
       // Arrange — pre-populate prefs with saved values (simulates a restart)
       await prefs.guardarSonidoHabilitado(false);
       await prefs.guardarIdioma('es');
@@ -106,7 +106,7 @@ void main() {
     });
 
     // ── AC5 ──────────────────────────────────────────────────────────────────
-    test('should_default_to_sound_on_and_english_on_first_run', () async {
+    test('should_default_to_sound_on_and_english_when_first_run', () async {
       // Arrange — empty prefs (first run)
       // Act
       await config.inicializar();

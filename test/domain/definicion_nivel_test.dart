@@ -70,7 +70,7 @@ void main() {
       expect(definicion.esCronometrado, isFalse);
     });
 
-    test('should_return_false_at_boundary_9', () {
+    test('should_return_false_when_numero_is_at_boundary_9', () {
       const definicion = DefinicionNivel(
         id: 9,
         numero: 9,
@@ -84,7 +84,7 @@ void main() {
       expect(definicion.esCronometrado, isFalse);
     });
 
-    test('should_return_true_at_boundary_10', () {
+    test('should_return_true_when_numero_is_at_boundary_10', () {
       const definicion = DefinicionNivel(
         id: 10,
         numero: 10,
@@ -100,7 +100,7 @@ void main() {
   });
 
   group('esBonus', () {
-    test('should_default_to_false', () {
+    test('should_default_esBonus_to_false_when_not_provided', () {
       const definicion = DefinicionNivel(
         id: 1,
         numero: 1,
@@ -127,7 +127,7 @@ void main() {
   });
 
   group('limiteTiempo on bonus', () {
-    test('should_return_null_for_bonus_level_even_if_param_provided', () {
+    test('should_return_null_when_bonus_level_even_if_param_provided', () {
       const definicion = DefinicionNivel(
         id: 20,
         numero: 20,

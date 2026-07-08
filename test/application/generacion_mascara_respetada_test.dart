@@ -23,7 +23,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('GeneracionAleatoriaNivel — mask-respecting fill (Ticket 31)', () {
     for (var indice = 1; indice <= 15; indice++) {
-      test('should_fill_only_the_shape_and_stay_solvable_for_index_$indice',
+      test('should_fill_only_the_shape_and_stay_solvable_when_index_is_$indice',
           () {
         // Arrange
         final perfil = PerfilDificultad.para(indice);

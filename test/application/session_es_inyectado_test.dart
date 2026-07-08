@@ -18,7 +18,7 @@ import 'package:arrowmaze/application/use_cases/registrar_usuario_use_case.dart'
 void main() {
   group('Session is injected (AC3)', () {
     test(
-      'should_read_session_through_injected_port_not_static_accessor',
+      'should_read_session_through_injected_port_when_no_static_accessor_used',
       () async {
         // Arrange — inject a ProveedorSesion that asserts it was called.
         String? tokenInyectado;

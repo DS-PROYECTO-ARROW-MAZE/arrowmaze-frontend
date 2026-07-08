@@ -126,7 +126,7 @@ void main() {
   // Ticket 30 — undo cap (AC4) + budget restore (AC5)
   // ---------------------------------------------------------------------------
 
-  test('should_block_fourth_undo_in_a_level', () {
+  test('should_block_fourth_undo_when_cap_reached', () {
     // Arrange — a board with many arrows so 4 distinct moves can be made.
     final tablero = GrafoTablero.desde(
       filas: 3,
@@ -207,7 +207,7 @@ void main() {
     expect(sesion.presupuestoMovimientos!.restante, 3);
   });
 
-  test('should_reset_undo_count_on_new_level', () {
+  test('should_reset_undo_count_when_new_level_starts', () {
     // Arrange — make 2 undos on one use case, then verify a fresh instance
     // resets the counter (simulates level restart / new level).
     final tablero = GrafoTablero.desde(

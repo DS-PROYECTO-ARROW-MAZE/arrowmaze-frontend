@@ -75,7 +75,7 @@ void main() {
     );
 
     test(
-      'should_not_reference_audio_or_ui_in_use_case',
+      'should_not_reference_audio_or_ui_when_emitting_move_events',
       () {
         // This test proves AC2 by verifying the use case routes every event
         // through the publisher — no audio or UI type appears in its import

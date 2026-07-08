@@ -116,7 +116,7 @@ void main() {
   );
 
   test(
-    'should_expose_successful_sync_future_for_leaderboard_to_await',
+    'should_expose_successful_sync_future_when_leaderboard_awaits',
     () async {
       // Arrange — sync wired with a backend UUID and a repo that succeeds.
       final sincronizar = SincronizarProgresoUseCase(
