@@ -8,7 +8,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Ranking architecture — read-only port', () {
     test(
-      'should_have_no_publicar_method_on_ranking_port',
+      'should_have_no_publicar_method_when_inspecting_ranking_port',
       () {
         // Arrange — locate the port interface source file.
         final file = File('lib/application/ports/i_consulta_ranking.dart');
@@ -35,7 +35,7 @@ void main() {
     );
 
     test(
-      'should_have_only_obtenerTop_method_on_ranking_port',
+      'should_expose_only_obtenerTop_method_when_inspecting_ranking_port',
       () {
         // Arrange
         final file = File('lib/application/ports/i_consulta_ranking.dart');

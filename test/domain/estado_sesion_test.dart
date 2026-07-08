@@ -78,7 +78,7 @@ void main() {
     expect(sesion.estaTerminada, isTrue);
   });
 
-  test('should_never_reach_EstadoDerrota_via_time_on_untimed_level', () {
+  test('should_never_reach_EstadoDerrota_via_time_when_level_is_untimed', () {
     // Arrange — an untimed session with a deterministic time sequence.
     final sesion = SesionJuego(tablero: tableroDeDosFlechas());
     final aleatorio = Random(7);
@@ -148,7 +148,7 @@ void main() {
     expect(sesion.estado, isA<EstadoPausado>());
   });
 
-  test('should_freeze_timer_while_paused_and_resume_to_EstadoJugando', () {
+  test('should_freeze_timer_and_resume_to_EstadoJugando_when_paused_then_resumed', () {
     // Arrange — a timed session with time on the clock, then paused.
     final sesion = SesionJuego(
       tablero: tableroDeDosFlechas(),

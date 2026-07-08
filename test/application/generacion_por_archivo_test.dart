@@ -78,7 +78,7 @@ void main() {
       expect(resultado, isNull);
     });
 
-    test('should_reject_loaded_board_with_length_one_arrow', () async {
+    test('should_reject_loaded_board_when_it_has_length_one_arrow', () async {
       final cargador = _CargadorFalsoFlechaCorta();
       final generador = GeneracionPorArchivoNivel(cargador: cargador);
       final config = ConfiguracionGeneracion(filas: 3, columnas: 3);

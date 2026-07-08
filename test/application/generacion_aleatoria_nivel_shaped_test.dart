@@ -15,7 +15,7 @@ void main() {
   group('GeneracionAleatoriaNivel — shaped & scaled generation', () {
     // Test several indices spanning a range of difficulties and shapes.
     for (var indice = 1; indice <= 25; indice++) {
-      test('should_produce_solvable_board_for_index_$indice', () {
+      test('should_produce_solvable_board_when_index_is_$indice', () {
         final perfil = PerfilDificultad.para(indice);
         final mascara = RepertorioFormas().formaParaIndice(indice);
         final config = ConfiguracionGeneracion(
@@ -36,7 +36,7 @@ void main() {
     }
 
     test(
-        'should_apply_selected_shape_mask_and_populate_only_playable_cells',
+        'should_populate_only_playable_cells_when_shape_mask_selected',
         () {
       // Use Corazón at index 2 — a shape that excludes some cells.
       const indice = 2;

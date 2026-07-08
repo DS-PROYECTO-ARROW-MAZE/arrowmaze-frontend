@@ -7,7 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 /// and the victory-wins-tie case where the board clears on the last move.
 void main() {
   group('PresupuestoMovimientos', () {
-    test('should_start_with_restante_equal_to_total', () {
+    test('should_start_with_restante_equal_to_total_when_constructed', () {
       const budget = PresupuestoMovimientos(10);
 
       expect(budget.total, 10);

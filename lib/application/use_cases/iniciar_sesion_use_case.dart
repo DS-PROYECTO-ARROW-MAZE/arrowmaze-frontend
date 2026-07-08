@@ -1,27 +1,28 @@
 import '../ports/fuente_autenticacion.dart';
 import '../ports/proveedor_sesion.dart';
-import 'limpiar_progreso_local_use_case.dart';
+import 'activar_progreso_usuario_use_case.dart';
 import 'resultado_inicio_sesion.dart';
 
 /// Authenticates an existing user.
 ///
-/// On success it wipes any leftover device-local progression (so a previous
-/// account's unlocks never leak in) and stores the session token via the
-/// injected [ProveedorSesion]. On wrong credentials it surfaces a clean
+/// On success it activates this account's device-local progression (switching
+/// the progress namespace to the user, so their own retained unlocks show and no
+/// other account's leak in) and stores the session token via the injected
+/// [ProveedorSesion]. On wrong credentials it surfaces a clean
 /// [InicioSesionCredencialesInvalidas].
 class IniciarSesionUseCase {
   const IniciarSesionUseCase({
     required this.fuenteAutenticacion,
     required this.proveedorSesion,
-    this.limpiarProgresoLocal,
+    this.activarProgreso,
   });
 
   final FuenteAutenticacion fuenteAutenticacion;
   final ProveedorSesion proveedorSesion;
 
-  /// Wipes device-local progression on a fresh login so no ghost data carries
-  /// over from a prior account; optional so token-only tests need not wire it.
-  final LimpiarProgresoLocalUseCase? limpiarProgresoLocal;
+  /// Switches device-local progression to this account on login so their own
+  /// unlocks are restored; optional so token-only tests need not wire it.
+  final ActivarProgresoUsuarioUseCase? activarProgreso;
 
   /// Executes the login flow.
   ///
@@ -35,9 +36,9 @@ class IniciarSesionUseCase {
         email: email,
         password: password,
       );
-      // Start from a clean slate: drop any progression left on the device from
-      // a prior account before this user's session begins.
-      await limpiarProgresoLocal?.ejecutar();
+      // Switch to this account's own retained progression before the session
+      // begins (per-user local progress, Ticket 24).
+      await activarProgreso?.ejecutar(email);
       await proveedorSesion.guardarToken(token);
       return const InicioSesionExitoso();
     } on AutenticacionException catch (e) {

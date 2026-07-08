@@ -42,7 +42,7 @@ void main() {
         ],
       );
 
-  test('should_expose_VictoriaViewState_distinct_from_EstadoVictoria', () {
+  test('should_expose_VictoriaViewState_distinct_from_EstadoVictoria_when_victory_reached', () {
     // Arrange — a VM whose session shares the use case's single board.
     final tablero = tableroDeUnaFlecha();
     final moverFlecha = MoverFlechaUseCase(tablero);

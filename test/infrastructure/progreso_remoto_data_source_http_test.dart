@@ -12,7 +12,7 @@ void main() {
       '"estrellas":2,"puntaje":600}]}';
 
   group('ProgresoRemotoDataSourceHttp (Ticket 24 — GET /progress)', () {
-    test('should_send_authorization_header_and_parse_get_progress_response',
+    test('should_send_authorization_header_and_parse_response_when_getting_progress',
         () async {
       // Arrange — capture the outgoing request.
       late http.BaseRequest capturada;
@@ -62,7 +62,7 @@ void main() {
       expect(items, isEmpty);
     });
 
-    test('should_map_dto_fields_exactly_to_domain_value_object', () async {
+    test('should_map_dto_fields_to_domain_value_object_when_parsing', () async {
       // Arrange
       final inner = MockClient(
         (_) async => http.Response(goldenJson, 200),

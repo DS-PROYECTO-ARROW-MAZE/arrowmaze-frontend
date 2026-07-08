@@ -34,7 +34,7 @@ void main() {
           reason: 'generated levels should be identifiable');
     });
 
-    test('should_apply_shape_rotation_to_generated_level', () async {
+    test('should_apply_shape_rotation_when_generating_level', () async {
       final catalogo = _CatalogoConLimite(cantidad: 3);
 
       // Index 6 → Cuadrado (wraps), index 7 → Corazón
@@ -45,7 +45,7 @@ void main() {
       expect(nivel7.nombre, contains('Corazón'));
     });
 
-    test('should_have_unbounded_supply_of_generated_levels', () async {
+    test('should_have_unbounded_supply_when_index_exceeds_authored_catalog', () async {
       final catalogo = _CatalogoConLimite(cantidad: 3);
 
       // High indices must still produce levels.
@@ -57,7 +57,7 @@ void main() {
       expect(nivel100.id, 100);
     });
 
-    test('should_yield_increasing_difficulty_for_generated_levels', () async {
+    test('should_yield_increasing_difficulty_when_shape_recurs_at_higher_index', () async {
       // Indices 6 (Cuadrado) and 11 (Cuadrado again) share a shape but
       // index 11 is strictly harder.
       final perfil6 = PerfilDificultad.para(6);

@@ -22,7 +22,7 @@ void main() {
         celdas: fuente.cargarParedes().map(fabrica.crear).toList(),
       );
 
-  test('should_cover_every_cell_with_a_path_at_start', () {
+  test('should_cover_every_cell_with_a_path_when_at_start', () {
     // Arrange
     final tablero = construir();
 
@@ -36,7 +36,7 @@ void main() {
     }
   });
 
-  test('should_be_solvable_by_a_greedy_sequence_of_valid_moves', () {
+  test('should_be_solvable_when_playing_a_greedy_sequence_of_valid_moves', () {
     // Arrange
     final tablero = construir();
     final pendientes = <Trayectoria>[

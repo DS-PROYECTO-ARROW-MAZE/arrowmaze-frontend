@@ -44,7 +44,7 @@ void main() {
     );
 
     test(
-      'should_stop_notifying_after_desuscribir',
+      'should_stop_notifying_when_observer_desuscribes',
       () {
         // Arrange — subscribe, then immediately unsubscribe.
         final publicador = PublicadorEventosJuego();

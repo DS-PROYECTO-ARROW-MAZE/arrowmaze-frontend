@@ -38,7 +38,7 @@ void main() {
       expect(resultado.obstaculo, isNull);
     });
 
-    test('should_report_arrow_adjacent_to_edge_as_clear', () {
+    test('should_report_arrow_as_clear_when_adjacent_to_edge', () {
       // Arrange — an arrow on the top row already touching the edge.
       final tablero = GrafoTablero.desde(
         filas: 3,

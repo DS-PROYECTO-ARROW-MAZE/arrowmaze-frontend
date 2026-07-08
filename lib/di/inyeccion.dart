@@ -19,11 +19,12 @@ import '../application/ports/i_registro.dart';
 import '../application/ports/i_repositorio_progreso.dart';
 import '../application/ports/proveedor_sesion.dart';
 import '../application/ports/fuente_niveles.dart';
+import '../application/ports/selector_usuario_progreso.dart';
+import '../application/use_cases/activar_progreso_usuario_use_case.dart';
 import '../application/use_cases/cerrar_sesion_use_case.dart';
 import '../application/use_cases/consultar_ranking_use_case.dart';
 import '../application/use_cases/crear_nivel_use_case.dart';
 import '../application/use_cases/iniciar_sesion_use_case.dart';
-import '../application/use_cases/limpiar_progreso_local_use_case.dart';
 import '../application/use_cases/mover_flecha_use_case.dart';
 import '../application/use_cases/obtener_niveles_use_case.dart';
 import '../application/use_cases/obtener_perfil_use_case.dart';
@@ -33,6 +34,7 @@ import '../application/use_cases/sincronizar_progreso_use_case.dart';
 import '../domain/entities/celda.dart';
 import '../domain/entities/fabrica_celdas_estandar.dart';
 import '../domain/grafo_tablero.dart';
+import '../domain/niveles/dificultad.dart';
 import '../domain/progreso/i_cola_sincronizacion.dart';
 import '../domain/puntuacion/definicion_nivel.dart';
 import '../domain/ranking/ranking_dto.dart';
@@ -111,6 +113,7 @@ abstract final class Inyeccion {
   static Future<JuegoViewModel> construirJuegoViewModelDesdeArchivo(
     int idNivel, {
     String? nivelIdRemoto,
+    Dificultad dificultad = Dificultad.facil,
   }) async {
     final tablero = await generadorPorArchivo.generarAsync(
       // Dimensions are taken from the level file itself; this placeholder is
@@ -127,6 +130,7 @@ abstract final class Inyeccion {
       tablero,
       idNivel: idNivel,
       nivelIdRemoto: nivelIdRemoto,
+      dificultad: dificultad,
     );
   }
 
@@ -142,6 +146,25 @@ abstract final class Inyeccion {
   /// arrow count so the player has some room for error.
   static const _margenMovimientos = 5;
 
+  /// Countdown length for a **medium** level (1:00).
+  static const _limiteMedio = Duration(minutes: 1);
+
+  /// Countdown length for a **hard** level (0:40, tighter than medium).
+  static const _limiteDificil = Duration(seconds: 40);
+
+  /// The countdown length for a level of [dificultad], or `null` when the level
+  /// is **untimed**.
+  ///
+  /// Only medium and hard levels are timed; easy levels have no clock at all.
+  /// These durations are gameplay tuning — adjust them here in one place.
+  static Duration? limiteTiempoPorDificultad(Dificultad dificultad) {
+    return switch (dificultad) {
+      Dificultad.facil => null,
+      Dificultad.medio => _limiteMedio,
+      Dificultad.dificil => _limiteDificil,
+    };
+  }
+
   /// Counts unique arrow paths on [tablero].
   static int _contarFlechas(Tablero tablero) {
     final ids = <int>{};
@@ -156,14 +179,15 @@ abstract final class Inyeccion {
     return ids.length;
   }
 
-  /// Shared wiring for both entry points: opens a **timed** [SesionJuego] from
-  /// [definicionNivelInicial] with a move budget, builds the use case, restores
-  /// the Observer chain ([AudioServiceImp] subscribes to the publisher, ticket
-  /// 07) and returns the ViewModel (which auto-subscribes itself).
+  /// Shared wiring for both entry points: opens a [SesionJuego] with a move
+  /// budget — timed only when [dificultad] is medium/hard — builds the use case,
+  /// restores the Observer chain ([AudioServiceImp] subscribes to the publisher,
+  /// ticket 07) and returns the ViewModel (which auto-subscribes itself).
   static JuegoViewModel _construirJuegoViewModel(
     Tablero tablero, {
     int idNivel = idNivelInicial,
     String? nivelIdRemoto,
+    Dificultad dificultad = Dificultad.facil,
   }) {
     const definicion = definicionNivelInicial;
 
@@ -171,11 +195,13 @@ abstract final class Inyeccion {
     final flechas = _contarFlechas(tablero);
     final presupuesto = PresupuestoMovimientos(flechas + _margenMovimientos);
 
-    // Open the session here (instead of letting the use case default to an
-    // untimed one) so the level carries the time limit and move budget.
+    // The countdown exists only on medium/hard levels: open the session timed
+    // there and untimed (no clock) on easy ones. Because the ViewModel keys its
+    // tick off the session, this single decision drives both the visible clock
+    // and whether it counts down.
     final sesion = SesionJuego(
       tablero: tablero,
-      limiteTiempo: definicion.limiteTiempo,
+      limiteTiempo: limiteTiempoPorDificultad(dificultad),
       presupuestoMovimientos: presupuesto,
     );
 
@@ -234,16 +260,17 @@ abstract final class Inyeccion {
     );
   }
 
-  /// Scoring/timing definition for the startup level. `limiteTiempo` makes the
-  /// level timed, driving the HUD clock and enabling the defeat transition.
+  /// Scoring tuning shared by every level (move-based scoring).
+  ///
+  /// Timing is **not** taken from here anymore: the countdown is opened on the
+  /// session per difficulty via [limiteTiempoPorDificultad], so this definition
+  /// carries no `limiteTiempo`.
   static const definicionNivelInicial = DefinicionNivel(
     id: 1,
     numero: 1,
     baseNivel: 1000,
     kmov: 10,
     ktiempo: 2,
-
-    limiteTiempo: Duration(seconds: 90),
     esBonus: false,
   );
 
@@ -281,12 +308,16 @@ abstract final class Inyeccion {
     fallback: _catalogoNivelesArchivo,
   );
 
-  /// Use case that wipes device-local play state (progression + pending-sync
-  /// queue) so one account's progress never leaks into another's on logout or a
-  /// fresh login/register.
-  static LimpiarProgresoLocalUseCase get limpiarProgresoLocalUseCase =>
-      LimpiarProgresoLocalUseCase(
-        progreso: progresoLocal,
+  /// The active-user selector — the same store instance as [progresoLocal],
+  /// used to switch the local-progress namespace on login/register.
+  static SelectorUsuarioProgreso get selectorUsuarioProgreso => _progresoLocal;
+
+  /// Use case that activates a signed-in account's device-local progression
+  /// (switches the per-user namespace + clears the pending-sync queue) so each
+  /// user sees their own retained unlocks and none leak across accounts.
+  static ActivarProgresoUsuarioUseCase get activarProgresoUsuarioUseCase =>
+      ActivarProgresoUsuarioUseCase(
+        selector: selectorUsuarioProgreso,
         cola: colaSincronizacion,
       );
 
@@ -340,14 +371,14 @@ abstract final class Inyeccion {
       RegistrarUsuarioUseCase(
         fuenteAutenticacion: fuenteAutenticacion,
         proveedorSesion: proveedorSesion,
-        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
+        activarProgreso: activarProgresoUsuarioUseCase,
       );
 
   static IniciarSesionUseCase get iniciarSesionUseCase =>
       IniciarSesionUseCase(
         fuenteAutenticacion: fuenteAutenticacion,
         proveedorSesion: proveedorSesion,
-        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
+        activarProgreso: activarProgresoUsuarioUseCase,
       );
 
   /// Use case reading the authenticated principal (`GET /auth/me`).
@@ -366,10 +397,7 @@ abstract final class Inyeccion {
       CrearNivelUseCase(fuenteNiveles: fuenteNiveles);
 
   static CerrarSesionUseCase get cerrarSesionUseCase =>
-      CerrarSesionUseCase(
-        proveedorSesion: proveedorSesion,
-        limpiarProgresoLocal: limpiarProgresoLocalUseCase,
-      );
+      CerrarSesionUseCase(proveedorSesion: proveedorSesion);
 
   /// Builds the [AuthViewModel] with all dependencies injected.
   static AuthViewModel construirAuthViewModel() {

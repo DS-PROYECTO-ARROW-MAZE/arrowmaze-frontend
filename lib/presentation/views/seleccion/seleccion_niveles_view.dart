@@ -72,6 +72,9 @@ class _SeleccionNivelesViewState extends State<SeleccionNivelesView> {
 
     return Scaffold(
       appBar: AppBar(
+        // Level Selection is the post-login home — there is no "back" to the
+        // login screen, so suppress the AppBar's automatic leading arrow.
+        automaticallyImplyLeading: false,
         title: Text(s.seleccionarNivel),
         actions: [
           if (widget.onAjustes != null)

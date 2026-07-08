@@ -34,7 +34,7 @@ void main() {
   }
 
   group('Architecture — ubiquitous language', () {
-    test('should_forbid_avoid_list_identifiers_in_lib', () {
+    test('should_forbid_avoid_list_identifiers_when_scanning_lib', () {
       // Arrange
       final dir = Directory('lib');
       expect(dir.existsSync(), isTrue, reason: 'lib/ must exist');

@@ -38,7 +38,7 @@ void main() {
       }
     });
 
-    test('should_never_yield_board_smaller_than_7x7_for_any_index', () {
+    test('should_never_yield_board_smaller_than_7x7_when_index_varies', () {
       for (var i = 1; i <= 50; i++) {
         final p = PerfilDificultad.para(i);
         expect(p.filas, greaterThanOrEqualTo(7),

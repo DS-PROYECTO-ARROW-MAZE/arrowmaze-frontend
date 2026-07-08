@@ -1,7 +1,7 @@
-import 'package:arrowmaze/application/ports/consulta_progreso_local.dart';
 import 'package:arrowmaze/application/ports/fuente_autenticacion.dart';
 import 'package:arrowmaze/application/ports/proveedor_sesion.dart';
-import 'package:arrowmaze/application/use_cases/limpiar_progreso_local_use_case.dart';
+import 'package:arrowmaze/application/ports/selector_usuario_progreso.dart';
+import 'package:arrowmaze/application/use_cases/activar_progreso_usuario_use_case.dart';
 import 'package:arrowmaze/application/use_cases/resultado_registro.dart';
 import 'package:arrowmaze/domain/progreso/i_cola_sincronizacion.dart';
 import 'package:arrowmaze/domain/progreso/run_completado.dart';
@@ -53,9 +53,9 @@ void main() {
     );
 
     test(
-      'should_wipe_local_progress_when_register_succeeds',
+      'should_activate_own_progress_namespace_when_register_succeeds',
       () async {
-        // Arrange — a new account must start with no inherited unlocks.
+        // Arrange — a new account must play on its own progression namespace.
         final authPort = _FuenteAutenticacionFake(
           usuario: UsuarioRegistrado(
             id: 'uuid-2',
@@ -64,13 +64,14 @@ void main() {
           ),
           token: 'tok-fresh',
         );
-        final progreso = _ProgresoLocalFake()..completados = {1, 2, 3};
+        final selector = _SelectorFake();
+        final cola = _ColaFake();
         final useCase = RegistrarUsuarioUseCase(
           fuenteAutenticacion: authPort,
           proveedorSesion: _ProveedorSesionFake(),
-          limpiarProgresoLocal: LimpiarProgresoLocalUseCase(
-            progreso: progreso,
-            cola: _ColaFake(),
+          activarProgreso: ActivarProgresoUsuarioUseCase(
+            selector: selector,
+            cola: cola,
           ),
         );
 
@@ -80,10 +81,11 @@ void main() {
           password: '123456',
         );
 
-        // Assert — registered and any prior device-local progress wiped.
+        // Assert — registered, and the new account's own namespace is active
+        // (its unlocks are isolated, not inherited) and the queue is cleared.
         expect(resultado, isA<RegistroExitoso>());
-        expect(progreso.limpiado, isTrue);
-        expect(progreso.completados, isEmpty);
+        expect(selector.usuarioActivo, 'fresh@b.com');
+        expect(cola.vaciado, isTrue);
       },
     );
 
@@ -178,32 +180,20 @@ class _ProveedorSesionFake implements ProveedorSesion {
   }
 }
 
-/// A fake [ConsultaProgresoLocal] that records whether it was wiped.
-class _ProgresoLocalFake implements ConsultaProgresoLocal {
-  Set<int> completados = {};
-  bool limpiado = false;
+/// A fake [SelectorUsuarioProgreso] that records the activated user.
+class _SelectorFake implements SelectorUsuarioProgreso {
+  String? usuarioActivo;
 
   @override
-  Future<Set<int>> nivelesCompletados() async => completados;
-
-  @override
-  Future<int> mejorEstrellas(int idNivel) async => 0;
-
-  @override
-  Future<void> registrarCompletado({
-    required int idNivel,
-    required int estrellas,
-  }) async {}
-
-  @override
-  Future<void> limpiar() async {
-    limpiado = true;
-    completados = {};
+  Future<void> establecerUsuario(String usuario) async {
+    usuarioActivo = usuario;
   }
 }
 
-/// A no-op [IColaSincronizacion] fake.
+/// A [IColaSincronizacion] fake that records whether it was emptied.
 class _ColaFake implements IColaSincronizacion {
+  bool vaciado = false;
+
   @override
   Future<void> encolar(RunCompletado run) async {}
 
@@ -214,5 +204,7 @@ class _ColaFake implements IColaSincronizacion {
   Future<int> cantidadPendientes() async => 0;
 
   @override
-  Future<void> vaciar() async {}
+  Future<void> vaciar() async {
+    vaciado = true;
+  }
 }

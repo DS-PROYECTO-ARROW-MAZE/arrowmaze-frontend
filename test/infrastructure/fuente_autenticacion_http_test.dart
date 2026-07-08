@@ -13,7 +13,7 @@ import 'package:http/testing.dart';
 /// transport — no real network.
 void main() {
   group('FuenteAutenticacionHttp (Issue 14)', () {
-    test('should_send_email_password_and_parse_user_on_register', () async {
+    test('should_send_email_password_and_parse_user_when_registering', () async {
       // Arrange
       late http.Request enviada;
       final fuente = FuenteAutenticacionHttp(
@@ -70,7 +70,7 @@ void main() {
       );
     });
 
-    test('should_return_token_on_login', () async {
+    test('should_return_token_when_login_succeeds', () async {
       // Arrange
       final fuente = FuenteAutenticacionHttp(
         client: MockClient((req) async {
@@ -106,7 +106,7 @@ void main() {
       );
     });
 
-    test('should_parse_principal_on_obtenerPerfil', () async {
+    test('should_parse_principal_when_obtenerPerfil_called', () async {
       // Arrange
       final fuente = FuenteAutenticacionHttp(
         client: MockClient((req) async {

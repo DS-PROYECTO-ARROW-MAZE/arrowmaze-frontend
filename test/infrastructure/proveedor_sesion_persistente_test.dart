@@ -21,7 +21,7 @@ void main() {
       expect(await sesion.obtenerToken(), isNull);
     });
 
-    test('should_persist_token_across_instances', () async {
+    test('should_persist_token_when_reloaded_across_instances', () async {
       // Arrange — save with one instance.
       final prefs = await SharedPreferences.getInstance();
       await ProveedorSesionPersistente(prefs: prefs).guardarToken('tok-persist');

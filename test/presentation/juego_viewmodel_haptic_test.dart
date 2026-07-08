@@ -5,6 +5,7 @@ import 'package:arrowmaze/domain/entities/celda.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
+import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
 import 'package:arrowmaze/domain/value_objects/posicion.dart';
 import 'package:arrowmaze/presentation/viewmodels/juego_view_model.dart';
@@ -16,6 +17,16 @@ class _RelojNulo implements Reloj {
   void iniciar(Duration intervalo, void Function() tic) {}
   @override
   void detener() {}
+}
+
+/// A [Reloj] whose one-second tick is fired manually from the test.
+class _RelojControlable implements Reloj {
+  void Function()? _callback;
+  @override
+  void iniciar(Duration intervalo, void Function() tic) => _callback = tic;
+  @override
+  void detener() {}
+  void tic() => _callback?.call();
 }
 
 /// Records every buzz so a test can assert the port was (or was not) invoked.
@@ -107,6 +118,33 @@ void main() {
     // Assert
     expect(haptica.vibraciones, 1);
     expect(viewModel.estado.alertaInvalida, isTrue);
+  });
+
+  test('should_not_repeat_invalid_alert_when_later_state_updates', () {
+    // Arrange — a timed level, so the countdown publishes new states after the
+    // mistake (this is when the alert used to "keep beating" each second).
+    final tablero = construirTablero();
+    final haptica = _HapticaFake();
+    final reloj = _RelojControlable();
+    final sesion =
+        SesionJuego(tablero: tablero, limiteTiempo: const Duration(seconds: 90));
+    final viewModel = JuegoViewModel(
+      tablero: tablero,
+      moverFlecha: MoverFlechaUseCase(tablero, sesion: sesion),
+      definicionNivel: definicion,
+      reloj: reloj,
+      haptica: haptica,
+    );
+
+    // Act — one invalid tap raises the one-shot alert, then the clock ticks.
+    viewModel.tocar(bloqueada);
+    expect(viewModel.estado.alertaInvalida, isTrue);
+    reloj.tic();
+
+    // Assert — the alert is a one-shot: it does NOT ride along on the tick's
+    // state, so the View flashes exactly once and never re-fires each second.
+    expect(viewModel.estado.alertaInvalida, isFalse);
+    expect(haptica.vibraciones, 1);
   });
 
   test('should_not_alert_or_buzz_when_move_valid', () {

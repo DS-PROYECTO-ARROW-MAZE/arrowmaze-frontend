@@ -12,7 +12,7 @@ void main() {
     });
 
     // ── AC2 + AC3 + AC4 ──────────────────────────────────────────────────────
-    test('should_round_trip_sound_and_language_across_instances', () async {
+    test('should_round_trip_sound_and_language_when_reloaded_across_instances', () async {
       // Arrange — write through one instance
       final store1 = PreferenciasUsuarioPersistente();
       await store1.guardarSonidoHabilitado(false);
@@ -27,7 +27,7 @@ void main() {
     });
 
     // ── AC5 (defaults on first run) ───────────────────────────────────────────
-    test('should_return_defaults_on_first_run', () async {
+    test('should_return_defaults_when_first_run', () async {
       // Arrange
       final store = PreferenciasUsuarioPersistente();
 
@@ -37,7 +37,7 @@ void main() {
       expect(await store.leerIdioma(), isNull);
     });
 
-    test('should_persist_sound_and_language_independently', () async {
+    test('should_persist_sound_and_language_when_set_independently', () async {
       // Arrange
       final store = PreferenciasUsuarioPersistente();
       await store.guardarSonidoHabilitado(false);
@@ -63,7 +63,7 @@ void main() {
       expect(await store.leerSonidoHabilitado(), isTrue);
     });
 
-    test('should_leave_other_prefs_keys_intact', () async {
+    test('should_leave_other_prefs_keys_intact_when_writing', () async {
       // Arrange — an unrelated key exists
       SharedPreferences.setMockInitialValues({
         'arrowmaze.sesion.token': 'tok-xyz',

@@ -77,7 +77,7 @@ void main() {
     );
 
     test(
-      'should_await_pending_sync_before_fetching_leaderboard',
+      'should_await_pending_sync_when_fetching_leaderboard',
       () async {
         // Arrange — the leaderboard read must not start until the in-flight
         // POST /progress/sync has resolved (no read-before-write race).

@@ -72,7 +72,7 @@ void main() {
     expect(notificaciones, 1);
   });
 
-  test('should_clear_movimiento_invalido_flag_after_a_valid_move', () {
+  test('should_clear_movimiento_invalido_flag_when_a_valid_move_follows', () {
     // Arrange — first an invalid tap raises the flag.
     final tablero = GrafoTablero.desde(
       filas: 3,

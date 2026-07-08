@@ -1,29 +1,30 @@
 import '../ports/fuente_autenticacion.dart';
 import '../ports/proveedor_sesion.dart';
-import 'limpiar_progreso_local_use_case.dart';
+import 'activar_progreso_usuario_use_case.dart';
 import 'resultado_registro.dart';
 
 /// Registers a new user account.
 ///
 /// The backend's `POST /auth/register` returns the created user but no token,
 /// so this use case registers and then logs in to obtain and persist the
-/// session token via the injected [ProveedorSesion]. A brand-new account must
-/// start with no unlocks, so any device-local progression is wiped first. On a
+/// session token via the injected [ProveedorSesion]. It activates this account's
+/// device-local progression (a brand-new account simply has an empty namespace,
+/// so it starts with no unlocks and never inherits another user's). On a
 /// duplicate email it surfaces a clean [RegistroEmailDuplicado] — never an
 /// unhandled exception.
 class RegistrarUsuarioUseCase {
   const RegistrarUsuarioUseCase({
     required this.fuenteAutenticacion,
     required this.proveedorSesion,
-    this.limpiarProgresoLocal,
+    this.activarProgreso,
   });
 
   final FuenteAutenticacion fuenteAutenticacion;
   final ProveedorSesion proveedorSesion;
 
-  /// Wipes device-local progression so a newly created account never inherits a
-  /// prior user's unlocks; optional so token-only tests need not wire it.
-  final LimpiarProgresoLocalUseCase? limpiarProgresoLocal;
+  /// Switches device-local progression to this account so a new user starts on
+  /// their own (empty) namespace; optional so token-only tests need not wire it.
+  final ActivarProgresoUsuarioUseCase? activarProgreso;
 
   /// Executes the registration flow.
   ///
@@ -38,9 +39,9 @@ class RegistrarUsuarioUseCase {
         email: email,
         password: password,
       );
-      // A new account starts fresh: clear any progression left on the device
-      // before this user's session begins.
-      await limpiarProgresoLocal?.ejecutar();
+      // Switch to this account's own progression namespace before the session
+      // begins (per-user local progress, Ticket 24).
+      await activarProgreso?.ejecutar(email);
       await proveedorSesion.guardarToken(token);
       return const RegistroExitoso();
     } on AutenticacionException catch (e) {

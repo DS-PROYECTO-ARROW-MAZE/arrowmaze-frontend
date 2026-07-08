@@ -34,11 +34,11 @@ void main() {
       expect(identical(a, b), isTrue);
     });
 
-    test('should_implement_ObservadorJuego', () {
+    test('should_implement_ObservadorJuego_when_used_as_observer', () {
       expect(AudioServiceImp.instance, isA<ObservadorJuego>());
     });
 
-    test('should_play_on_FlechaEliminada_and_Victoria', () {
+    test('should_play_when_notified_of_FlechaEliminada_and_Victoria', () {
       // Arrange — wire AudioServiceImp as an observer via a real publisher.
       final publicador = PublicadorEventosJuego();
       publicador.suscribir(AudioServiceImp.instance);
@@ -63,7 +63,7 @@ void main() {
       );
     });
 
-    test('should_ignore_unrelated_events_without_error', () {
+    test('should_ignore_unrelated_events_when_notified_without_error', () {
       // The service must handle every TipoEvento gracefully, not only the two
       // it cares about.
       final publicador = PublicadorEventosJuego();

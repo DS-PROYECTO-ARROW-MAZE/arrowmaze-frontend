@@ -13,7 +13,7 @@ import 'package:http/testing.dart';
 /// Issue 14 — RED: NivelesDataSourceHttp (`POST /levels`, protected) (AC2).
 void main() {
   group('NivelesDataSourceHttp', () {
-    test('should_post_contract_body_and_parse_created_level', () async {
+    test('should_post_contract_body_and_parse_created_level_when_creating', () async {
       // Arrange — capture the outgoing request; the interceptor adds the token.
       late http.Request enviada;
       final inner = MockClient((req) async {

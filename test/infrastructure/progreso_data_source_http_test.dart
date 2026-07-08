@@ -11,7 +11,7 @@ import 'package:http/testing.dart';
 /// Issue 14 — ProgresoDataSourceHttp (`POST /progress/sync`, protected) (AC2/AC3).
 void main() {
   group('ProgresoDataSourceHttp (Issue 14)', () {
-    test('should_post_progresos_batch_with_bearer_and_return_true', () async {
+    test('should_post_progresos_batch_with_bearer_and_return_true_when_uploading', () async {
       // Arrange
       late http.Request enviada;
       final inner = MockClient((req) async {

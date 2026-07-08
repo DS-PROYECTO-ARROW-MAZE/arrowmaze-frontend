@@ -10,7 +10,7 @@ import 'package:flutter_test/flutter_test.dart';
 void main() {
   group('Localizaciones', () {
     // ── AC3 ──────────────────────────────────────────────────────────────────
-    test('should_resolve_each_key_in_english_and_spanish', () {
+    test('should_resolve_each_key_when_locale_is_english_or_spanish', () {
       const en = CadenasEn();
       const es = CadenasEs();
 
@@ -42,22 +42,22 @@ void main() {
       );
     });
 
-    test('should_return_english_cadenas_for_en_code', () {
+    test('should_return_english_cadenas_when_code_is_en', () {
       final cadenas = LocalizacionesProvider.cadenasPara('en');
       expect(cadenas, isA<CadenasEn>());
     });
 
-    test('should_return_spanish_cadenas_for_es_code', () {
+    test('should_return_spanish_cadenas_when_code_is_es', () {
       final cadenas = LocalizacionesProvider.cadenasPara('es');
       expect(cadenas, isA<CadenasEs>());
     });
 
-    test('should_default_to_english_for_unknown_code', () {
+    test('should_default_to_english_when_code_is_unknown', () {
       final cadenas = LocalizacionesProvider.cadenasPara('fr');
       expect(cadenas, isA<CadenasEn>());
     });
 
-    test('should_have_distinct_translations_for_locale_specific_strings', () {
+    test('should_have_distinct_translations_when_strings_are_locale_specific', () {
       // At least some strings must differ between languages — confirms that
       // the Spanish file is not a copy of the English one.
       const en = CadenasEn();
@@ -76,7 +76,7 @@ void main() {
       );
     });
 
-    test('should_translate_parametric_string_with_move_count', () {
+    test('should_translate_parametric_string_when_given_move_count', () {
       const en = CadenasEn();
       const es = CadenasEs();
 

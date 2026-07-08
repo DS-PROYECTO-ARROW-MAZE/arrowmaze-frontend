@@ -25,6 +25,11 @@ enum TipoEvento {
   /// has reached `EstadoVictoria` (PRD §3 B1).
   victoria,
 
+  /// A timed level's countdown crossed the final-warning threshold (15 s left):
+  /// a heads-up cue that time is nearly up (PRD §3 B2, ticket 29). Emitted
+  /// **once per run** as the clock reaches the threshold — never each tick.
+  avisoTiempo,
+
   /// Terminal defeat: a timed level's clock reached zero (PRD §3 B2).
   derrota,
 }

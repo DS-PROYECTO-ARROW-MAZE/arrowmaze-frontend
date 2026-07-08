@@ -94,7 +94,7 @@ void main() {
   // Ticket 30 — budget countdown + undo cap in the ViewState
   // ---------------------------------------------------------------------------
 
-  test('should_expose_remaining_moves_and_undos_and_disable_undo_at_zero',
+  test('should_expose_remaining_moves_and_undos_and_disable_undo_when_at_zero',
       () {
     // Arrange — a ViewModel with budget + manually wired undo.
     const definicion = DefinicionNivel(

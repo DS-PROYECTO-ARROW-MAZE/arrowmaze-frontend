@@ -116,6 +116,17 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// so the flash never strobes (Ticket 28, AC1).
   static const Duration ventanaAlertaInvalida = Duration(milliseconds: 400);
 
+  /// The final-countdown threshold: when a timed level's clock first reaches
+  /// this much time left, the ViewModel fires the one-shot time warning — a
+  /// distinct HUD style plus a `TipoEvento.avisoTiempo` audio cue (ticket 29).
+  static const Duration umbralAvisoTiempo = Duration(seconds: 15);
+
+  /// One-shot guard for the time warning: it fires **once per run** when the
+  /// clock first crosses [umbralAvisoTiempo] (AC1) and must not re-fire on later
+  /// ticks or across pause/resume (AC5). A retry opens a fresh session and
+  /// ViewModel, so this instance field resets naturally per run.
+  bool _avisoTiempoEmitido = false;
+
   /// When the last alert pulse fired, or `null` when the current streak of
   /// invalid taps has been broken (by a valid move or an undo).
   DateTime? _ultimaAlertaInvalida;
@@ -259,7 +270,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
 
     final derrota = _sesion.estado is EstadoDerrota;
     final derrotaPorTiempo = derrota &&
-        _definicionNivel.esCronometrado &&
+        _sesion.esCronometrado &&
         (_sesion.tiempoRestante == null ||
             _sesion.tiempoRestante == Duration.zero);
 
@@ -365,9 +376,15 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   }
 
   /// Starts the one-second tick that advances a timed level's clock; a no-op on
-  /// an untimed level or once the session is finished.
+  /// an untimed session or once the session is finished.
+  ///
+  /// Whether the level is timed is owned by the **session** (the composition root
+  /// opens it with a `limiteTiempo` only for medium/hard levels), not by the
+  /// scoring [DefinicionNivel]. Keying off the session guarantees the clock the
+  /// HUD shows (`tiempoRestante`, also session-derived) actually ticks — the two
+  /// can never disagree and leave a frozen countdown on screen.
   void _iniciarReloj() {
-    if (!_definicionNivel.esCronometrado || _sesion.estaTerminada) return;
+    if (!_sesion.esCronometrado || _sesion.estaTerminada) return;
     _reloj.detener();
     _reloj.iniciar(const Duration(seconds: 1), _tic);
   }
@@ -381,10 +398,32 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     _estado = _estado.copyWith(
       derrota: derrota,
       derrotaPorTiempo: derrota,
+      avisoTiempo: _evaluarAvisoTiempo(_sesion.tiempoRestante),
       movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       tiempoRestante: _sesion.tiempoRestante,
     );
     notifyListeners();
+  }
+
+  /// Decides the HUD warning state for the current [restante] time and fires the
+  /// one-shot audio cue the first time the clock crosses [umbralAvisoTiempo].
+  ///
+  /// The cue is published as a domain [EventoJuego] through the move use case's
+  /// publisher, so audio reacts via the Observer ([AudioServiceImp]) and no audio
+  /// symbol ever reaches this ViewModel (AC4). Guarded by [_avisoTiempoEmitido]
+  /// so it fires exactly once per run (AC1) — subsequent ticks and pause/resume
+  /// keep the HUD warning on without re-emitting (AC5). Returns whether the HUD
+  /// should show the warning style now (the final 15 s, before time runs out).
+  bool _evaluarAvisoTiempo(Duration? restante) {
+    if (restante == null) return false;
+    final enAviso = restante <= umbralAvisoTiempo && restante > Duration.zero;
+    if (enAviso && !_avisoTiempoEmitido) {
+      _avisoTiempoEmitido = true;
+      _moverFlecha.publicador.publicar(
+        const EventoJuego(TipoEvento.avisoTiempo, Posicion.en(fila: 0, columna: 0)),
+      );
+    }
+    return enAviso;
   }
 
   /// Enqueues [run] and starts its upload, keeping the in-flight future in

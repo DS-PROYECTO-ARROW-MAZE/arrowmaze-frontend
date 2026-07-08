@@ -19,14 +19,14 @@ void main() {
       expect(repertorio.formaParaIndice(5).nombre, 'Estrella');
     });
 
-    test('should_wrap_to_first_shape_after_repertoire_length', () {
+    test('should_wrap_to_first_shape_when_index_exceeds_repertoire_length', () {
       final repertorio = RepertorioFormas();
 
       expect(repertorio.formaParaIndice(6).nombre, 'Cuadrado');
       expect(repertorio.formaParaIndice(7).nombre, 'Corazón');
     });
 
-    test('should_yield_every_shape_over_a_full_cycle', () {
+    test('should_yield_every_shape_when_iterating_a_full_cycle', () {
       final repertorio = RepertorioFormas();
       final nombres =
           List.generate(5, (i) => repertorio.formaParaIndice(i + 1).nombre)
@@ -41,7 +41,7 @@ void main() {
       ]));
     });
 
-    test('should_never_yield_square_only_over_any_5_consecutive_indices', () {
+    test('should_never_yield_square_only_when_scanning_any_5_consecutive_indices', () {
       final repertorio = RepertorioFormas();
       // Check 10 windows of 5 consecutive indices — each window must contain
       // at least one non-square shape.
@@ -58,7 +58,7 @@ void main() {
   });
 
   group('MascaraForma', () {
-    test('should_generate_absent_positions_for_given_grid', () {
+    test('should_generate_absent_positions_when_given_a_grid', () {
       final mascara =
           RepertorioFormas().formaParaIndice(1); // Cuadrado — no ausentes
 
@@ -67,7 +67,7 @@ void main() {
       expect(ausentes, isEmpty);
     });
 
-    test('should_not_populate_playable_cells_outside_mask_for_heart', () {
+    test('should_not_populate_playable_cells_outside_mask_when_shape_is_heart', () {
       // Corazón should exclude at least some cells on a 7×7 grid.
       final mascara =
           RepertorioFormas().formaParaIndice(2); // Corazón
@@ -81,7 +81,7 @@ void main() {
           reason: 'Corazón should have some playable cells too');
     });
 
-    test('should_yield_different_absent_sets_for_different_shapes_on_same_grid',
+    test('should_yield_different_absent_sets_when_shapes_differ_on_same_grid',
         () {
       final repertorio = RepertorioFormas();
       final ausentesCuadrado = repertorio.formaParaIndice(1).ausentes(7, 7);

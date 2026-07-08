@@ -28,7 +28,7 @@ void main() {
   }
 
   group('Architecture — dependency direction', () {
-    test('should_not_import_logging_or_metrics_library_in_decorator', () {
+    test('should_not_import_logging_or_metrics_library_when_scanning_decorator', () {
       // Arrange — the decorators must lean only on ports, never a concrete
       // logging/metrics/framework library (AC2).
       final dir = Directory('lib/application/decoradores');
@@ -53,7 +53,7 @@ void main() {
       }
     });
 
-    test('should_keep_domain_free_of_frameworks', () {
+    test('should_keep_domain_free_of_frameworks_when_scanning_imports', () {
       // Arrange — domain stays Dart-pure: no Flutter/logging/metrics/Nest/Prisma
       // and no leakage from outer layers (AC4, ADR-0004).
       final dir = Directory('lib/domain');
@@ -78,7 +78,7 @@ void main() {
       }
     });
 
-    test('should_keep_application_free_of_flutter_and_outer_layers', () {
+    test('should_keep_application_free_of_flutter_and_outer_layers_when_scanning_imports', () {
       // Arrange — the application layer is pure Dart use cases and ports: no
       // Flutter, and no leakage from the presentation/infrastructure rings.
       final dir = Directory('lib/application');
@@ -101,7 +101,7 @@ void main() {
       }
     });
 
-    test('should_keep_viewmodels_free_of_flutter_ui', () {
+    test('should_keep_viewmodels_free_of_flutter_ui_when_scanning_imports', () {
       // Arrange — ViewModels may use ChangeNotifier (foundation) but must never
       // touch Flutter UI surfaces; that is the View's job (strict MVVM).
       final dir = Directory('lib/presentation/viewmodels');
@@ -126,7 +126,7 @@ void main() {
       }
     });
 
-    test('should_not_reference_audio_in_domain_or_application', () {
+    test('should_not_reference_audio_when_scanning_domain_or_application', () {
       // AC2: domain/use-case code contains no reference to audio — audio is
       // driven only through the Observer pattern.
       for (final capa in ['lib/domain', 'lib/application']) {
@@ -148,7 +148,7 @@ void main() {
       }
     });
 
-    test('should_keep_presentation_free_of_infrastructure', () {
+    test('should_keep_presentation_free_of_infrastructure_when_scanning_imports', () {
       // Arrange — the presentation layer reaches infrastructure only through
       // the composition root (di/), never by importing it directly.
       final dir = Directory('lib/presentation');
