@@ -335,6 +335,9 @@ abstract final class Inyeccion {
         consultaRemoto: fuenteProgresoRemoto,
         progresoLocal: progresoLocal,
         catalogo: catalogoNiveles,
+        // Surface a failed login-restore (offline, 401, response-shape drift)
+        // instead of degrading silently to a from-scratch Level Select.
+        registro: registro,
       );
 
   /// Builds the [SeleccionNivelesViewModel] for the Level Selection screen.
@@ -430,7 +433,7 @@ abstract final class Inyeccion {
   /// [RestaurarProgresoUseCase] to fetch server-side unlocks on login.
   static IConsultaProgresoRemoto get fuenteProgresoRemoto => _fuenteProgresoRemoto;
   static final ProgresoRemotoDataSourceHttp _fuenteProgresoRemoto =
-      ProgresoRemotoDataSourceHttp(client: _clienteHttp);
+      ProgresoRemotoDataSourceHttp(client: _clienteHttp, registro: _registro);
 
   static SincronizarProgresoUseCase get sincronizarProgresoUseCase =>
       SincronizarProgresoUseCase(

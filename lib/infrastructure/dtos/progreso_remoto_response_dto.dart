@@ -1,26 +1,16 @@
 import '../../application/ports/progreso_remoto_item.dart';
 
-/// DTO for the `GET /progress` response envelope — mirrors backend ticket 18's
-/// contract exactly: `{ "niveles": [ { "nivelId", "estrellas", "puntaje" }, … ] }`.
-class ProgresoRemotoResponseDto {
-  /// Creates the response DTO.
-  const ProgresoRemotoResponseDto({required this.niveles});
-
-  /// The list of progression items returned by the backend.
-  final List<ProgresoRemotoItemDto> niveles;
-
-  /// Deserialises from the backend JSON shape.
-  factory ProgresoRemotoResponseDto.fromJson(Map<String, dynamic> json) {
-    final items = (json['niveles'] as List<dynamic>)
-        .map((e) => ProgresoRemotoItemDto.fromJson(e as Map<String, dynamic>))
-        .toList();
-    return ProgresoRemotoResponseDto(niveles: items);
-  }
-}
-
-/// DTO for a single item inside the `GET /progress` response.
+/// DTO for a single item in the `GET /progress` response.
 ///
-/// Shape: `{ "nivelId": "uuid", "estrellas": 2, "puntaje": 600 }`.
+/// The backend (`ProgressController.list`, backend ticket 18) returns a **bare
+/// JSON array** of these items — *not* an object envelope:
+/// ```json
+/// [ { "nivelId": "uuid", "puntaje": 600, "estrellas": 2,
+///     "movimientos": 12, "segundosRestantes": 55, "completadoEn": "…" }, … ]
+/// ```
+/// The client only needs `nivelId`, `estrellas` and `puntaje` to merge best
+/// per-level; the remaining fields are ignored. Numeric fields are read through
+/// `num` so an int or double payload both parse without throwing.
 class ProgresoRemotoItemDto {
   /// Creates a progress item DTO.
   const ProgresoRemotoItemDto({
@@ -38,12 +28,12 @@ class ProgresoRemotoItemDto {
   /// Best score for this level.
   final int puntaje;
 
-  /// Deserialises from the backend JSON shape.
+  /// Deserialises from one element of the backend's response array.
   factory ProgresoRemotoItemDto.fromJson(Map<String, dynamic> json) {
     return ProgresoRemotoItemDto(
       nivelId: json['nivelId'] as String,
-      estrellas: json['estrellas'] as int,
-      puntaje: json['puntaje'] as int,
+      estrellas: (json['estrellas'] as num).toInt(),
+      puntaje: (json['puntaje'] as num).toInt(),
     );
   }
 

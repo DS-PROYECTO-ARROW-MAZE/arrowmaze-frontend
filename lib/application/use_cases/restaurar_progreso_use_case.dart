@@ -1,6 +1,7 @@
 import '../ports/catalogo_niveles.dart';
 import '../ports/consulta_progreso_local.dart';
 import '../ports/i_consulta_progreso_remoto.dart';
+import '../ports/i_registro.dart';
 
 /// On login, reads the authenticated player's server-side progression via
 /// `GET /progress` and merges it into the local store ([ConsultaProgresoLocal])
@@ -16,13 +17,20 @@ class RestaurarProgresoUseCase {
     required IConsultaProgresoRemoto consultaRemoto,
     required ConsultaProgresoLocal progresoLocal,
     required CatalogoNiveles catalogo,
+    IRegistro? registro,
   })  : _consultaRemoto = consultaRemoto,
         _progresoLocal = progresoLocal,
-        _catalogo = catalogo;
+        _catalogo = catalogo,
+        _registro = registro;
 
   final IConsultaProgresoRemoto _consultaRemoto;
   final ConsultaProgresoLocal _progresoLocal;
   final CatalogoNiveles _catalogo;
+
+  /// Optional logging sink: a restore that fails to read remote progress or map
+  /// it to the catalog is reported here instead of degrading silently, so a
+  /// broken login-restore surfaces in the logs (Ticket 24 diagnostics).
+  final IRegistro? _registro;
 
   /// Fetches remote progress and merges best-per-level into local storage.
   ///
@@ -50,7 +58,8 @@ class RestaurarProgresoUseCase {
           items.add(_ProgresoItem(idNivel: idNivel, estrellas: remoto.estrellas));
         }
       }
-    } catch (_) {
+    } catch (e) {
+      _registro?.error('Restore of progress on login failed: $e');
       return;
     }
 

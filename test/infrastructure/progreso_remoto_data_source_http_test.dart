@@ -7,9 +7,14 @@ import 'package:flutter_test/flutter_test.dart';
 /// Ticket 24 — `GET /progress` data source sends the bearer token and parses
 /// the response shape matching backend ticket 18's contract exactly.
 void main() {
+  // Golden JSON matching the real backend `GET /progress` contract: a **bare
+  // array** of `ProgresoRespuestaDto` (backend ticket 18), carrying the full
+  // per-run fields — not a `{ "niveles": [...] }` envelope. The client only
+  // needs nivelId/estrellas/puntaje but must parse the array shape correctly.
   const goldenJson =
-      '{"niveles":[{"nivelId":"a1b2c3d4-e5f6-7890-abcd-ef1234567890",'
-      '"estrellas":2,"puntaje":600}]}';
+      '[{"nivelId":"a1b2c3d4-e5f6-7890-abcd-ef1234567890",'
+      '"puntaje":600,"estrellas":2,"movimientos":12,'
+      '"segundosRestantes":55,"completadoEn":"2026-06-21T20:30:00.000Z"}]';
 
   group('ProgresoRemotoDataSourceHttp (Ticket 24 — GET /progress)', () {
     test('should_send_authorization_header_and_parse_response_when_getting_progress',
