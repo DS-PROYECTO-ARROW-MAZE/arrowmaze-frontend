@@ -73,6 +73,22 @@ external services.*
 
 ---
 
+## Screens
+
+The game features seven main screens, each with a distinct role in the user flow:
+
+| # | Screen | Image | Function |
+|---|---|---|---|
+| 1 | **Login** | `assets/images/1-Login-Screen.png` | User authentication — register or log in with credentials. Entry point for session-based features (progress sync, leaderboard). |
+| 2 | **Gameplay** | `assets/images/2-GamePlay-Screen.png` | Main game screen — grid of arrow cells, ray traversal, move counter, timer, and undo button. |
+| 3 | **Level Selection** | `assets/images/3-LevelSelection-Screen.png` | Level catalog with unlock status — browse levels, see star ratings, and pick a level to play. |
+| 4 | **Victory** | `assets/images/4-Victoria-Screen.png` | End-of-level success screen — displays score, star rating, and options to replay or go to level selection. |
+| 5 | **Defeat** | `assets/images/5-Derrota-Screen.png` | End-of-level failure screen — shown when the timer expires or moves run out, with retry and quit options. |
+| 6 | **Pause** | `assets/images/6-Pausa-Screen.png` | Pause overlay — freezes the game clock and hides the board, offering resume, restart, and quit controls. |
+| 7 | **Settings** | `assets/images/7-Setting-Screen.png` | Settings screen — toggle sound effects on/off and switch language between English and Spanish. |
+
+---
+
 ## Quick Commands
 
 ```sh
