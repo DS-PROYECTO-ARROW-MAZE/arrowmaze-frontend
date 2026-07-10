@@ -1,13 +1,15 @@
-# ArrowMaze
+# ArrowMaze Frontend
 
-Flutter clone of the game **Arrow Maze — Escape Puzzle** (SayGames Ltd.).
-University project in **Desarrollo de Software** course. **NRC 25783**.
+Flutter game inspired in the game **Arrow Maze — Escape Puzzle** (SayGames Ltd.).
+
 
 **Gameplay:** the player taps cells containing arrows; a arrow traces the full
 arrow chain until it hits a wall or reaches an empty destination. The goal is
 to clear the board using as few moves as possible.
 
----
+
+University project in **Desarrollo de Software** course. **NRC 25783**.
+Teacher: Carlos Alonzo
 
 ## Development Team — TEAM 01
 
