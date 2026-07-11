@@ -6,11 +6,13 @@ import 'core/i18n/localizaciones_provider.dart';
 import 'core/theme/app_theme.dart';
 import 'di/inyeccion.dart';
 import 'presentation/viewmodels/juego_view_model.dart';
+import 'presentation/viewmodels/splash_view_model.dart';
 import 'presentation/views/auth/auth_view.dart';
 import 'presentation/views/game/game_view.dart';
 import 'presentation/views/ranking/ranking_view.dart';
 import 'presentation/views/seleccion/seleccion_niveles_view.dart';
 import 'presentation/views/settings/ajustes_view.dart';
+import 'presentation/views/splash/splash_view.dart';
 import 'presentation/viewmodels/seleccion_niveles_view_state.dart';
 
 Future<void> main() async {
@@ -45,16 +47,52 @@ class MyApp extends StatelessWidget {
       // call CadenasScope.of(context) for i18n strings. Rebuilds only the
       // scope (not the Navigator) when the locale changes (AC3).
       builder: (context, child) => _LocaleScope(child: child!),
-      // Meta-game loop (Ticket 13): Auth → Level Select → Game → (Next/Retry/
-      // Menu). Each builder below is the composition root for its route — it asks
-      // [Inyeccion] for fresh ViewModels so the Views never touch the DI graph.
-      home: AuthView(
-        viewModel: Inyeccion.construirAuthViewModel(),
-        construirInicio: _construirSeleccion,
-      ),
+      // Meta-game loop (Ticket 13): Splash → (Auth | Level Select) → Game →
+      // (Next/Retry/Menu). Each builder below is the composition root for its
+      // route — it asks [Inyeccion] for fresh ViewModels so the Views never touch
+      // the DI graph. The launch screen (Ticket 33) is the home; it routes on its
+      // own completion by session state.
+      home: const _ArranqueSplash(),
     );
   }
 }
+
+/// Composition-root host for the launch splash (Ticket 33).
+///
+/// Builds the [SplashViewModel] once, shows [SplashView], and — once the fade-out
+/// finishes — replaces itself with the correct destination by session state:
+/// Level Selection when a session exists, the login screen otherwise (AC5). The
+/// splash is a one-time launch screen: routing uses [Navigator.pushReplacement]
+/// so it is not re-shown on in-app navigation (AC6).
+class _ArranqueSplash extends StatefulWidget {
+  const _ArranqueSplash();
+
+  @override
+  State<_ArranqueSplash> createState() => _ArranqueSplashState();
+}
+
+class _ArranqueSplashState extends State<_ArranqueSplash> {
+  late final SplashViewModel _viewModel = Inyeccion.construirSplashViewModel();
+
+  void _rutear() {
+    if (!mounted) return;
+    final destino = _viewModel.haySesion ? _construirSeleccion : _construirAuth;
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: destino),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SplashView(viewModel: _viewModel, alCompletar: _rutear);
+  }
+}
+
+/// Builds the Register / Login screen (the no-session destination after splash).
+Widget _construirAuth(BuildContext context) => AuthView(
+      viewModel: Inyeccion.construirAuthViewModel(),
+      construirInicio: _construirSeleccion,
+    );
 
 /// Reactive locale wrapper placed inside MaterialApp.builder.
 ///
