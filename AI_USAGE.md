@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-035 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-036 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, `develop` merge/conflict resolution |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, launch splash screen (ticket 33), `develop` merge/conflict resolution |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
@@ -1646,6 +1646,15 @@ eloj:
 - **Modifications made by the team:** Review only — the team reviewed the tests and the fix; no manual code edits were required.
 - **Lessons learned / limitations identified:** (1) A unlock rule that reads only the *adjacent* predecessor (`contains(N−1)`) is **fragile to any hole** in the completed-set; correcting the rule's *input* (saturating to the max cleared id) rather than the rule itself keeps the Strategy the single source of truth (OCP) while guaranteeing the monotonic invariant. (2) Deriving the **unlock** flag from the saturated set but **completion/stars** from the raw records is what prevents a fixed padlock from turning into a phantom star on the gap level. (3) The hydration/parser tests (AC3/AC4) passed on the first run — they act as regression guards locking the `GET /progress` contract and the UUID→ordinal mapping so a future truncation or mis-key is caught by a test, not shipped.
 
+### T-036 — Ticket 33 · Initial splash screen with fade-out into the level menu
+
+- **Task / problem addressed:** On launch, greet the player with a branded splash (`assets/images/ArrowMaze_splash.png`) rendered on the **first frame** — no blank/white flash — held for a **minimum ~2 s** *and* until the launch bootstrap settles, then **smoothly fade out** into the correct post-splash screen (Level Selection when a session exists, login otherwise). Scope defined by `.issues/33-feat-frontend-splash-screen.md`. Acceptance criteria: (AC1) splash on frame 1; (AC2) `max(min-visible, bootstrap)` wait; (AC3) bootstrap waits **bounded by a timeout** so a slow/offline start still transitions; (AC4) opacity fade-out, not an instant cut; (AC5) post-splash routing respects session; (AC6) the fade controller is disposed on unmount (no ticker leak) and the splash is a one-time launch screen. `assets/images/` was not yet registered in `pubspec.yaml` — this ticket adds it.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "please implement this ticket `c:\Users\maria\Desktop\ArrowMaze\arrowmaze-frontend\.issues\33-feat-frontend-splash-screen.md` follow the rules in these skills `c:\…\.claude\skills\clean-architecture` `c:\…\.claude\skills\tdd-strict`".
+- **Result obtained:** Strict TDD (red → green → refactor) producing: **presentation** — `presentation/viewmodels/splash_view_model.dart` (thin, **pure Dart**, imports no Flutter widgets: exposes `Future<void> listo` = `Future.wait` of a `min-visible` delay and a `_bootstrap()` = auth-state probe + optional resource warm-up, each bounded by a `timeout` via `.timeout(...)`; caches `listo` in the constructor; exposes `haySesion` — a hung/absent probe safely resolves to `false` → login; min-visible and timeout kept as single named constants `duracionMinimaVisible` / `duracionTimeoutBootstrap`); `presentation/views/splash/splash_view.dart` (thin View: full-screen `Image.asset` on a dark `AppColors.background` scaffold with an `errorBuilder` so a missing/undecodable asset never crashes the launch, wrapped in a keyed `FadeTransition` driven by a `SingleTickerProviderStateMixin` `AnimationController`; awaits `viewModel.listo` then `forward()`s the fade and fires `alCompletar` on completion; **no routing, no DI**; disposes the controller in `dispose`; exposes `imagenKey`/`fadeKey` for tests). **composition root** — `main.dart` `home:` is now a `_ArranqueSplash` host that builds the `SplashViewModel` once and, on completion, `pushReplacement`s to Level Selection (`haySesion`) or the login `AuthView` (`_construirAuth`), so the splash is not re-shown on in-app navigation; `di/inyeccion.dart` adds `construirSplashViewModel()` reusing the injected `proveedorSesion` (no duplicate session logic). **assets/deps** — `pubspec.yaml` registers `assets/images/` and adds `fake_async` as a dev dependency for deterministic clock tests. New tests (7): `test/presentation/splash_viewmodel_test.dart` (4 via `fake_async`: complete-after-minimum-even-if-bootstrap-instant, wait-for-bootstrap-when-slower, complete-within-timeout-when-resources-hang with a never-resolving probe, route-to-menu-vs-login by session); `test/presentation/splash_view_test.dart` (3 widget: branded-image-on-first-frame, fade-out-and-invoke-callback, dispose-controller-on-unmount). Verified: full suite **434 green** (427 prior + 7 new); `flutter analyze` clean (no errors/warnings; only pre-existing info-level `prefer_initializing_formals` hints, matching every existing ViewModel); zero `package:flutter` imports in the ViewModel's timing logic and under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and the implementation; no manual code edits were required. Two AI self-corrections happened within the same session (see Critical Evaluation): the fade-out widget test's `find.byType(FadeTransition)` matched route-level transitions ("Too many elements"), fixed by targeting a keyed `FadeTransition`; and the image `errorBuilder` used the legacy `(_, __, ___)` multi-underscore params, updated to Dart wildcard params `(_, _, _)`.
+- **Lessons learned / limitations identified:** (1) Injecting the `min-visible` and `timeout` **durations** and using `fake_async` made the timing/AC2–AC3 logic deterministic and instant to test — no real 2 s waits — while keeping the ViewModel free of any Flutter dependency, honouring the "ViewModel imports no Flutter widgets for its timing logic" rule. (2) Keeping *routing* out of the View (the composition-root `_ArranqueSplash` decides the destination from `haySesion`, the View only fires a callback) preserved the MVVM boundary and let the View be tested with a plain completion spy. (3) A deliberate scope tradeoff, flagged to the user: per the ticket's instruction to *reuse the existing `ProveedorSesion` probe (no new domain concept)*, routing keys off **token presence**, not a `/auth/me` validation — a stale token therefore routes to the menu (where catalog/progress reads degrade gracefully) rather than being re-validated at splash. (4) Widget tests that inspect a widget type present at multiple tree levels (`FadeTransition` also appears in route transitions) must target a `Key`, not `byType`, to stay unambiguous.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1653,13 +1662,14 @@ eloj:
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
     03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, 30, and 32 — plus the post-29 timer/invalid-alert fixes, the
+    27, 28, 29, 30, 32, and 33 — plus the post-29 timer/invalid-alert fixes, the
     per-user local-progress rework (T-033), the Level-Selection back-button change
-    (T-034), and the unlock-consistency fix (T-035) — were AI-generated then
+    (T-034), the unlock-consistency fix (T-035), and the launch splash screen
+    (T-036) — were AI-generated then
     human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
     AI-authored in these tasks). Every ticket followed the same pattern (full AI
     authoring + human review), so the share holds at ~90%. Rough judgment over the
-    files added across the slices (427 passing tests, all source in `lib/domain/`,
+    files added across the slices (434 passing tests, all source in `lib/domain/`,
     `lib/application/`,
     `lib/infrastructure/`, `lib/presentation/`, `lib/di/`, `lib/core/`, plus
     synthesized binary assets under `assets/sounds/`).
@@ -1947,6 +1957,18 @@ eloj:
     `copyWith` (`?? false`), matching the existing `animacionSalida` pattern, so
     the pulse rides only the state its leading invalid tap produces; added a test
     that a later timer tick does not re-raise it.
+- **Case:** The splash fade-out widget test asserted on `find.byType(FadeTransition)`,
+  which threw `Bad state: Too many elements` because Flutter's route machinery also
+  builds `FadeTransition`s, so more than one matched (ticket 33).
+  - **How it was detected:** `flutter test` — the widget test failed on the
+    ambiguous finder before reaching its assertion.
+  - **How it was corrected:** Gave the splash's own `FadeTransition` a `fadeKey`
+    and switched the finder to `find.byKey(SplashView.fadeKey)`, so the animation
+    assertion targets exactly the View's transition and never a route-level one.
+- **Case:** The splash image `errorBuilder` used legacy repeated-underscore ignored
+  params `(_, __, ___)`, tripping the `unnecessary_underscores` lint (ticket 33).
+  - **How it was detected:** `flutter analyze` / IDE diagnostics.
+  - **How it was corrected:** Replaced them with Dart wildcard params `(_, _, _)`.
 
 ### Team reflection
 
