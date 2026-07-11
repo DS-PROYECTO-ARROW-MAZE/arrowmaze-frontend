@@ -13,6 +13,7 @@ import '../../../domain/value_objects/direccion.dart';
 import '../../../domain/value_objects/posicion.dart';
 import '../../viewmodels/juego_view_model.dart';
 import '../../viewmodels/juego_view_state.dart';
+import 'confetti_overlay.dart';
 
 /// The board screen — a thin View that only draws.
 ///
@@ -293,23 +294,32 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
 /// A full-screen scrim hosting an end-of-session or pause panel. Purely
 /// presentational — built entirely from theme tokens.
 class _Overlay extends StatelessWidget {
-  const _Overlay({required this.children});
+  const _Overlay({required this.children, this.fondo});
 
   final List<Widget> children;
+
+  /// An optional full-bleed layer drawn behind the centered panel content — used
+  /// by the victory overlay to sit its confetti under the win text/stars.
+  final Widget? fondo;
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: ColoredBox(
         color: AppColors.background.withValues(alpha: 0.82),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: children,
+        child: Stack(
+          children: [
+            if (fondo != null) Positioned.fill(child: fondo!),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -359,6 +369,11 @@ class _VictoriaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = CadenasScope.of(context);
     return _Overlay(
+      // Confetti sits behind the win text/stars, tinted from the arrow palette
+      // so the celebration matches the board. It fires once as this overlay
+      // first renders and disposes with it — winning is winning, so it plays on
+      // bonus wins too (this overlay is shown for every victory).
+      fondo: ConfettiOverlay(colores: game.arrowPalette),
       children: [
         Text(
           s.victoria,
