@@ -1,5 +1,6 @@
 import 'package:arrowmaze/application/ports/catalogo_niveles.dart';
 import 'package:arrowmaze/application/ports/consulta_progreso_local.dart';
+import 'package:arrowmaze/application/use_cases/nivel_con_estado.dart';
 import 'package:arrowmaze/application/use_cases/obtener_niveles_use_case.dart';
 import 'package:arrowmaze/domain/niveles/dificultad.dart';
 import 'package:arrowmaze/domain/niveles/resumen_nivel.dart';
@@ -64,8 +65,80 @@ void main() {
       expect(niveles[0].estrellas, 0);
       expect(niveles[1].desbloqueado, isTrue);
     });
+
+    // Ticket 32 (AC2) — the monotonic-unlock invariant. A completed-set with a
+    // hole (here: 1‑8 minus id 5, the reported "L6 padlock while L7/L8 have
+    // stars" case) must never render a locked level *before* an unlocked one.
+    test('should_never_lock_a_level_before_an_unlocked_one', () async {
+      // Arrange — eight levels; every id completed except a middle one (5).
+      final useCase = ObtenerNivelesUseCase(
+        catalogo: _CatalogoFake(_ochoNiveles),
+        progreso: _ProgresoFake(completados: const {1, 2, 3, 4, 6, 7, 8}),
+      );
+
+      // Act
+      final niveles = await useCase.ejecutar();
+
+      // Assert — for every unlocked level, all earlier levels are unlocked too.
+      _expectMonotonicUnlock(niveles);
+      // And specifically the reported case: level 6 is not phantom-locked.
+      expect(niveles.firstWhere((n) => n.resumen.id == 6).desbloqueado, isTrue);
+    });
+
+    test('should_keep_stars_from_real_records_when_filling_unlock_holes',
+        () async {
+      // Arrange — hole at 5: it has no record, but 6 does. Saturating the unlock
+      // set must not invent completion/stars for the gap level.
+      final useCase = ObtenerNivelesUseCase(
+        catalogo: _CatalogoFake(_ochoNiveles),
+        progreso: _ProgresoFake(
+          completados: const {1, 2, 3, 4, 6, 7, 8},
+          estrellas: const {6: 3},
+        ),
+      );
+
+      // Act
+      final niveles = await useCase.ejecutar();
+
+      // Assert — level 5 is unlocked but not marked completed (no phantom star).
+      final nivel5 = niveles.firstWhere((n) => n.resumen.id == 5);
+      expect(nivel5.desbloqueado, isTrue);
+      expect(nivel5.completado, isFalse);
+      expect(nivel5.estrellas, 0);
+      // Level 6 keeps its real stars.
+      final nivel6 = niveles.firstWhere((n) => n.resumen.id == 6);
+      expect(nivel6.completado, isTrue);
+      expect(nivel6.estrellas, 3);
+    });
   });
 }
+
+/// Reusable invariant: in a rendered catalog, an unlocked level implies every
+/// earlier level (lower id) is unlocked (Ticket 32, AC2).
+void _expectMonotonicUnlock(List<NivelConEstado> niveles) {
+  final ordenados = [...niveles]
+    ..sort((a, b) => a.resumen.id.compareTo(b.resumen.id));
+  var vistoBloqueado = false;
+  for (final nivel in ordenados) {
+    if (!nivel.desbloqueado) {
+      vistoBloqueado = true;
+    } else if (vistoBloqueado) {
+      fail('Level ${nivel.resumen.id} is unlocked but an earlier level is '
+          'locked — monotonic-unlock invariant violated.');
+    }
+  }
+}
+
+const _ochoNiveles = [
+  ResumenNivel(id: 1, nombre: 'One', dificultad: Dificultad.facil),
+  ResumenNivel(id: 2, nombre: 'Two', dificultad: Dificultad.facil),
+  ResumenNivel(id: 3, nombre: 'Three', dificultad: Dificultad.medio),
+  ResumenNivel(id: 4, nombre: 'Four', dificultad: Dificultad.medio),
+  ResumenNivel(id: 5, nombre: 'Five', dificultad: Dificultad.medio),
+  ResumenNivel(id: 6, nombre: 'Six', dificultad: Dificultad.dificil),
+  ResumenNivel(id: 7, nombre: 'Seven', dificultad: Dificultad.dificil),
+  ResumenNivel(id: 8, nombre: 'Eight', dificultad: Dificultad.dificil),
+];
 
 const _tresNiveles = [
   ResumenNivel(id: 1, nombre: 'One', dificultad: Dificultad.facil),

@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-07 (T-031…T-034 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-035 appended)
 
 ## 1. Tools Used
 
@@ -1637,6 +1637,15 @@ eloj:
 - **Modifications made by the team:** Review only.
 - **Lessons learned / limitations identified:** An unwanted back arrow on a post-login "home" screen is usually Flutter's automatic `AppBar` *leading* widget, not written code; `automaticallyImplyLeading: false` is the intent-explicit fix and works regardless of how the route was pushed.
 
+### T-035 — Ticket 32 · Unlock-state consistency on login (no phantom locks)
+
+- **Task / problem addressed:** A returning user saw a **padlock on a level that precedes ones they had already cleared** — the reported case being **Level 6 locked while Levels 7 and 8 showed stars**. This is internally contradictory: `ReglaDesbloqueoSecuencial` unlocks level *N* only when *N−1* is completed, so if 7/8 are unlocked/completed, 6 must be treated as completed too. Scope defined by `.issues/32-fix-frontend-unlock-state-consistency-on-login.md`. Acceptance criteria: (AC1) no phantom locks — a padlock never precedes an unlocked level; (AC2) monotonic unlock invariant — if level *N* is unlocked, every level `< N` is unlocked; (AC3) full hydration — `RestaurarProgresoUseCase` writes every completed id from `GET /progress`; (AC4) id-space integrity — remote UUIDs map to the exact catalog ordinal the rule reads; (AC5) graceful degrade (offline/401) unchanged.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "please implement this ticket `…\.issues\32-fix-frontend-unlock-state-consistency-on-login.md` it is obligatory to apply the rules in `…\clean-architecture` `…\tdd-strict` these skills."
+- **Result obtained:** Root cause identified: the sequential rule reads `completados.contains(N−1)` and is **not monotonic against a completed-set with a hole** (a missing middle id from a lossy login restore, an unsynced clear, or a namespace switch); a hole at id 5 reproduces "L6 padlock while L7/L8 have stars" exactly. Fixed with strict TDD, **domain rule left unchanged** per the ticket: `ObtenerNivelesUseCase` now feeds the injected `ReglaDesbloqueo` an **effective completed-set saturated up to the highest cleared level** (new `_conjuntoDesbloqueoEfectivo` helper) — sequential progression cannot skip levels, so clearing level *H* implies `1..H` were cleared. The rule stays the sole lock decision-maker (OCP); only its *input* is corrected. `completado`/`estrellas` keep reading the **raw** records, so a gap level shows unlocked-but-no-stars, never a phantom star. RED tests added first (two failed as expected, then passed): `obtener_niveles_use_case_test` — `should_never_lock_a_level_before_an_unlocked_one` (+ a reusable `_expectMonotonicUnlock` assertion) and `should_keep_stars_from_real_records_when_filling_unlock_holes`; `seleccion_niveles_viewmodel_test` — `should_render_level6_unlocked_when_levels_7_and_8_are_completed` (the exact reported case); `restaurar_progreso_use_case_test` — `should_hydrate_every_completed_id_from_remote` (golden sparse 1–8) and `should_map_remote_ids_to_catalog_ids_without_loss` (out-of-order UUIDs, to catch positional shortcuts); `progreso_remoto_data_source_http_test` — `should_parse_full_progress_history_without_dropping_entries`; `regla_desbloqueo_test` — `should_keep_unlock_monotonic_over_a_prefix_completed_set`. Confirmed the View already derives locks solely from `NivelConEstado.desbloqueado` (no independent recompute). Verified: full suite **427 green**; `flutter analyze` clean (only 3 pre-existing info-level `prefer_initializing_formals` hints on the untouched constructor); zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** Review only — the team reviewed the tests and the fix; no manual code edits were required.
+- **Lessons learned / limitations identified:** (1) A unlock rule that reads only the *adjacent* predecessor (`contains(N−1)`) is **fragile to any hole** in the completed-set; correcting the rule's *input* (saturating to the max cleared id) rather than the rule itself keeps the Strategy the single source of truth (OCP) while guaranteeing the monotonic invariant. (2) Deriving the **unlock** flag from the saturated set but **completion/stars** from the raw records is what prevents a fixed padlock from turning into a phantom star on the gap level. (3) The hydration/parser tests (AC3/AC4) passed on the first run — they act as regression guards locking the `GET /progress` contract and the UUID→ordinal mapping so a future truncation or mis-key is caught by a test, not shipped.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1644,13 +1653,14 @@ eloj:
 - **Approximate % of code that was AI-assisted:** ~90%
 - **Basis for the estimate:**     All `lib/` and `test/` files across tickets 01, 02,
     03, 04, 05, 06, 07, 08, 09, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26,
-    27, 28, 29, and 30 — plus the post-29 timer/invalid-alert fixes, the per-user
-    local-progress rework (T-033), and the Level-Selection back-button change
-    (T-034) — were AI-generated then human-reviewed; the theme tokens under
-    `lib/core/theme` were pre-existing (not AI-authored in these tasks). Every
-    ticket followed the same pattern (full AI authoring + human review), so the
-    share holds at ~90%. Rough judgment over the files added across the slices
-    (420 passing tests, all source in `lib/domain/`, `lib/application/`,
+    27, 28, 29, 30, and 32 — plus the post-29 timer/invalid-alert fixes, the
+    per-user local-progress rework (T-033), the Level-Selection back-button change
+    (T-034), and the unlock-consistency fix (T-035) — were AI-generated then
+    human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
+    AI-authored in these tasks). Every ticket followed the same pattern (full AI
+    authoring + human review), so the share holds at ~90%. Rough judgment over the
+    files added across the slices (427 passing tests, all source in `lib/domain/`,
+    `lib/application/`,
     `lib/infrastructure/`, `lib/presentation/`, `lib/di/`, `lib/core/`, plus
     synthesized binary assets under `assets/sounds/`).
 
