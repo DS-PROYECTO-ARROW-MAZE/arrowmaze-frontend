@@ -5,6 +5,7 @@ import 'package:arrowmaze/core/i18n/cadenas_scope.dart';
 import 'package:arrowmaze/core/theme/game_theme.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
+import 'package:arrowmaze/domain/niveles/dificultad.dart';
 import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
 import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
 import 'package:arrowmaze/domain/value_objects/direccion.dart';
@@ -22,6 +23,21 @@ class _RelojNulo implements Reloj {
   void iniciar(Duration intervalo, void Function() tic) {}
   @override
   void detener() {}
+}
+
+/// A clock whose one-second tick is fired manually from the test, so a timed
+/// level's countdown can be driven a second at a time across the hint window.
+class _RelojControlable implements Reloj {
+  void Function()? _callback;
+
+  @override
+  void iniciar(Duration intervalo, void Function() tic) => _callback = tic;
+
+  @override
+  void detener() {}
+
+  /// Advances the session clock by one second.
+  void tic() => _callback?.call();
 }
 
 /// Ticket 34 — the victory confetti fires exactly when the Level Complete UI
@@ -169,5 +185,156 @@ void main() {
     expect(vm.estado.victoria!.mostrarPuntuacion, isFalse);
     expect(find.byType(ConfettiOverlay), findsOneWidget);
     await tester.pumpAndSettle();
+  });
+
+  group('conditional hint button (ticket 35)', () {
+    // A timed level (numero >= 10, non-bonus) — the only kind the time gate can
+    // ever open on.
+    const definicionMedia = DefinicionNivel(
+      id: 10,
+      numero: 10,
+      baseNivel: 1000,
+      kmov: 10,
+      ktiempo: 2,
+      limiteTiempo: Duration(seconds: 27),
+    );
+
+    // While time-locked the button wears a padlock; once unlocked (or spent) it
+    // wears a lit bulb.
+    final hintBloqueadoFinder =
+        find.widgetWithIcon(IconButton, Icons.lock_outline);
+    final hintDisponibleFinder =
+        find.widgetWithIcon(IconButton, Icons.lightbulb);
+
+    /// Builds a medium timed level whose clock the returned [_RelojControlable]
+    /// drives a second at a time, so tests can cross the 25 s hint boundary.
+    ({JuegoViewModel vm, _RelojControlable reloj}) montarMedio(
+      WidgetTester tester, {
+      required Duration limite,
+    }) {
+      final tablero = construirTablero();
+      final reloj = _RelojControlable();
+      final vm = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(
+          tablero,
+          sesion: SesionJuego(tablero: tablero, limiteTiempo: limite),
+        ),
+        definicionNivel: definicionMedia,
+        reloj: reloj,
+        dificultad: Dificultad.medio,
+      );
+      return (vm: vm, reloj: reloj);
+    }
+
+    testWidgets('should_not_build_hint_button_on_easy_level', (tester) async {
+      // Arrange — an easy level: Rule A forbids the button entirely.
+      final tablero = construirTablero();
+      final vm = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(tablero),
+        definicionNivel: definicion,
+        reloj: _RelojNulo(),
+        dificultad: Dificultad.facil,
+      );
+      await tester.pumpWidget(montarJuego(vm));
+
+      // Assert — the hint button is never built on easy (AC1), in either look.
+      expect(hintBloqueadoFinder, findsNothing);
+      expect(hintDisponibleFinder, findsNothing);
+    });
+
+    testWidgets(
+      'should_render_hint_locked_then_unlocked_across_25s_boundary',
+      (tester) async {
+        // Arrange — a medium timed level starting one second above the window.
+        final ctx = montarMedio(tester, limite: const Duration(seconds: 27));
+        await tester.pumpWidget(montarJuego(ctx.vm));
+
+        // The button participates (Rule A) but wears the padlock at start
+        // (27 > 25, Rule B). It stays tappable so an early tap can explain it.
+        expect(hintBloqueadoFinder, findsOneWidget);
+        expect(hintDisponibleFinder, findsNothing);
+        expect(
+          tester.widget<IconButton>(hintBloqueadoFinder).onPressed,
+          isNotNull,
+        );
+
+        // 27→26 is still above the threshold — still padlocked.
+        ctx.reloj.tic();
+        await tester.pump();
+        expect(hintBloqueadoFinder, findsOneWidget);
+
+        // 26→25 crosses the boundary — the bulb lights up (AC4).
+        ctx.reloj.tic();
+        await tester.pump();
+        expect(hintBloqueadoFinder, findsNothing);
+        expect(hintDisponibleFinder, findsOneWidget);
+      },
+    );
+
+    testWidgets('should_spotlight_a_suggested_arrow_when_hint_tapped',
+        (tester) async {
+      // Arrange — a medium timed level driven into the hint window. The only
+      // arrow's head (1,0) exits left with a clear ray.
+      final ctx = montarMedio(tester, limite: const Duration(seconds: 26));
+      await tester.pumpWidget(montarJuego(ctx.vm));
+      ctx.reloj.tic(); // 26→25 unlocks the bulb
+      await tester.pump();
+
+      // No spotlight until the player asks.
+      expect(find.byKey(const ValueKey('hint-spot')), findsNothing);
+
+      // Act — tap the (now unlocked) hint button.
+      await tester.tap(hintDisponibleFinder);
+      await tester.pump();
+
+      // Assert — the suggested arrow is spotlighted (something visibly happens).
+      expect(ctx.vm.estado.pistaSugerida, const Posicion.en(fila: 1, columna: 0));
+      expect(find.byKey(const ValueKey('hint-spot')), findsOneWidget);
+
+      // Drain the pulse so no timers outlive the test.
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('should_show_locked_notice_when_hint_tapped_too_early',
+        (tester) async {
+      // Arrange — a medium timed level still 40 s out (15 s before the 25 s gate).
+      final ctx = montarMedio(tester, limite: const Duration(seconds: 40));
+      await tester.pumpWidget(montarJuego(ctx.vm));
+
+      // Act — tap the padlocked button before it unlocks.
+      await tester.tap(hintBloqueadoFinder);
+      await tester.pump();
+
+      // Assert — a notice explains it is still locked for 15 s, and no hint fired.
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+      expect(find.text('Hint locked — unlocks in 15s'), findsOneWidget);
+      expect(find.byKey(const ValueKey('hint-spot')), findsNothing);
+    });
+
+    testWidgets('should_disable_hint_button_after_it_is_used_once',
+        (tester) async {
+      // Arrange — a medium timed level driven into the hint window.
+      final ctx = montarMedio(tester, limite: const Duration(seconds: 26));
+      await tester.pumpWidget(montarJuego(ctx.vm));
+      ctx.reloj.tic(); // 26→25 unlocks the bulb
+      await tester.pump();
+
+      // Act — spend the single hint.
+      await tester.tap(hintDisponibleFinder);
+      await tester.pump();
+
+      // Assert — the button remains (still a bulb) but is now disabled: the hint
+      // is once-per-level and cannot be requested again.
+      expect(ctx.vm.estado.pistaUsada, isTrue);
+      expect(hintDisponibleFinder, findsOneWidget);
+      expect(
+        tester.widget<IconButton>(hintDisponibleFinder).onPressed,
+        isNull,
+      );
+
+      await tester.pumpAndSettle();
+    });
   });
 }

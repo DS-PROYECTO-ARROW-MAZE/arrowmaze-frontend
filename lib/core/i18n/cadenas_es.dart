@@ -88,6 +88,16 @@ class CadenasEs extends Cadenas {
   String deshacerConUsos(int n) => 'Deshacer ($n restantes)';
 
   @override
+  String get pista => 'Pista';
+
+  @override
+  String get pistaUsada => 'Pista ya usada';
+
+  @override
+  String pistaBloqueada(int segundos) =>
+      'Pista bloqueada — disponible en ${segundos}s';
+
+  @override
   String get pausar => 'Pausar';
 
   @override
