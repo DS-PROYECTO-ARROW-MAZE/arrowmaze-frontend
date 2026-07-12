@@ -220,6 +220,9 @@ abstract final class Inyeccion {
       // Ticket 13: tie the run to its level and persist completion on victory so
       // the next level unlocks.
       idNivel: idNivel,
+      // Ticket 35: difficulty gates the hint button (Rule A) — the same value
+      // that decides whether the level is timed.
+      dificultad: dificultad,
       // Backend level UUID — the identity a synced run is keyed by. Null for the
       // offline/random board, which disables sync for that run.
       nivelIdRemoto: nivelIdRemoto,

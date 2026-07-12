@@ -56,6 +56,27 @@ dev_dependencies:
   # bootstrap-timeout logic, Ticket 33).
   fake_async: ^1.3.3
 
+  # Generates the platform launcher icons (Android mipmaps + adaptive icon, iOS
+  # AppIcon set) from the brand art in assets/images/. Run after changing the
+  # art with: dart run flutter_launcher_icons
+  flutter_launcher_icons: ^0.14.4
+
+# Launcher-icon generation (see the flutter_launcher_icons dev dependency).
+# The legacy icon and the Android 8+ adaptive icon both use the full brand PNG.
+# The art already bakes in safe padding (the arrows sit within the central 66%
+# "safe zone"), and its dark canvas matches adaptive_icon_background exactly, so
+# a full-bleed foreground (inset 0) reads as one seamless icon under any launcher
+# mask instead of a shrunken card floating on a plain background.
+flutter_launcher_icons:
+  android: true
+  ios: true
+  image_path: "assets/images/ArrowMaze_icon.png"
+  min_sdk_android: 21
+  adaptive_icon_background: "#0E1320"
+  adaptive_icon_foreground: "assets/images/ArrowMaze_icon.png"
+  adaptive_icon_foreground_inset: 0
+  remove_alpha_ios: true
+
 # For information on the generic Dart part of this file, see the
 # following page: https://dart.dev/tools/pub/pubspec
 

@@ -87,6 +87,16 @@ class CadenasEn extends Cadenas {
   String deshacerConUsos(int n) => 'Undo ($n left)';
 
   @override
+  String get pista => 'Hint';
+
+  @override
+  String get pistaUsada => 'Hint already used';
+
+  @override
+  String pistaBloqueada(int segundos) =>
+      'Hint locked — unlocks in ${segundos}s';
+
+  @override
   String get pausar => 'Pause';
 
   @override

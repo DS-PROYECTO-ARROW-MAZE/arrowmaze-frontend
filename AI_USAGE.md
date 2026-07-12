@@ -1,13 +1,13 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-037 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-039 appended)
 
 ## 1. Tools Used
 
 | Tool | Version / Model | Role in the team's workflow |
 | ---- | --------------- | --------------------------- |
-| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, launch splash screen (ticket 33), victory confetti overlay (ticket 34), `develop` merge/conflict resolution |
+| Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, launch splash screen (ticket 33), victory confetti overlay (ticket 34), hint once-per-level lock + time-locked early-tap notice with themed restyle (ticket 35 enhancement), app launcher-icon generation (Android adaptive + legacy, iOS), `develop` merge/conflict resolution |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
 | Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
@@ -1664,6 +1664,24 @@ eloj:
 - **Modifications made by the team:** Review only — the team reviewed the tests and implementation; no manual code edits were required. Both new test files and the implementation compiled and passed on the **first** green run (no red-phase compile stumbles beyond the expected "`ConfettiOverlay` undefined" while the tests existed before the widget).
 - **Lessons learned / limitations identified:** (1) `WidgetTester.hasRunningAnimations` is a clean, implementation-agnostic way to assert both the fire-once behaviour (AC1/AC2) without exposing private controller state — the burst is observed through its public animation effect, not a test hook. (2) Tying the whole effect's lifecycle to the overlay's mount (fire in `initState`, dispose in `dispose`) makes AC2 (once per win) and AC4 (no leak) fall out of Flutter's own widget lifecycle — the confetti never has to reason about "is this the same victory?" because a new win is a fresh mount and a rebuild reuses the same `State` (so `initState` doesn't re-run). (3) Keeping the overlay theme/VM-agnostic (it receives only a `List<Color>`) preserved the presentation-only boundary the ticket demanded — no confetti symbol reaches `domain`/`application`, and the host View decides the palette. (4) Placing confetti as a `fondo` layer **above** the dim scrim but **behind** the centered panel content keeps it visible yet never over the buttons, satisfying "under the panel content" (AC5) without a separate hit-test guard beyond the `IgnorePointer`.
 
+### T-038 — Ticket 35 (enhancement) · Hint — once-per-level lock + time-locked early-tap notice
+
+- **Task / problem addressed:** The medium/hard hint button (ticket 35 gate: Rule A = difficulty, Rule B = `≤ 25 s` left, session playing) had two gaps the user wanted closed: (1) the hint could be requested **any number of times** while the gate was open — it should be usable **only once per level**; and (2) before the time gate opened the button was simply **disabled** (a dead button with no explanation) — tapping it early should instead **tell the player it is still locked and for how many more seconds**. A follow-up asked for the locked notice to be **restyled to match the app's design** rather than a plain Material `SnackBar`.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "i need please that for each level where it its the option of hint, it could be used only once per level, not many times. and if someone touches de buttom before the right time, somehow it should show that it is still lock till x amount of seconds"; then (verbatim, follow-up) "i would like that the message of hint locked would be prettier please, with the same design of the whole app".
+- **Result obtained:** `lib/presentation/viewmodels/juego_view_state.dart` — added a **latched** `pistaUsada` (carried forward by `copyWith`, so a spent hint stays spent for the run) and a **transient** `pistaBloqueadaSegundos` (cleared by `copyWith` like `pistaSugerida`, so the "still locked" notice rides only on the tap that raised it). `lib/presentation/viewmodels/juego_view_model.dart` — a `_pistaUsada` guard (resets per run since a retry builds a fresh ViewModel); `_pistaDisponibleEn` now also requires **not spent**; `pedirPista()` rewritten to own the tap semantics — a no-op when off a hint level / already spent / not actively playing, otherwise if the time gate is shut it publishes `pistaBloqueadaSegundos` (via the new `_segundosParaDesbloquear` = `restante − 25 s`, `null` when untimed) and if the gate is open it reveals the suggestion **and** latches `pistaUsada`. `lib/presentation/views/game/game_view.dart` — the button is now built on every medium/hard level and stays **tappable unless spent**: icon is `lock_outline` while time-locked, `lightbulb` once unlocked **or** spent, disabled (`onPressed: null`) only after use; `_avisarPistaBloqueada` shows the notice. **Themed notice (follow-up):** replaced the default `SnackBar` with a floating card — transparent shell wrapping a `DecoratedBox` using `AppColors.surface`, `AppRadii.cardRadius`, a `GameTheme.starActive` (the hint's gold) border **and** glow `boxShadow`, a `Icons.lock_clock_outlined` accent icon, and `AppTypography.bodyLarge` text — so it reads like the pause/victory panels. i18n: `pistaUsada` tooltip + `pistaBloqueada(int segundos)` message added to `Cadenas` and both `CadenasEn`/`CadenasEs`. New tests: `test/presentation/game_view_test.dart` (+4: `should_render_hint_locked_then_unlocked_across_25s_boundary`, `should_show_locked_notice_when_hint_tapped_too_early`, `should_disable_hint_button_after_it_is_used_once`, and the updated `should_spotlight_a_suggested_arrow_when_hint_tapped`) and `test/presentation/juego_viewmodel_test.dart` (+2: `should_lock_hint_after_first_use`, `should_report_seconds_until_unlock_when_pedirPista_too_early`). Verified: full suite **454 green**; `flutter analyze` clean on the changed files (only the pre-existing info-level `prefer_initializing_formals` hints remain). *(This entry covers the once-per-level + notice enhancements; the base ticket-35 hint gate — `pistaHabilitadaEnNivel`/`pistaDisponible`/the spotlight — pre-existed on the `35-hint` branch.)*
+- **Modifications made by the team:** The two existing widget tests that encoded the **old** behavior (button *disabled* before 25 s; `lightbulb_outline` icon) were updated to the new locked-icon / tappable semantics — a deliberate behavior change requested by the user, not a regression. The "prettier" restyle was the user's design feedback on the first (plain `SnackBar`) implementation, applied as the themed card. No other manual code edits — `flutter test`/`flutter analyze` were the guardrails.
+- **Lessons learned / limitations identified:** (1) A transient one-shot field only clears when a **new** state is published, so a second `pedirPista()` that is a no-op leaves the prior `pistaSugerida` in place — this broke an over-eager first test assertion (`expect(pistaSugerida, isNull)` right after the no-op); fixed by driving a clock tick to publish a clearing state before asserting, which is also the real runtime behavior. (2) Keeping the button **tappable-but-locked** (instead of disabled) let the ViewModel own the "explain the lock" decision, so the View stays rule-free — it just renders the booleans. (3) Building the notice purely from existing design tokens (`AppColors`/`AppRadii`/`GameTheme`/`AppTypography`) matched the app's look with **no** bespoke colors or sizes, so it will track future theme changes.
+
+### T-039 — App launcher icon from brand art (Android adaptive + legacy, iOS)
+
+- **Task / problem addressed:** Use the brand art at `assets/images/ArrowMaze_icon.png` as the application's **launcher icon**, so the logo shows as the app icon in Android Studio and on device. The project still shipped Flutter's default icon.
+- **AI tool used:** Claude Code (Opus 4.8 / claude-opus-4-8).
+- **Prompt / instruction:** (verbatim) "c:\\Users\\maria\\Desktop\\ArrowMaze\\arrowmaze-frontend\\assets\\images here there is too the logo of the app, please make it the logo. (ill be using android studio, the idea is that the logo appears as the logo of the app there too)".
+- **Result obtained:** Added `flutter_launcher_icons: ^0.14.4` (dev dependency — a code-generation package, **not** an AI tool, so it is not listed in §1) plus a config block in `pubspec.yaml`: `android`/`ios` true, `image_path` = the brand PNG, `min_sdk_android: 21`, `adaptive_icon_background: "#0E1320"` (sampled from the art's own canvas), `adaptive_icon_foreground` = the same PNG, `adaptive_icon_foreground_inset: 0` (full-bleed), `remove_alpha_ios: true`. Running `dart run flutter_launcher_icons` regenerated `android/app/src/main/res/mipmap-{m,h,xh,xxh,xxxh}dpi/ic_launcher.png` (legacy), created `mipmap-anydpi-v26/ic_launcher.xml` (adaptive) + `drawable-*/ic_launcher_foreground.png` + `values/colors.xml` (`ic_launcher_background` = `#0E1320`), and rebuilt the iOS `AppIcon.appiconset`. Verification used Python/Pillow: sampled the art to confirm the canvas color (`#0E1320`) and that the arrows occupy the central ~66 % (Android's adaptive "safe zone"), then rendered **circle** and **squircle** mask previews of the composed adaptive icon to confirm no clipping and no seam. Verified the generated legacy mipmap now shows the arrows (not the default Flutter glyph).
+- **Modifications made by the team:** Iterated twice on the adaptive foreground before it looked right: (1) the first attempt **pre-padded** the icon to 90 % *and* the tool adds its own default 16 % inset, so the arrows rendered noticeably too small; (2) a tighter arrows-only crop then produced a **"floating card" seam**, because the crop kept the art's dotted dark background, which read as a darker rounded card sitting on the flat adaptive background. Both were resolved by going **full-bleed** (`inset: 0`) with the complete art as the foreground over a background color that exactly matches the art's canvas — confirmed seamless under both mask shapes via the rendered previews. The app display name (`android:label="arrowmaze"`) was left unchanged (not requested). iOS icons were regenerated as a side effect of `ios: true`.
+- **Lessons learned / limitations identified:** (1) `flutter_launcher_icons` applies a **16 % foreground inset by default** (`adaptive_icon_foreground_inset`); stacking your own padding on top shrinks the glyph — drive padding from one place. (2) For pre-composed square art with its own dark canvas, a **full-bleed** adaptive foreground over a **matching** background color reads as one seamless icon, whereas an inset foreground reintroduces a visible "card" because the art's texture/gradient differs from the flat background. (3) Rendering the circle/squircle mask previews **before** committing caught the sizing and seam problems that are invisible in the raw source PNG. (4) The generated icon files are committed, so the icon ships with the branch — but Android caches launcher icons aggressively, so an emulator/device may need an uninstall + reinstall (or wipe) to refresh.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1674,12 +1692,15 @@ eloj:
     27, 28, 29, 30, 32, and 33 — plus the post-29 timer/invalid-alert fixes, the
     per-user local-progress rework (T-033), the Level-Selection back-button change
     (T-034), the unlock-consistency fix (T-035), the launch splash screen
-    (T-036), and the victory confetti overlay (ticket 34, T-037) — were AI-generated then
-    human-reviewed; the theme tokens under `lib/core/theme` were pre-existing (not
-    AI-authored in these tasks). Every ticket followed the same pattern (full AI
-    authoring + human review), so the share holds at ~90%. Rough judgment over the
-    files added across the slices (439 passing tests, all source in `lib/domain/`,
-    `lib/application/`,
+    (T-036), the victory confetti overlay (ticket 34, T-037), the hint
+    once-per-level lock + time-locked notice with themed restyle (ticket 35
+    enhancement, T-038), and the app launcher-icon generation (T-039) — were
+    AI-generated then human-reviewed; the theme tokens under `lib/core/theme` were
+    pre-existing (not AI-authored in these tasks), and the launcher-icon PNGs are
+    generated from brand art (also not AI-authored). Every ticket followed the same
+    pattern (full AI authoring + human review), so the share holds at ~90%. Rough
+    judgment over the files added across the slices (454 passing tests, all source
+    in `lib/domain/`, `lib/application/`,
     `lib/infrastructure/`, `lib/presentation/`, `lib/di/`, `lib/core/`, plus
     synthesized binary assets under `assets/sounds/`).
 
@@ -1978,6 +1999,25 @@ eloj:
   params `(_, __, ___)`, tripping the `unnecessary_underscores` lint (ticket 33).
   - **How it was detected:** `flutter analyze` / IDE diagnostics.
   - **How it was corrected:** Replaced them with Dart wildcard params `(_, _, _)`.
+- **Case:** A new hint test asserted `pistaSugerida` was `null` immediately after a
+  second, no-op `pedirPista()` — but a transient one-shot field only clears when a
+  **new** state is published, and a no-op publishes nothing, so the prior
+  suggestion was still present and the assertion failed (ticket 35 enhancement).
+  - **How it was detected:** `flutter test` — `should_lock_hint_after_first_use`
+    failed with the stale `Posicion` still set.
+  - **How it was corrected:** Drove a clock tick (which publishes a fresh state and
+    clears the transient) before asserting — matching the real runtime behavior —
+    then confirmed the repeat request stays a no-op.
+- **Case:** The first Android **adaptive** launcher icon looked wrong twice: a
+  pre-padded (90 %) foreground stacked on the tool's default 16 % inset made the
+  arrows too small, and a tighter arrows crop then showed a "floating card" seam
+  because it kept the art's dotted dark background over the flat adaptive
+  background (launcher-icon task).
+  - **How it was detected:** Rendered circle + squircle mask previews of the
+    composed adaptive icon with Python/Pillow before committing.
+  - **How it was corrected:** Switched to a **full-bleed** foreground (`inset: 0`)
+    with the complete art over a background color matching the art's own canvas
+    (`#0E1320`), verified seamless and unclipped under both mask shapes.
 
 ### Team reflection
 
