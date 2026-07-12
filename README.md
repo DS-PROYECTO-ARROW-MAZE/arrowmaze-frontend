@@ -179,7 +179,7 @@ When a game event fires, the subject notifies all registered observers. The core
 
 ## Architecture Diagram
 
-![Architecture diagram](docs/arquitectura-arrowmaze.png)
+![Architecture diagram](docs/arquitecturaFrontend-arrowmaze.png)
 
 *The diagram shows the 4 layers, their internal components, the direction of
 dependencies (→ toward the domain) and the data flow from the UI to the
