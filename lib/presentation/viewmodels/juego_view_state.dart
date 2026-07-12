@@ -203,6 +203,11 @@ class JuegoViewState {
     this.derrota = false,
     this.derrotaPorTiempo = false,
     this.avisoTiempo = false,
+    this.pistaHabilitadaEnNivel = false,
+    this.pistaDisponible = false,
+    this.pistaUsada = false,
+    this.pistaSugerida,
+    this.pistaBloqueadaSegundos,
     this.victoria,
     this.tiempoRestante,
     this.muted = false,
@@ -256,6 +261,42 @@ class JuegoViewState {
   /// ViewModel emits exactly once as the threshold is crossed.
   final bool avisoTiempo;
 
+  /// Whether this level offers a hint button at all — **Rule A** of the hint
+  /// gate (ticket 35): `true` only on medium/hard levels. Stable for the whole
+  /// run, so the View can decide whether to *build* the button (absent on easy)
+  /// independently of whether it is currently usable ([pistaDisponible]).
+  final bool pistaHabilitadaEnNivel;
+
+  /// Whether the hint button is usable **right now** — the full gate (ticket 35):
+  /// Rule A ([pistaHabilitadaEnNivel]) AND the time gate (`≤ 25 s` left) AND the
+  /// session still playing AND the hint not yet spent ([pistaUsada]). Recomputed
+  /// each tick alongside [avisoTiempo]; the View binds the button's *lit* look to
+  /// it and never evaluates the rule.
+  final bool pistaDisponible;
+
+  /// Whether this level's **single** hint has already been spent — the once-per-
+  /// level guard (ticket 35). Latches to `true` the moment [JuegoViewModel.pedirPista]
+  /// delivers a suggestion and, unlike [pistaDisponible], is carried forward by
+  /// [copyWith] so it survives later ticks. Once set, the hint button is disabled
+  /// for the rest of the run: a hint can never be requested twice.
+  final bool pistaUsada;
+
+  /// The board cell to spotlight as a hint — the head of a currently-clearable
+  /// arrow (ticket 35). **Transient**: it rides only on the state
+  /// [JuegoViewModel.pedirPista] emits and is *not* carried forward by
+  /// [copyWith], so the View captures it into a brief highlight pulse (as it does
+  /// for [animacionSalida]) and it clears on the next state. `null` when no hint
+  /// is being shown.
+  final Posicion? pistaSugerida;
+
+  /// How many seconds remain until the hint **unlocks**, published only when the
+  /// player taps the button *too early* — while Rule A holds but the `≤ 25 s`
+  /// time gate is still shut (ticket 35). **Transient**: like [pistaSugerida] it
+  /// rides only on the state [JuegoViewModel.pedirPista] emits and is *not*
+  /// carried forward by [copyWith], so the View captures it into a one-shot
+  /// "still locked for X s" message. `null` when no such feedback is pending.
+  final int? pistaBloqueadaSegundos;
+
   /// Whether audio is globally muted (the View shows a mute/unmute icon).
   final bool muted;
 
@@ -288,6 +329,11 @@ class JuegoViewState {
     bool? derrota,
     bool? derrotaPorTiempo,
     bool? avisoTiempo,
+    bool? pistaHabilitadaEnNivel,
+    bool? pistaDisponible,
+    bool? pistaUsada,
+    Posicion? pistaSugerida,
+    int? pistaBloqueadaSegundos,
     bool? muted,
     VictoriaViewState? victoria,
     Duration? tiempoRestante,
@@ -310,6 +356,19 @@ class JuegoViewState {
       derrota: derrota ?? this.derrota,
       derrotaPorTiempo: derrotaPorTiempo ?? this.derrotaPorTiempo,
       avisoTiempo: avisoTiempo ?? this.avisoTiempo,
+      pistaHabilitadaEnNivel:
+          pistaHabilitadaEnNivel ?? this.pistaHabilitadaEnNivel,
+      pistaDisponible: pistaDisponible ?? this.pistaDisponible,
+      // Latches on purpose: once the single hint is spent it stays spent for the
+      // whole run, so a later copy (e.g. a timer tick) never silently re-arms it.
+      pistaUsada: pistaUsada ?? this.pistaUsada,
+      // Transient on purpose: a copy that doesn't explicitly carry a suggestion
+      // clears the highlight, so a hint spotlight never survives into the next
+      // state (e.g. a timer tick) — the View captures it into its own pulse.
+      pistaSugerida: pistaSugerida,
+      // Transient on purpose (same as pistaSugerida): the "still locked" notice
+      // rides only on the tap that raised it and clears on the next state.
+      pistaBloqueadaSegundos: pistaBloqueadaSegundos,
       muted: muted ?? this.muted,
       victoria: victoria ?? this.victoria,
       tiempoRestante: tiempoRestante ?? this.tiempoRestante,

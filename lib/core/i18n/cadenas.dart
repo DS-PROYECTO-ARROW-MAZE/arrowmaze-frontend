@@ -91,6 +91,16 @@ abstract class Cadenas {
   /// Undo icon-button tooltip with remaining-uses count.
   String deshacerConUsos(int n);
 
+  /// Hint icon-button tooltip (ticket 35).
+  String get pista;
+
+  /// Hint icon-button tooltip once the single hint has been spent (ticket 35).
+  String get pistaUsada;
+
+  /// Notice shown when the hint is tapped too early: how many [segundos] remain
+  /// until it unlocks (ticket 35).
+  String pistaBloqueada(int segundos);
+
   /// Pause icon-button tooltip.
   String get pausar;
 

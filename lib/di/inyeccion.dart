@@ -67,6 +67,7 @@ import '../presentation/viewmodels/auth_view_model.dart';
 import '../presentation/viewmodels/juego_view_model.dart';
 import '../presentation/viewmodels/ranking_view_model.dart';
 import '../presentation/viewmodels/seleccion_niveles_view_model.dart';
+import '../presentation/viewmodels/splash_view_model.dart';
 import '../presentation/viewmodels/sync_view_model.dart';
 
 /// Composition root: wires domain, application, infrastructure, and presentation
@@ -219,6 +220,9 @@ abstract final class Inyeccion {
       // Ticket 13: tie the run to its level and persist completion on victory so
       // the next level unlocks.
       idNivel: idNivel,
+      // Ticket 35: difficulty gates the hint button (Rule A) — the same value
+      // that decides whether the level is timed.
+      dificultad: dificultad,
       // Backend level UUID — the identity a synced run is keyed by. Null for the
       // offline/random board, which disables sync for that run.
       nivelIdRemoto: nivelIdRemoto,
@@ -401,6 +405,12 @@ abstract final class Inyeccion {
 
   static CerrarSesionUseCase get cerrarSesionUseCase =>
       CerrarSesionUseCase(proveedorSesion: proveedorSesion);
+
+  /// Builds the [SplashViewModel] for the launch screen (Ticket 33). The
+  /// auth-state probe reuses the injected [proveedorSesion] — no duplicate
+  /// session logic — and the min-visible/timeout defaults live in the ViewModel.
+  static SplashViewModel construirSplashViewModel() =>
+      SplashViewModel(proveedorSesion: proveedorSesion);
 
   /// Builds the [AuthViewModel] with all dependencies injected.
   static AuthViewModel construirAuthViewModel() {

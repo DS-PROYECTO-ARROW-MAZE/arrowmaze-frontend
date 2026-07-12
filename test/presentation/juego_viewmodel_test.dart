@@ -3,6 +3,7 @@ import 'package:arrowmaze/application/use_cases/mover_flecha_use_case.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/evento_juego.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
+import 'package:arrowmaze/domain/niveles/dificultad.dart';
 import 'package:arrowmaze/domain/observador_juego.dart';
 import 'package:arrowmaze/domain/puntuacion/definicion_nivel.dart';
 import 'package:arrowmaze/domain/sesion/sesion_juego.dart';
@@ -343,6 +344,241 @@ void main() {
       // and the HUD stays in its warning state throughout.
       expect(ctx.observador.avisos, 1);
       expect(ctx.vm.estado.avisoTiempo, isTrue);
+    });
+  });
+
+  group('conditional hint button (ticket 35)', () {
+    /// Builds a ViewModel for a level of [dificultad], wired to a manual clock so
+    /// the countdown can be driven one second at a time. When [limite] is given
+    /// the session is timed (the only way the time gate can be met); when it is
+    /// `null` the level is untimed (no countdown at all).
+    ({JuegoViewModel vm, _RelojControlable reloj}) construirPista({
+      required Dificultad dificultad,
+      Duration? limite,
+    }) {
+      final tablero = construirTablero();
+      final sesion = SesionJuego(tablero: tablero, limiteTiempo: limite);
+      final mover = MoverFlechaUseCase(tablero, sesion: sesion);
+      final reloj = _RelojControlable();
+      final vm = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: mover,
+        definicionNivel: definicion,
+        reloj: reloj,
+        dificultad: dificultad,
+      );
+      return (vm: vm, reloj: reloj);
+    }
+
+    test('should_never_expose_hint_on_easy_levels', () {
+      // Arrange — an easy level, forced onto a timed session so the clock can be
+      // driven all the way to zero. Rule A must dominate: no hint ever.
+      final ctx = construirPista(
+        dificultad: Dificultad.facil,
+        limite: const Duration(seconds: 27),
+      );
+
+      // Rule A absent from the start.
+      expect(ctx.vm.estado.pistaHabilitadaEnNivel, isFalse);
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // Act — drive time down through the whole window to 0.
+      for (var i = 0; i < 27; i++) {
+        ctx.reloj.tic();
+        // Assert — never exposed, even below 25 s (AC1/AC5).
+        expect(ctx.vm.estado.pistaDisponible, isFalse);
+      }
+    });
+
+    test('should_expose_hint_only_at_or_below_25_seconds_on_medium', () {
+      // Arrange — a medium timed level starting one second above the window.
+      final ctx = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 27),
+      );
+
+      // Rule A holds, but the time gate is shut at the start (27 > 25).
+      expect(ctx.vm.estado.pistaHabilitadaEnNivel, isTrue);
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // Act/Assert — 27→26 is still above the threshold (AC3).
+      ctx.reloj.tic();
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // 26→25 crosses the boundary — available at exactly 25 s (AC4).
+      ctx.reloj.tic();
+      expect(ctx.vm.estado.pistaDisponible, isTrue);
+    });
+
+    test('should_expose_hint_on_hard_levels_in_window', () {
+      // Arrange — a hard timed level entering the window on the first tick.
+      final ctx = construirPista(
+        dificultad: Dificultad.dificil,
+        limite: const Duration(seconds: 26),
+      );
+      expect(ctx.vm.estado.pistaHabilitadaEnNivel, isTrue);
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // Act — 26→25 opens the window (AC2/AC4).
+      ctx.reloj.tic();
+
+      // Assert
+      expect(ctx.vm.estado.pistaDisponible, isTrue);
+    });
+
+    test('should_reset_hint_availability_on_retry', () {
+      // Arrange — first run driven into the hint window.
+      final primera = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 26),
+      );
+      primera.reloj.tic(); // 26→25
+      expect(primera.vm.estado.pistaDisponible, isTrue);
+
+      // Act — a retry is a fresh session + ViewModel with a full clock.
+      final segunda = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 26),
+      );
+
+      // Assert — availability starts locked again, not leaked from the first run
+      // (AC6).
+      expect(segunda.vm.estado.pistaDisponible, isFalse);
+    });
+
+    test('should_keep_hint_locked_when_no_countdown', () {
+      // Arrange — a medium level with no timer at all (untimed).
+      final ctx = construirPista(dificultad: Dificultad.medio);
+
+      // Assert — Rule A holds but the time gate can never be met without a
+      // countdown, so the button stays locked (AC6).
+      expect(ctx.vm.estado.pistaHabilitadaEnNivel, isTrue);
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+    });
+
+    test('should_suggest_head_of_a_clearable_arrow_when_pedirPista_available',
+        () {
+      // Arrange — a medium timed level driven into the hint window. The board's
+      // only arrow is the L-path whose head (1,0) exits left, ray clear.
+      final ctx = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 26),
+      );
+      ctx.reloj.tic(); // 26→25 opens the window
+      expect(ctx.vm.estado.pistaDisponible, isTrue);
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+
+      // Act
+      ctx.vm.pedirPista();
+
+      // Assert — the suggestion points at the clearable arrow's head.
+      expect(
+        ctx.vm.estado.pistaSugerida,
+        const Posicion.en(fila: 1, columna: 0),
+      );
+    });
+
+    test('should_not_suggest_anything_when_hint_gate_is_closed', () {
+      // Arrange — a medium timed level still above the window (26 > 25).
+      final ctx = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 26),
+      );
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // Act — asking with the gate shut is a no-op.
+      ctx.vm.pedirPista();
+
+      // Assert — no suggestion is produced.
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+    });
+
+    test('should_skip_blocked_arrows_and_suggest_a_clearable_one', () {
+      // Arrange — two mutually-blocking arrows at (0,0)/(1,0) come first in
+      // row-major order; the only clearable arrow is (2,2) exiting right.
+      final tablero = GrafoTablero.desde(
+        filas: 3,
+        columnas: 3,
+        trayectorias: [
+          Trayectoria(
+            id: 1,
+            direccionCabeza: Direccion.abajo,
+            segmentos: const [Posicion.en(fila: 0, columna: 0)],
+          ),
+          Trayectoria(
+            id: 2,
+            direccionCabeza: Direccion.arriba,
+            segmentos: const [Posicion.en(fila: 1, columna: 0)],
+          ),
+          Trayectoria(
+            id: 3,
+            direccionCabeza: Direccion.derecha,
+            segmentos: const [Posicion.en(fila: 2, columna: 2)],
+          ),
+        ],
+      );
+      final sesion =
+          SesionJuego(tablero: tablero, limiteTiempo: const Duration(seconds: 26));
+      final reloj = _RelojControlable();
+      final vm = JuegoViewModel(
+        tablero: tablero,
+        moverFlecha: MoverFlechaUseCase(tablero, sesion: sesion),
+        definicionNivel: definicion,
+        reloj: reloj,
+        dificultad: Dificultad.dificil,
+      );
+      reloj.tic(); // 26→25 opens the window
+
+      // Act
+      vm.pedirPista();
+
+      // Assert — the two blocked arrows are skipped; the clear one is suggested.
+      expect(vm.estado.pistaSugerida, const Posicion.en(fila: 2, columna: 2));
+    });
+
+    test('should_lock_hint_after_first_use', () {
+      // Arrange — a medium timed level driven into the hint window.
+      final ctx = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 26),
+      );
+      ctx.reloj.tic(); // 26→25 opens the window
+      expect(ctx.vm.estado.pistaDisponible, isTrue);
+
+      // Act — spend the single hint.
+      ctx.vm.pedirPista();
+      expect(ctx.vm.estado.pistaSugerida, isNotNull);
+
+      // The hint is now spent: the gate shuts for the rest of the run.
+      expect(ctx.vm.estado.pistaUsada, isTrue);
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // A tick publishes a fresh state, clearing the transient suggestion.
+      ctx.reloj.tic();
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+
+      // Assert — a second request is a no-op: no new suggestion, no lock notice
+      // (once per level, not re-lockable into an early-tap message).
+      ctx.vm.pedirPista();
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+      expect(ctx.vm.estado.pistaBloqueadaSegundos, isNull);
+    });
+
+    test('should_report_seconds_until_unlock_when_pedirPista_too_early', () {
+      // Arrange — a medium timed level 40 s out, 15 s before the 25 s gate.
+      final ctx = construirPista(
+        dificultad: Dificultad.medio,
+        limite: const Duration(seconds: 40),
+      );
+      expect(ctx.vm.estado.pistaDisponible, isFalse);
+
+      // Act — tap the still-locked hint.
+      ctx.vm.pedirPista();
+
+      // Assert — no hint fires, but the remaining lock time (15 s) is published
+      // so the View can explain the lock instead of a dead button.
+      expect(ctx.vm.estado.pistaSugerida, isNull);
+      expect(ctx.vm.estado.pistaBloqueadaSegundos, 15);
     });
   });
 
