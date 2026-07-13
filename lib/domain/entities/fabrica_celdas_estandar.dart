@@ -12,12 +12,26 @@ import 'trayectoria.dart';
 /// means extending this one factory, not every call site.
 ///
 /// Expected shapes (see `assets/levels/*.json`):
-/// - fixed cell — `{"row": int, "col": int, "type": "wall|empty"}`.
-/// - arrow path — `{"id": int, "head": "UP|DOWN|LEFT|RIGHT",
-///   "cells": [{"row": int, "col": int}, …]}` ordered tail → head.
+/// - fixed cell — `{"row": int, "col": int, "layer": int?, "type": "wall|empty"}`.
+/// - arrow path — `{"id": int, "head": "UP|DOWN|LEFT|RIGHT|FORWARD|BACKWARD",
+///   "cells": [{"row": int, "col": int, "layer": int?}, …]}` ordered tail → head.
+///
+/// `layer` is optional on every cell and defaults to `0`, so every existing
+/// (2D) level file keeps working unchanged.
 class FabricaCeldasEstandar {
   /// Creates the factory. Stateless — safe to share as a `const`.
   const FabricaCeldasEstandar();
+
+  /// Maps a JSON direction token to its [Direccion] — the single lookup table
+  /// every direction string resolves through, cardinal or depth alike.
+  static const Map<String, Direccion> _direcciones = <String, Direccion>{
+    'UP': Direccion.arriba,
+    'DOWN': Direccion.abajo,
+    'LEFT': Direccion.izquierda,
+    'RIGHT': Direccion.derecha,
+    'FORWARD': Direccion.adelante,
+    'BACKWARD': Direccion.atras,
+  };
 
   /// Builds a single fixed [Celda] described by [json].
   ///
@@ -25,10 +39,7 @@ class FabricaCeldasEstandar {
   /// built by [crearTrayectoria]; an `arrow` here, or any unknown `type`, throws
   /// [ArgumentError] so malformed level data fails loudly.
   Celda crear(Map<String, dynamic> json) {
-    final posicion = Posicion.en(
-      fila: json['row'] as int,
-      columna: json['col'] as int,
-    );
+    final posicion = _posicionDesde(json);
     final tipo = json['type'] as String;
 
     switch (tipo) {
@@ -55,25 +66,24 @@ class FabricaCeldasEstandar {
     return Trayectoria(
       id: json['id'] as int,
       direccionCabeza: _direccionDesde(json['head'] as String?),
-      segmentos: celdas
-          .map((c) => Posicion.en(fila: c['row'] as int, columna: c['col'] as int))
-          .toList(),
+      segmentos: celdas.map(_posicionDesde).toList(),
     );
   }
 
+  /// The [Posicion] a fixed-cell or path-segment [json] map describes;
+  /// `layer` is optional and defaults to `0`.
+  Posicion _posicionDesde(Map<String, dynamic> json) => Posicion.en(
+        fila: json['row'] as int,
+        columna: json['col'] as int,
+        capa: json['layer'] as int? ?? 0,
+      );
+
   /// Maps a JSON direction token to its [Direccion].
   Direccion _direccionDesde(String? token) {
-    switch (token) {
-      case 'UP':
-        return Direccion.arriba;
-      case 'DOWN':
-        return Direccion.abajo;
-      case 'LEFT':
-        return Direccion.izquierda;
-      case 'RIGHT':
-        return Direccion.derecha;
-      default:
-        throw ArgumentError.value(token, 'head', 'Unknown direction');
+    final direccion = _direcciones[token];
+    if (direccion == null) {
+      throw ArgumentError.value(token, 'head', 'Unknown direction');
     }
+    return direccion;
   }
 }

@@ -29,6 +29,7 @@ abstract class GeneradorNivelBase {
     return GrafoTablero.desde(
       filas: config.filas,
       columnas: config.columnas,
+      profundo: config.profundo,
       ausentes: config.ausentes,
     );
   }
@@ -42,12 +43,14 @@ abstract class GeneradorNivelBase {
   bool validarEstructural(Tablero tablero) {
     for (var f = 0; f < tablero.filas; f++) {
       for (var c = 0; c < tablero.columnas; c++) {
-        final pos = Posicion.en(fila: f, columna: c);
-        final celda = tablero.celdaEn(pos);
-        if (celda is CeldaFlecha) {
-          final t = tablero.trayectoriaEn(pos);
-          if (t != null && t.segmentos.length < minLongitudFlecha) {
-            return false;
+        for (var p = 0; p < tablero.profundo; p++) {
+          final pos = Posicion.en(fila: f, columna: c, capa: p);
+          final celda = tablero.celdaEn(pos);
+          if (celda is CeldaFlecha) {
+            final t = tablero.trayectoriaEn(pos);
+            if (t != null && t.segmentos.length < minLongitudFlecha) {
+              return false;
+            }
           }
         }
       }
@@ -61,19 +64,21 @@ abstract class GeneradorNivelBase {
     final ausentes = <Posicion>{};
     for (var f = 0; f < tablero.filas; f++) {
       for (var c = 0; c < tablero.columnas; c++) {
-        final pos = Posicion.en(fila: f, columna: c);
-        final celda = tablero.celdaEn(pos);
-        if (celda is CeldaAusente) {
-          ausentes.add(pos);
-          continue;
-        }
-        if (celda is CeldaFlecha) {
-          final t = tablero.trayectoriaEn(pos);
-          if (t != null && !trayectorias.containsKey(t.id)) {
-            trayectorias[t.id] = t;
+        for (var p = 0; p < tablero.profundo; p++) {
+          final pos = Posicion.en(fila: f, columna: c, capa: p);
+          final celda = tablero.celdaEn(pos);
+          if (celda is CeldaAusente) {
+            ausentes.add(pos);
+            continue;
           }
-        } else if (celda is CeldaPared) {
-          celdas.add(celda);
+          if (celda is CeldaFlecha) {
+            final t = tablero.trayectoriaEn(pos);
+            if (t != null && !trayectorias.containsKey(t.id)) {
+              trayectorias[t.id] = t;
+            }
+          } else if (celda is CeldaPared) {
+            celdas.add(celda);
+          }
         }
       }
     }
@@ -83,6 +88,7 @@ abstract class GeneradorNivelBase {
     final copia = GrafoTablero.desde(
       filas: tablero.filas,
       columnas: tablero.columnas,
+      profundo: tablero.profundo,
       trayectorias: trayectorias.values.toList(),
       celdas: celdas,
       ausentes: ausentes,

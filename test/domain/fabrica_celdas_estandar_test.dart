@@ -18,6 +18,8 @@ void main() {
       'DOWN': Direccion.abajo,
       'LEFT': Direccion.izquierda,
       'RIGHT': Direccion.derecha,
+      'FORWARD': Direccion.adelante,
+      'BACKWARD': Direccion.atras,
     };
 
     casos.forEach((token, esperada) {
@@ -36,6 +38,39 @@ void main() {
       expect(trayectoria.cabeza, const Posicion.en(fila: 0, columna: 1));
       expect(trayectoria.cola, const Posicion.en(fila: 0, columna: 0));
     });
+  });
+
+  test('should_default_capa_to_zero_when_cell_omits_layer', () {
+    // Arrange / Act
+    final celda = fabrica.crear({'row': 1, 'col': 1, 'type': 'wall'});
+
+    // Assert
+    expect(celda.posicion.capa, 0);
+  });
+
+  test('should_read_capa_from_layer_field_when_building_a_fixed_cell', () {
+    // Arrange / Act
+    final celda =
+        fabrica.crear({'row': 1, 'col': 1, 'layer': 2, 'type': 'wall'});
+
+    // Assert
+    expect(celda.posicion.capa, 2);
+  });
+
+  test('should_read_capa_from_layer_field_when_building_a_trayectoria', () {
+    // Arrange / Act
+    final trayectoria = fabrica.crearTrayectoria({
+      'id': 1,
+      'head': 'FORWARD',
+      'cells': [
+        {'row': 0, 'col': 0, 'layer': 0},
+        {'row': 0, 'col': 0, 'layer': 1},
+      ],
+    });
+
+    // Assert
+    expect(trayectoria.cola, const Posicion.en(fila: 0, columna: 0, capa: 0));
+    expect(trayectoria.cabeza, const Posicion.en(fila: 0, columna: 0, capa: 1));
   });
 
   test('should_create_a_wall_when_type_is_wall', () {

@@ -14,6 +14,7 @@ class ResumenNivel {
     required this.nombre,
     required this.dificultad,
     this.idRemoto,
+    this.es3D = false,
   });
 
   /// The level's sequential ordinal (1, 2, 3, …) — the `numero`. Drives local
@@ -32,4 +33,12 @@ class ResumenNivel {
 
   /// The level's difficulty (a value, not a subtype).
   final Dificultad dificultad;
+
+  /// Whether this is a depth-aware (3D) board — the rotatable-cube view
+  /// (ticket 36), not a difficulty tier. Kept separate from [dificultad] on
+  /// purpose: a 3D board still has an ordinary [dificultad] for internal
+  /// tuning (timer, hint gate); the Level Selection card shows "3D" here
+  /// *instead of* the difficulty label, which is a presentation choice, not a
+  /// reason to invent a fake difficulty value.
+  final bool es3D;
 }

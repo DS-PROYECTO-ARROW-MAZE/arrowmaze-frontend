@@ -1,0 +1,250 @@
+{
+  "id": 18,
+  "name": "Level 18",
+  "difficulty": "easy",
+  "rows": 5,
+  "cols": 3,
+  "layers": 2,
+  "cells": [
+    {
+      "row": 4,
+      "col": 0,
+      "layer": 1,
+      "type": "arrow",
+      "id": 1,
+      "direction": "UP"
+    },
+    {
+      "row": 4,
+      "col": 0,
+      "layer": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "UP"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "layer": 0,
+      "type": "arrow",
+      "id": 1,
+      "direction": "UP"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "layer": 0,
+      "type": "arrow",
+      "id": 2,
+      "direction": "UP"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "layer": 0,
+      "type": "arrow",
+      "id": 2,
+      "direction": "UP"
+    },
+    {
+      "row": 3,
+      "col": 0,
+      "layer": 1,
+      "type": "arrow",
+      "id": 2,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "layer": 0,
+      "type": "arrow",
+      "id": 3,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 0,
+      "layer": 1,
+      "type": "arrow",
+      "id": 3,
+      "direction": "UP"
+    },
+    {
+      "row": 3,
+      "col": 1,
+      "layer": 1,
+      "type": "arrow",
+      "id": 4,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "layer": 1,
+      "type": "arrow",
+      "id": 4,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 1,
+      "layer": 0,
+      "type": "arrow",
+      "id": 4,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "layer": 0,
+      "type": "arrow",
+      "id": 4,
+      "direction": "UP"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "layer": 1,
+      "type": "arrow",
+      "id": 5,
+      "direction": "UP"
+    },
+    {
+      "row": 1,
+      "col": 0,
+      "layer": 0,
+      "type": "arrow",
+      "id": 5,
+      "direction": "UP"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "layer": 0,
+      "type": "arrow",
+      "id": 5,
+      "direction": "UP"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "layer": 0,
+      "type": "arrow",
+      "id": 6,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 0,
+      "col": 0,
+      "layer": 0,
+      "type": "arrow",
+      "id": 6,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 0,
+      "col": 0,
+      "layer": 1,
+      "type": "arrow",
+      "id": 6,
+      "direction": "RIGHT"
+    },
+    {
+      "row": 0,
+      "col": 1,
+      "layer": 1,
+      "type": "arrow",
+      "id": 7,
+      "direction": "BACKWARD"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "layer": 1,
+      "type": "arrow",
+      "id": 7,
+      "direction": "BACKWARD"
+    },
+    {
+      "row": 1,
+      "col": 1,
+      "layer": 1,
+      "type": "arrow",
+      "id": 8,
+      "direction": "UP"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "layer": 1,
+      "type": "arrow",
+      "id": 8,
+      "direction": "UP"
+    },
+    {
+      "row": 2,
+      "col": 2,
+      "layer": 1,
+      "type": "arrow",
+      "id": 9,
+      "direction": "DOWN"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "layer": 1,
+      "type": "arrow",
+      "id": 9,
+      "direction": "DOWN"
+    },
+    {
+      "row": 3,
+      "col": 2,
+      "layer": 0,
+      "type": "arrow",
+      "id": 10,
+      "direction": "LEFT"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "layer": 0,
+      "type": "arrow",
+      "id": 10,
+      "direction": "LEFT"
+    },
+    {
+      "row": 0,
+      "col": 2,
+      "layer": 0,
+      "type": "arrow",
+      "id": 11,
+      "direction": "BACKWARD"
+    },
+    {
+      "row": 1,
+      "col": 2,
+      "layer": 0,
+      "type": "arrow",
+      "id": 11,
+      "direction": "BACKWARD"
+    },
+    {
+      "row": 4,
+      "col": 1,
+      "layer": 1,
+      "type": "arrow",
+      "id": 12,
+      "direction": "BACKWARD"
+    },
+    {
+      "row": 4,
+      "col": 2,
+      "layer": 1,
+      "type": "arrow",
+      "id": 12,
+      "direction": "BACKWARD"
+    }
+  ]
+}

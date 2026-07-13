@@ -602,25 +602,39 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     return actual;
   }
 
-  /// Whether [posicion] lies within the board's row/column bounds.
+  /// Whether [posicion] lies within the board's row/column/depth bounds.
+  ///
+  /// Checking `capa` too (not just `fila`/`columna`) is what makes
+  /// [_objetivoBorde] terminate for a depth exit (`adelante`/`atras`): that
+  /// direction never changes `fila`/`columna`, so without this a 2D-only
+  /// bounds check would walk forever.
   bool _dentroDelTablero(Posicion posicion) =>
       posicion.fila >= 0 &&
       posicion.columna >= 0 &&
+      posicion.capa >= 0 &&
       posicion.fila < _tablero.filas &&
-      posicion.columna < _tablero.columnas;
+      posicion.columna < _tablero.columnas &&
+      posicion.capa < _tablero.profundo;
 
-  /// Reads the current board through the port into a flat UI snapshot.
+  /// Reads the current board through the port into a flat UI snapshot — every
+  /// cell of every depth layer (ticket 36), so the rotatable 3D cube view can
+  /// render and hit-test the whole board at once. For a flat 2D board
+  /// (`profundo == 1`) this is exactly `filas × columnas` cells, unchanged
+  /// from before depth-aware boards existed.
   TableroUI _instantanea() {
     final celdas = <CeldaUI>[];
     for (var fila = 0; fila < _tablero.filas; fila++) {
       for (var columna = 0; columna < _tablero.columnas; columna++) {
-        final posicion = Posicion.en(fila: fila, columna: columna);
-        celdas.add(_aCeldaUI(posicion, _tablero.celdaEn(posicion)));
+        for (var capa = 0; capa < _tablero.profundo; capa++) {
+          final posicion = Posicion.en(fila: fila, columna: columna, capa: capa);
+          celdas.add(_aCeldaUI(posicion, _tablero.celdaEn(posicion)));
+        }
       }
     }
     return TableroUI(
       filas: _tablero.filas,
       columnas: _tablero.columnas,
+      profundo: _tablero.profundo,
       celdas: celdas,
     );
   }

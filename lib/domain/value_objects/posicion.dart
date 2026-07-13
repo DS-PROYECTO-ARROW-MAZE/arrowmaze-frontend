@@ -5,11 +5,14 @@ import 'vector3.dart';
 ///
 /// On a 2D board a position is a `(fila, columna)` pair; its [coordenada] maps
 /// those onto the `Vector3` `y`/`x` axes so direction math stays uniform across
-/// dimensions. It is value-equal, so positions compare and hash by content and
-/// can be used as map keys and in assertions.
+/// dimensions. [capa] is the depth layer (`z` axis) and defaults to `0`, so
+/// every 2D call site stays valid unchanged. It is value-equal, so positions
+/// compare and hash by content (including [capa]) and can be used as map keys
+/// and in assertions.
 class Posicion {
-  /// Creates a 2D position from its row ([fila]) and column ([columna]).
-  const Posicion.en({required this.fila, required this.columna});
+  /// Creates a position from its row ([fila]), column ([columna]) and depth
+  /// layer ([capa], `0` on a 2D board).
+  const Posicion.en({required this.fila, required this.columna, this.capa = 0});
 
   /// Row index (the `y` axis) on a 2D board.
   final int fila;
@@ -17,23 +20,29 @@ class Posicion {
   /// Column index (the `x` axis) on a 2D board.
   final int columna;
 
+  /// Depth layer index (the `z` axis); `0` on a 2D board.
+  final int capa;
+
   /// This position as a dimension-agnostic coordinate (`x = columna`,
-  /// `y = fila`, `z = 0`).
-  Vector3 get coordenada => Vector3(columna, fila, 0);
+  /// `y = fila`, `z = capa`).
+  Vector3 get coordenada => Vector3(columna, fila, capa);
 
   /// The neighbouring position one step along [direccion].
   Posicion desplazar(Direccion direccion) {
     final destino = coordenada + direccion.delta;
-    return Posicion.en(fila: destino.y, columna: destino.x);
+    return Posicion.en(fila: destino.y, columna: destino.x, capa: destino.z);
   }
 
   @override
   bool operator ==(Object other) =>
-      other is Posicion && other.fila == fila && other.columna == columna;
+      other is Posicion &&
+      other.fila == fila &&
+      other.columna == columna &&
+      other.capa == capa;
 
   @override
-  int get hashCode => Object.hash(fila, columna);
+  int get hashCode => Object.hash(fila, columna, capa);
 
   @override
-  String toString() => 'Posicion(fila: $fila, columna: $columna)';
+  String toString() => 'Posicion(fila: $fila, columna: $columna, capa: $capa)';
 }

@@ -14,6 +14,8 @@ import '../../../domain/value_objects/posicion.dart';
 import '../../viewmodels/juego_view_model.dart';
 import '../../viewmodels/juego_view_state.dart';
 import 'confetti_overlay.dart';
+import 'cubo_3d_view.dart';
+import 'pintura_flecha.dart';
 
 /// The board screen — a thin View that only draws.
 ///
@@ -101,7 +103,13 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
     final salida = estado.animacionSalida;
     if (salida != null && !identical(salida, _ultimaSalidaProcesada)) {
       _ultimaSalidaProcesada = salida;
-      _lanzarSalida(salida);
+      // The snake-gait glide is a flat 2D-plane animation (its sampler works
+      // in row/column cell units only); on the rotatable 3D cube (ticket 36)
+      // an exit simply completes instantly instead — no on-screen glide.
+      final esTableroPlano = estado.tablero.profundo == 1;
+      if (esTableroPlano) {
+        _lanzarSalida(salida);
+      }
     }
     final pista = estado.pistaSugerida;
     if (pista != null && pista != _ultimaPistaProcesada) {
@@ -347,8 +355,13 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
                       child: Padding(
                         padding: const EdgeInsets.all(AppSpacing.lg),
                         child: AspectRatio(
-                          aspectRatio:
-                              estado.tablero.columnas / estado.tablero.filas,
+                          // The rotatable 3D cube (ticket 36) always fits its
+                          // own bounding sphere into whatever square-ish space
+                          // it's given (it can rotate to show any face), so it
+                          // wants a square viewport regardless of footprint.
+                          aspectRatio: estado.tablero.profundo > 1
+                              ? 1
+                              : estado.tablero.columnas / estado.tablero.filas,
                           child: _FeedbackInvalido(
                             animacion: _feedback,
                             game: game,
@@ -933,6 +946,13 @@ class _Tablero extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final tablero = estado.tablero;
+    // A depth-aware board (ticket 36) renders as a rotatable 3D cube — every
+    // layer at once — instead of the flat grid; hint spotlight and the
+    // snake-gait exit overlay are both flat-grid-only concerns, so this path
+    // never builds them.
+    if (tablero.profundo > 1) {
+      return Cubo3D(tablero: tablero, game: game, onTap: onTap);
+    }
     return LayoutBuilder(
       builder: (context, constraints) {
         final anchoCelda = constraints.maxWidth / tablero.columnas;
@@ -1134,32 +1154,11 @@ class _SalidaPainter extends CustomPainter {
     canvas.drawPath(camino, trazo);
 
     // Arrowhead at the head (first sampled point), aiming along the exit.
-    _pintarPunta(canvas, aPixel(puntos.first), salida.direccion, lado, color);
-  }
-
-  /// Draws a filled triangular arrowhead at [centro] pointing in [direccion].
-  void _pintarPunta(
-    Canvas canvas,
-    Offset centro,
-    Direccion direccion,
-    double lado,
-    Color color,
-  ) {
     final dir = Offset(
-      direccion.delta.x.toDouble(),
-      direccion.delta.y.toDouble(),
+      salida.direccion.delta.x.toDouble(),
+      salida.direccion.delta.y.toDouble(),
     );
-    final perp = Offset(-dir.dy, dir.dx);
-    final punta = centro + dir * (lado * 0.34);
-    final base = centro + dir * (lado * 0.04);
-    final izquierda = base + perp * (lado * 0.17);
-    final derecha = base - perp * (lado * 0.17);
-    final camino = Path()
-      ..moveTo(punta.dx, punta.dy)
-      ..lineTo(izquierda.dx, izquierda.dy)
-      ..lineTo(derecha.dx, derecha.dy)
-      ..close();
-    canvas.drawPath(camino, Paint()..color = color);
+    pintarPuntaFlecha(canvas, aPixel(puntos.first), dir, lado, color);
   }
 
   @override
@@ -1278,34 +1277,12 @@ class _TableroPainter extends CustomPainter {
     canvas.drawCircle(centro, grosor / 2, Paint()..color = color);
 
     if (celda.esCabeza && celda.direccion != null) {
-      _pintarPuntaFlecha(canvas, centro, celda.direccion!, lado, color);
+      final dir = Offset(
+        celda.direccion!.delta.x.toDouble(),
+        celda.direccion!.delta.y.toDouble(),
+      );
+      pintarPuntaFlecha(canvas, centro, dir, lado, color);
     }
-  }
-
-  /// Draws a filled triangular arrowhead at [centro] pointing in [direccion].
-  void _pintarPuntaFlecha(
-    Canvas canvas,
-    Offset centro,
-    Direccion direccion,
-    double lado,
-    Color color,
-  ) {
-    final dir = Offset(
-      direccion.delta.x.toDouble(),
-      direccion.delta.y.toDouble(),
-    );
-    final perp = Offset(-dir.dy, dir.dx);
-    final punta = centro + dir * (lado * 0.34);
-    final base = centro + dir * (lado * 0.04);
-    final izquierda = base + perp * (lado * 0.17);
-    final derecha = base - perp * (lado * 0.17);
-
-    final camino = Path()
-      ..moveTo(punta.dx, punta.dy)
-      ..lineTo(izquierda.dx, izquierda.dy)
-      ..lineTo(derecha.dx, derecha.dy)
-      ..close();
-    canvas.drawPath(camino, Paint()..color = color);
   }
 
   @override

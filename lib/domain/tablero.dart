@@ -49,6 +49,11 @@ abstract interface class Tablero {
   /// Number of columns.
   int get columnas;
 
+  /// Number of depth layers (`capa` values `0..profundo-1`); `1` on a 2D
+  /// board. Lets a dimension-agnostic caller (e.g. [Solver]) enumerate every
+  /// position without knowing whether the board is 2D or 3D.
+  int get profundo;
+
   /// Whether the board holds no arrow paths left — every arrow has exited.
   ///
   /// This is the victory condition (`Victoria` in `CONTEXT.md`): a board is empty

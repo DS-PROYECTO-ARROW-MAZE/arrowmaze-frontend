@@ -20,20 +20,23 @@ class GrafoTablero implements Tablero {
   GrafoTablero._(
     this._filas,
     this._columnas,
+    this._profundo,
     this._nodos,
     this._trayectorias,
     this._detector,
   );
 
-  /// Builds a board of [filas] × [columnas], empty everywhere except where a
-  /// fixed [celdas] (walls), a [trayectorias] segment overrides a position, or
-  /// the position is marked [ausentes] (outside the playable region).
+  /// Builds a board of [filas] × [columnas] × [profundo] layers, empty
+  /// everywhere except where a fixed [celdas] (walls), a [trayectorias]
+  /// segment overrides a position, or the position is marked [ausentes]
+  /// (outside the playable region). [profundo] defaults to `1` (a 2D board).
   ///
   /// [detector] is injectable for testing; it defaults to the standard collision
   /// walk.
   factory GrafoTablero.desde({
     required int filas,
     required int columnas,
+    int profundo = 1,
     List<Trayectoria> trayectorias = const <Trayectoria>[],
     List<Celda> celdas = const <Celda>[],
     Set<Posicion> ausentes = const <Posicion>{},
@@ -45,9 +48,11 @@ class GrafoTablero implements Tablero {
     // Absent positions get no node — they are void (like the board edge).
     for (var f = 0; f < filas; f++) {
       for (var c = 0; c < columnas; c++) {
-        final posicion = Posicion.en(fila: f, columna: c);
-        if (ausentes.contains(posicion)) continue;
-        nodos[posicion] = Nodo(CeldaVacia(posicion));
+        for (var p = 0; p < profundo; p++) {
+          final posicion = Posicion.en(fila: f, columna: c, capa: p);
+          if (ausentes.contains(posicion)) continue;
+          nodos[posicion] = Nodo(CeldaVacia(posicion));
+        }
       }
     }
 
@@ -70,9 +75,11 @@ class GrafoTablero implements Tablero {
       }
     }
 
-    // Link each node to its existing neighbours in all directions.
+    // Link each node to its existing neighbours in all six directions (a
+    // single loop, no branching on dimension) — a layer-1 board simply finds
+    // no depth neighbour to link, so this costs nothing for a 2D board.
     for (final nodo in nodos.values) {
-      for (final direccion in Direccion.cardinales) {
+      for (final direccion in Direccion.todas) {
         final vecino = nodos[nodo.celda.posicion.desplazar(direccion)];
         if (vecino != null) {
           nodo.vecinos[direccion] = vecino;
@@ -80,11 +87,12 @@ class GrafoTablero implements Tablero {
       }
     }
 
-    return GrafoTablero._(filas, columnas, nodos, indice, detector);
+    return GrafoTablero._(filas, columnas, profundo, nodos, indice, detector);
   }
 
   final int _filas;
   final int _columnas;
+  final int _profundo;
   final Map<Posicion, Nodo> _nodos;
   final Map<int, Trayectoria> _trayectorias;
   final DetectorColisiones _detector;
@@ -94,6 +102,9 @@ class GrafoTablero implements Tablero {
 
   @override
   int get columnas => _columnas;
+
+  @override
+  int get profundo => _profundo;
 
   @override
   bool get estaVacio => _trayectorias.isEmpty;
@@ -147,7 +158,7 @@ class GrafoTablero implements Tablero {
     // walk; nodes still removed are skipped, matching the state at removal time).
     for (final posicion in trayectoria.segmentos) {
       final nodo = _nodos[posicion]!;
-      for (final direccion in Direccion.cardinales) {
+      for (final direccion in Direccion.todas) {
         final vecino = _vecinoPresenteMasCercano(posicion, direccion, segmentos);
         if (vecino != null) {
           nodo.vecinos[direccion] = vecino;

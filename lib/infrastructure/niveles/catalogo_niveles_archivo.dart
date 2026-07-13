@@ -47,6 +47,7 @@ class CatalogoNivelesArchivo implements CatalogoNiveles {
           id: id,
           nombre: json['name'] as String? ?? 'Level $id',
           dificultad: Dificultad.desde(json['difficulty'] as String?),
+          es3D: (json['layers'] as int? ?? 1) > 1,
         ),
       );
     }

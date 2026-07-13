@@ -10,9 +10,17 @@ import '../../domain/niveles/resumen_nivel.dart';
 /// HTTP-backed [CatalogoNiveles] (Ticket 17).
 ///
 /// Fetches the level list from `GET /levels`. On any network failure (timeout,
-/// non‑200 status, or thrown exception) it falls back to a provided
+/// non‑200 status, or thrown exception) it falls back entirely to a provided
 /// [CatalogoNiveles] (typically [CatalogoNivelesArchivo]) so the UI never
 /// crashes and the player sees the bundled levels offline.
+///
+/// When the backend **is** reachable, its response still isn't the whole
+/// story: a level authored locally and not yet known to the backend (ticket
+/// 36's 3D boards, for instance) would otherwise vanish the moment a backend
+/// is running, even though the bundled asset is right there. So a successful
+/// response is *merged* with [fallback] — the backend wins for every id it
+/// knows (real UUID, live progress sync), and any bundled id it doesn't know
+/// is appended as a local-only, offline-only entry (Ticket 36).
 class CatalogoNivelesRemoto implements CatalogoNiveles {
   /// Creates the remote catalog.
   ///
@@ -35,16 +43,31 @@ class CatalogoNivelesRemoto implements CatalogoNiveles {
       );
       if (response.statusCode == 200) {
         final body = jsonDecode(response.body) as List<dynamic>;
-        final niveles = body
+        final remotos = body
             .map((j) => _desdeJson(j as Map<String, dynamic>))
             .toList();
-        niveles.sort((a, b) => a.id.compareTo(b.id));
-        return niveles;
+        return _fusionarConLocales(remotos);
       }
     } catch (_) {
-      // Network error — fall back.
+      // Network error — fall back entirely to the bundle.
     }
     return _fallback.listar();
+  }
+
+  /// Merges [remotos] with [_fallback]'s bundled catalog: every remote entry
+  /// is kept as-is (it owns the real [ResumenNivel.idRemoto]), and any
+  /// bundled id the backend didn't return is appended, offline-only. Ordered
+  /// by id ascending either way.
+  Future<List<ResumenNivel>> _fusionarConLocales(
+    List<ResumenNivel> remotos,
+  ) async {
+    final idsRemotos = remotos.map((n) => n.id).toSet();
+    final locales = await _fallback.listar();
+    final soloLocales = locales.where((n) => !idsRemotos.contains(n.id));
+
+    final combinados = [...remotos, ...soloLocales];
+    combinados.sort((a, b) => a.id.compareTo(b.id));
+    return combinados;
   }
 
   @override

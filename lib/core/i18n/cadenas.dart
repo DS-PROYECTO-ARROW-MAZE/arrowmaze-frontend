@@ -74,6 +74,11 @@ abstract class Cadenas {
   /// Difficulty chip label — hard.
   String get dificil;
 
+  /// Chip label shown on a depth-aware (3D) level card **instead of** a
+  /// difficulty label (ticket 36) — a rendering-dimension marker, not a
+  /// difficulty, so it is never translated to mean something else.
+  String get etiqueta3D;
+
   // ── Game ──────────────────────────────────────────────────────────────────
 
   /// AppBar title for the game screen (brand name, same in all locales).
@@ -155,6 +160,9 @@ abstract class Cadenas {
 
   /// Prefix label for the move counter in the HUD (e.g. "Moves: ").
   String get etiquetaMovimientos;
+
+  /// Discoverability caption shown under a rotatable 3D board (ticket 36).
+  String get arrastrarParaRotar;
 
   // ── Settings ──────────────────────────────────────────────────────────────
 
