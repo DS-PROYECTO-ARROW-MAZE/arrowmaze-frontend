@@ -111,3 +111,24 @@ Story→module→test traceability mirrors PRD §11 / §7.
 - **Invariant change (ticket 30):** untimed levels **can now lose** via move-budget exhaustion —
   the §7.3 "untimed never reaches `EstadoDerrota`" test is superseded (PRD §12). Update, don't
   work around.
+
+## Phase 7 — Enhancement batch 3 (tickets 32–35)
+
+> Added 2026-07-11 from the third requirements batch. Ticket **32 is Priority 1** (progression
+> state-consistency hotfix) and builds directly on ticket 24 / backend ticket 18. All four are
+> frontend-only (the `GET /progress` contract already exists on the backend).
+
+| Ticket | Phase | Blocked by | Backend twin | Priority |
+|---|---|---|---|---|
+| 32 fix unlock-state consistency on login (no phantom locks) | Hotfix | 08, 13, 14, 24 | backend 18 (verify full history) | **1** |
+| 33 initial splash screen + fade-out into menu | 7 | 08, 14 | — | — |
+| 34 victory confetti on Level Complete (+ cleanup) | 7 | 06, 13, 19 | — | — |
+| 35 conditional Hint button (Medium+ & ≤ 25 s) | 7 | 01, 04, 17, 18 | — | — |
+
+- **Grab first:** 32 (P1 — regression of 24; pair by re-checking the backend-18 payload is complete).
+  33/34/35 are independent off their parents and can proceed in parallel.
+- **Interaction note (35):** the hint time-gate (≤ 25 s) opens **before** the ticket-29 warning
+  window (≤ 15 s); both read the **same** timer source (ticket 18) — no second clock. Keep the 25 s
+  and 15 s thresholds as sibling named constants.
+- **Assets note (33):** `assets/images/` (splash + logo) is **not yet registered** in `pubspec.yaml`
+  (only `assets/levels/` and `assets/sounds/` are); ticket 33 adds it.

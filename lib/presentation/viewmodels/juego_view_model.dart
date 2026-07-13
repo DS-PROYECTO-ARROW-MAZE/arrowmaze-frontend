@@ -12,6 +12,7 @@ import '../../domain/evento_juego.dart';
 import '../../domain/observador_juego.dart';
 import '../../application/use_cases/mover_flecha_use_case.dart';
 import '../../domain/entities/celda.dart';
+import '../../domain/niveles/dificultad.dart';
 import '../../domain/progreso/run_completado.dart';
 import '../../domain/puntuacion/definicion_nivel.dart';
 import '../../domain/sesion/estado_sesion.dart';
@@ -54,6 +55,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     required this._definicionNivel,
     required this._reloj,
     int idNivel = 1,
+    Dificultad dificultad = Dificultad.facil,
     String? nivelIdRemoto,
     ConsultaProgresoLocal? progreso,
     CalcularPuntuacionUseCase? calcularPuntuacion,
@@ -64,6 +66,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
     HapticFeedbackPort? haptica,
     DateTime Function()? ahora,
   })  : _idNivel = idNivel,
+        _dificultad = dificultad,
         _nivelIdRemoto = nivelIdRemoto,
         _progreso = progreso,
         _sincronizar = sincronizar,
@@ -89,6 +92,8 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       muted: _audioControl?.muted ?? false,
       tiempoRestante: _sesion.tiempoRestante,
       usosUndoRestantes: _deshacerMovimiento.usosRestantes,
+      pistaHabilitadaEnNivel: pistaHabilitadaEnNivel,
+      pistaDisponible: _pistaDisponibleAhora,
     );
     _iniciarReloj();
   }
@@ -121,6 +126,12 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// distinct HUD style plus a `TipoEvento.avisoTiempo` audio cue (ticket 29).
   static const Duration umbralAvisoTiempo = Duration(seconds: 15);
 
+  /// The hint-unlock threshold (ticket 35, Rule B): on a medium/hard level the
+  /// hint button unlocks only once the clock reaches this much time left or less
+  /// (`segundosRestantes ≤ 25`). It opens *before* the 15 s warning
+  /// ([umbralAvisoTiempo]), so the hint appears first, then the final warning.
+  static const Duration umbralPista = Duration(seconds: 25);
+
   /// One-shot guard for the time warning: it fires **once per run** when the
   /// clock first crosses [umbralAvisoTiempo] (AC1) and must not re-fire on later
   /// ticks or across pause/resume (AC5). A retry opens a fresh session and
@@ -131,9 +142,19 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   /// invalid taps has been broken (by a valid move or an undo).
   DateTime? _ultimaAlertaInvalida;
 
+  /// The once-per-level hint guard (ticket 35): latches to `true` the moment a
+  /// hint is actually delivered, so the button can never be used a second time
+  /// this run. A retry opens a fresh ViewModel, so it resets naturally per run.
+  bool _pistaUsada = false;
+
   /// The id of the level being played — used to record completion against the
   /// right level for progression/unlocks (Ticket 13).
   final int _idNivel;
+
+  /// The level's difficulty — the **data** behind Rule A of the hint gate
+  /// (ticket 35): the hint button exists only on medium/hard levels. Never a
+  /// subtype, always this value (CLAUDE.md: difficulty is data).
+  final Dificultad _dificultad;
 
   /// The backend level UUID, when known — the identity a synced run is keyed by.
   /// `null` for the offline/random board, which simply skips sync.
@@ -301,6 +322,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       victoria: victoriaState,
       derrota: derrota,
       derrotaPorTiempo: derrotaPorTiempo,
+      pistaDisponible: _pistaDisponibleEn(_sesion.tiempoRestante),
       tiempoRestante: _sesion.tiempoRestante,
       animacionSalida: animacionSalida,
     );
@@ -363,7 +385,11 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   void pausar() {
     _sesion.pausar();
     _reloj.detener();
-    _estado = _estado.copyWith(pausado: _sesion.estado is EstadoPausado);
+    _estado = _estado.copyWith(
+      pausado: _sesion.estado is EstadoPausado,
+      // Pausing leaves the playing state, so the hint locks until resumed.
+      pistaDisponible: _pistaDisponibleEn(_sesion.tiempoRestante),
+    );
     notifyListeners();
   }
 
@@ -371,7 +397,11 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
   void reanudar() {
     _sesion.reanudar();
     _iniciarReloj();
-    _estado = _estado.copyWith(pausado: _sesion.estado is EstadoPausado);
+    _estado = _estado.copyWith(
+      pausado: _sesion.estado is EstadoPausado,
+      // Back in play: re-open the hint if the clock is already in the window.
+      pistaDisponible: _pistaDisponibleEn(_sesion.tiempoRestante),
+    );
     notifyListeners();
   }
 
@@ -399,6 +429,7 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       derrota: derrota,
       derrotaPorTiempo: derrota,
       avisoTiempo: _evaluarAvisoTiempo(_sesion.tiempoRestante),
+      pistaDisponible: _pistaDisponibleEn(_sesion.tiempoRestante),
       movimientosRestantes: _sesion.presupuestoMovimientos?.restante ?? -1,
       tiempoRestante: _sesion.tiempoRestante,
     );
@@ -424,6 +455,97 @@ class JuegoViewModel extends ChangeNotifier implements ObservadorJuego {
       );
     }
     return enAviso;
+  }
+
+  /// **Rule A** of the hint gate (ticket 35): whether this level offers a hint
+  /// button at all — `true` only on medium/hard levels, so an easy level never
+  /// builds it. Stable for the whole run (difficulty never changes mid-level).
+  bool get pistaHabilitadaEnNivel =>
+      _dificultad == Dificultad.medio || _dificultad == Dificultad.dificil;
+
+  /// The full hint gate evaluated for the current remaining time — Rule A AND
+  /// the `≤ 25 s` time gate AND the session still playing AND the single hint
+  /// not yet spent (ticket 35). Kept as a single pure predicate so the View only
+  /// reads the resulting boolean and never re-derives difficulty or the clock.
+  bool _pistaDisponibleEn(Duration? restante) {
+    if (!pistaHabilitadaEnNivel) return false; // Rule A
+    if (_pistaUsada) return false; // once per level
+    if (_sesion.estado is! EstadoJugando) return false; // playing only
+    if (restante == null) return false; // untimed → time gate never met
+    return restante <= umbralPista && restante > Duration.zero; // Rule B
+  }
+
+  /// The hint gate for the session's current clock — the value published on each
+  /// new state.
+  bool get _pistaDisponibleAhora => _pistaDisponibleEn(_sesion.tiempoRestante);
+
+  /// Player intent: ask for a hint (ticket 35). The button stays tappable for the
+  /// whole run on a medium/hard level (unless already spent), so this method — not
+  /// the View — decides what a tap does:
+  ///
+  /// * **Already spent or off a hint level, or not in play** → a silent no-op; the
+  ///   single hint per level cannot be requested twice.
+  /// * **Tapped too early** (Rule A holds but the `≤ 25 s` time gate is still
+  ///   shut) → publishes [JuegoViewState.pistaBloqueadaSegundos] with the seconds
+  ///   left until unlock, so the View shows a "still locked for X s" notice.
+  /// * **Unlocked** → finds a currently-clearable arrow, spends the hint
+  ///   ([pistaUsada]) and publishes its head as [JuegoViewState.pistaSugerida] so
+  ///   the View spotlights it. If no arrow can be cleared right now the hint is
+  ///   *not* spent (nothing useful to suggest), leaving it available to retry.
+  void pedirPista() {
+    // Never usable off a hint level, once spent, or outside active play.
+    if (!pistaHabilitadaEnNivel || _pistaUsada) return;
+    if (_sesion.estado is! EstadoJugando) return;
+
+    if (!_pistaDisponibleAhora) {
+      // Time-locked: surface how long until it opens so the player learns the
+      // rule instead of a dead button (a no-op when it can never open — untimed).
+      final faltan = _segundosParaDesbloquear(_sesion.tiempoRestante);
+      if (faltan == null) return;
+      _estado = _estado.copyWith(pistaBloqueadaSegundos: faltan);
+      notifyListeners();
+      return;
+    }
+
+    final sugerida = _buscarPistaSugerida();
+    if (sugerida == null) return;
+    _pistaUsada = true;
+    _estado = _estado.copyWith(
+      pistaSugerida: sugerida,
+      pistaUsada: true,
+      // Spending the hint shuts the gate for good — refresh the lit-button flag.
+      pistaDisponible: false,
+    );
+    notifyListeners();
+  }
+
+  /// Seconds remaining until the hint's time gate opens for [restante] — the gap
+  /// between the current clock and [umbralPista] (`≤ 25 s`), or `null` when the
+  /// gate is already open or can never open (untimed level). Drives the
+  /// "still locked for X s" notice shown on an early tap (ticket 35).
+  int? _segundosParaDesbloquear(Duration? restante) {
+    if (restante == null) return null; // untimed → never opens
+    final faltan = restante.inSeconds - umbralPista.inSeconds;
+    return faltan > 0 ? faltan : null;
+  }
+
+  /// The head of the first arrow whose exit ray is clear to the board edge — a
+  /// move that can be made *right now* — or `null` when no arrow is currently
+  /// clearable. Scans in row-major order, testing each arrow once at its head
+  /// through the same [Tablero.raycast] the move rule uses, so the suggestion can
+  /// never point at a blocked arrow.
+  Posicion? _buscarPistaSugerida() {
+    for (var fila = 0; fila < _tablero.filas; fila++) {
+      for (var columna = 0; columna < _tablero.columnas; columna++) {
+        final posicion = Posicion.en(fila: fila, columna: columna);
+        final trayectoria = _tablero.trayectoriaEn(posicion);
+        if (trayectoria == null || !trayectoria.esCabeza(posicion)) continue;
+        final rayo =
+            _tablero.raycast(trayectoria.cabeza, trayectoria.direccionCabeza);
+        if (rayo.despejadoHastaBorde) return trayectoria.cabeza;
+      }
+    }
+    return null;
   }
 
   /// Enqueues [run] and starts its upload, keeping the in-flight future in

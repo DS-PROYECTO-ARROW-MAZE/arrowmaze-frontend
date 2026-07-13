@@ -51,6 +51,47 @@ void main() {
       expect(vm.estado.mensajeError, isNotNull);
     });
 
+    /// Ticket 32 AC1 — the exact reported regression: a returning player whose
+    /// history reaches Levels 7–8 must see every earlier level unlocked, with no
+    /// padlock on Level 6 (the completed-set arrives with a hole at id 5).
+    test('should_render_level6_unlocked_when_levels_7_and_8_are_completed',
+        () async {
+      // Arrange — 1‑8 completed except the middle id 5 (mirrors a lossy restore).
+      final useCase = ObtenerNivelesUseCase(
+        catalogo: _CatalogoFake(const [
+          ResumenNivel(id: 1, nombre: 'One', dificultad: Dificultad.facil),
+          ResumenNivel(id: 2, nombre: 'Two', dificultad: Dificultad.facil),
+          ResumenNivel(id: 3, nombre: 'Three', dificultad: Dificultad.medio),
+          ResumenNivel(id: 4, nombre: 'Four', dificultad: Dificultad.medio),
+          ResumenNivel(id: 5, nombre: 'Five', dificultad: Dificultad.medio),
+          ResumenNivel(id: 6, nombre: 'Six', dificultad: Dificultad.dificil),
+          ResumenNivel(id: 7, nombre: 'Seven', dificultad: Dificultad.dificil),
+          ResumenNivel(id: 8, nombre: 'Eight', dificultad: Dificultad.dificil),
+        ]),
+        progreso: _ProgresoFake(
+          completados: const {1, 2, 3, 4, 6, 7, 8},
+          estrellas: const {7: 3, 8: 2},
+        ),
+      );
+      final vm = SeleccionNivelesViewModel(obtenerNiveles: useCase);
+
+      // Act
+      await vm.cargar();
+
+      // Assert — no padlock precedes an unlocked level; Level 6 is playable.
+      final niveles = vm.estado.niveles;
+      final nivel6 = niveles.firstWhere((n) => n.id == 6);
+      expect(nivel6.desbloqueado, isTrue);
+      // Levels 7 and 8 still carry their stars.
+      expect(niveles.firstWhere((n) => n.id == 7).estrellas, 3);
+      expect(niveles.firstWhere((n) => n.id == 8).estrellas, 2);
+      // Every level up to the highest completed is unlocked (monotonic).
+      for (final nivel in niveles.where((n) => n.id <= 8)) {
+        expect(nivel.desbloqueado, isTrue,
+            reason: 'Level ${nivel.id} must not be locked before an unlocked one.');
+      }
+    });
+
     /// Ticket 24 AC1 — re-calling `cargar()` (triggered by every View
     /// appearance, including Back-nav) must re-read progression so the UI is
     /// never stale. This test mutates progression between loads.
