@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
+
 /// Backend API configuration.
 ///
 /// Single source of truth for the API base URL and endpoint paths so the
@@ -5,13 +7,19 @@
 abstract final class ApiConfig {
   /// Base URL of the ArrowMaze NestJS backend.
   ///
-  /// Configurable at build/run time via `--dart-define=API_BASE_URL=...`,
-  /// falling back to the local backend (`http://localhost:3000`). Keeping it in
-  /// an environment value means no environment-specific URL is ever hard-coded.
-  static const String baseUrl = String.fromEnvironment(
-    'API_BASE_URL',
-    defaultValue: 'http://localhost:3000',
-  );
+  /// Resolution order:
+  /// 1. An explicit `--dart-define=API_BASE_URL=...` value always wins, so a
+  ///    physical device (host LAN IP) or any other target can be pointed
+  ///    anywhere at build/run time.
+  /// 2. Otherwise the platform is auto-detected: web builds (Chrome) talk to
+  ///    the host's `localhost` directly, while Android uses `10.0.2.2`, the
+  ///    emulator alias that maps to the host machine's `localhost`.
+  ///
+  /// All branches are compile-time constants (`kIsWeb` and `bool.hasEnvironment`
+  /// are `const`), so `baseUrl` stays a `const`.
+  static const String baseUrl = bool.hasEnvironment('API_BASE_URL')
+      ? String.fromEnvironment('API_BASE_URL')
+      : (kIsWeb ? 'http://localhost:3000' : 'http://10.0.2.2:3000');
 
   /// Register endpoint — `POST /auth/register` (public).
   static const String registerPath = '/auth/register';

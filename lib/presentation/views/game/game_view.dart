@@ -13,6 +13,7 @@ import '../../../domain/value_objects/direccion.dart';
 import '../../../domain/value_objects/posicion.dart';
 import '../../viewmodels/juego_view_model.dart';
 import '../../viewmodels/juego_view_state.dart';
+import 'confetti_overlay.dart';
 
 /// The board screen — a thin View that only draws.
 ///
@@ -69,10 +70,23 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
   /// descriptor instance already turned into a running animation.
   AnimacionSalida? _ultimaSalidaProcesada;
 
+  /// Drives the hint spotlight pulse (ticket 35): a brief blink over the
+  /// suggested arrow's head when the player asks for a hint.
+  late final AnimationController _pista;
+
+  /// The cell currently spotlighted as a hint, or `null` when no hint is showing.
+  Posicion? _celdaPista;
+
+  /// Guards against re-launching the same hint spotlight: the last suggestion
+  /// already turned into a running pulse.
+  Posicion? _ultimaPistaProcesada;
+
   @override
   void initState() {
     super.initState();
     _feedback = AnimationController(vsync: this, duration: AppDurations.fast);
+    // Three sine blinks read clearly over this window (token-derived).
+    _pista = AnimationController(vsync: this, duration: AppDurations.slow * 3);
     widget.viewModel.addListener(_alCambiarEstado);
   }
 
@@ -89,6 +103,85 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
       _ultimaSalidaProcesada = salida;
       _lanzarSalida(salida);
     }
+    final pista = estado.pistaSugerida;
+    if (pista != null && pista != _ultimaPistaProcesada) {
+      _ultimaPistaProcesada = pista;
+      _lanzarPista(pista);
+    }
+    final bloqueada = estado.pistaBloqueadaSegundos;
+    if (bloqueada != null) {
+      _avisarPistaBloqueada(bloqueada);
+    }
+  }
+
+  /// Shows a brief "still locked for X seconds" notice when the player taps the
+  /// hint before it unlocks (ticket 35). Purely presentational — the ViewModel
+  /// already decided the tap was too early and told us how long remains.
+  ///
+  /// The notice is a themed floating card (not the default Material SnackBar): it
+  /// wears the app's neon-on-dark surface, the card radius, and the hint's gold
+  /// accent as a glow + lock-clock icon, so it reads as part of the same design
+  /// as the pause/victory panels.
+  void _avisarPistaBloqueada(int segundos) {
+    final s = CadenasScope.of(context);
+    final game = Theme.of(context).extension<GameTheme>()!;
+    final acento = game.starActive; // the same gold as the hint bulb
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(
+        SnackBar(
+          // Transparent shell so our own card owns the whole look.
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          behavior: SnackBarBehavior.floating,
+          padding: EdgeInsets.zero,
+          margin: const EdgeInsets.all(AppSpacing.md),
+          duration: AppDurations.slow * 6,
+          content: DecoratedBox(
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: AppRadii.cardRadius,
+              border: Border.all(color: acento.withValues(alpha: 0.55)),
+              boxShadow: [
+                BoxShadow(
+                  color: acento.withValues(alpha: 0.28),
+                  blurRadius: 18,
+                  spreadRadius: 1,
+                ),
+              ],
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: AppSpacing.md,
+                vertical: AppSpacing.sm + AppSpacing.xs,
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.lock_clock_outlined, color: acento, size: 22),
+                  const SizedBox(width: AppSpacing.sm),
+                  Flexible(
+                    child: Text(
+                      s.pistaBloqueada(segundos),
+                      style: AppTypography.bodyLarge,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+  }
+
+  /// Blinks a spotlight over [celda] a few times, then clears it. Purely
+  /// presentational — the ViewModel already picked the cell (ticket 35); this
+  /// only draws attention to it for a moment.
+  void _lanzarPista(Posicion celda) {
+    setState(() => _celdaPista = celda);
+    _pista.forward(from: 0).whenComplete(() {
+      if (mounted) setState(() => _celdaPista = null);
+    });
   }
 
   /// Starts one exit animation for [salida], driving a normalized `t` from 0→1
@@ -148,6 +241,7 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
   void dispose() {
     widget.viewModel.removeListener(_alCambiarEstado);
     _feedback.dispose();
+    _pista.dispose();
     for (final salida in _salidas) {
       salida.controlador.dispose();
     }
@@ -238,6 +332,14 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
                     tiempoRestante: estado.tiempoRestante,
                     avisoTiempo: estado.avisoTiempo,
                     usosUndoRestantes: estado.usosUndoRestantes,
+                    // Ticket 35: the hint button is built only on medium/hard
+                    // (Rule A) and enabled only inside the final 25 s (Rule B).
+                    // Both booleans are decided by the ViewModel — the View reads
+                    // them and never evaluates difficulty or the clock.
+                    pistaHabilitadaEnNivel: estado.pistaHabilitadaEnNivel,
+                    pistaDisponible: estado.pistaDisponible,
+                    pistaUsada: estado.pistaUsada,
+                    onPedirPista: widget.viewModel.pedirPista,
                     game: game,
                   ),
                   Expanded(
@@ -254,6 +356,8 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
                               estado: estado,
                               game: game,
                               salidas: _salidas,
+                              celdaPista: _celdaPista,
+                              animacionPista: _pista,
                               onTap: widget.viewModel.tocar,
                             ),
                           ),
@@ -293,23 +397,32 @@ class _GameViewState extends State<GameView> with TickerProviderStateMixin {
 /// A full-screen scrim hosting an end-of-session or pause panel. Purely
 /// presentational — built entirely from theme tokens.
 class _Overlay extends StatelessWidget {
-  const _Overlay({required this.children});
+  const _Overlay({required this.children, this.fondo});
 
   final List<Widget> children;
+
+  /// An optional full-bleed layer drawn behind the centered panel content — used
+  /// by the victory overlay to sit its confetti under the win text/stars.
+  final Widget? fondo;
 
   @override
   Widget build(BuildContext context) {
     return Positioned.fill(
       child: ColoredBox(
         color: AppColors.background.withValues(alpha: 0.82),
-        child: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(AppSpacing.xl),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: children,
+        child: Stack(
+          children: [
+            if (fondo != null) Positioned.fill(child: fondo!),
+            Center(
+              child: Padding(
+                padding: const EdgeInsets.all(AppSpacing.xl),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: children,
+                ),
+              ),
             ),
-          ),
+          ],
         ),
       ),
     );
@@ -359,6 +472,11 @@ class _VictoriaOverlay extends StatelessWidget {
   Widget build(BuildContext context) {
     final s = CadenasScope.of(context);
     return _Overlay(
+      // Confetti sits behind the win text/stars, tinted from the arrow palette
+      // so the celebration matches the board. It fires once as this overlay
+      // first renders and disposes with it — winning is winning, so it plays on
+      // bonus wins too (this overlay is shown for every victory).
+      fondo: ConfettiOverlay(colores: game.arrowPalette),
       children: [
         Text(
           s.victoria,
@@ -578,6 +696,10 @@ class _Hud extends StatelessWidget {
     this.tiempoRestante,
     this.avisoTiempo = false,
     this.usosUndoRestantes = 3,
+    this.pistaHabilitadaEnNivel = false,
+    this.pistaDisponible = false,
+    this.pistaUsada = false,
+    this.onPedirPista,
   });
 
   /// Threshold at which the timer turns warning yellow (seconds).
@@ -596,6 +718,24 @@ class _Hud extends StatelessWidget {
   /// clock then pulses in the danger colour (ticket 29, AC2).
   final bool avisoTiempo;
   final int usosUndoRestantes;
+
+  /// Rule A of the hint gate (ticket 35): whether to build the hint button at
+  /// all. `false` on easy levels, where the button is absent from the tree.
+  final bool pistaHabilitadaEnNivel;
+
+  /// Rule B of the hint gate: whether the (built) hint button is *unlocked* right
+  /// now — `true` only inside the final 25 s of a medium/hard level and while the
+  /// single hint is still unspent. Drives the button's lit look, not whether it
+  /// can be tapped (an early tap is allowed so the ViewModel can explain the lock).
+  final bool pistaDisponible;
+
+  /// Whether the level's single hint has already been spent (ticket 35). Once
+  /// `true` the button is disabled for the rest of the run.
+  final bool pistaUsada;
+
+  /// Invoked when the tapped hint button fires (the ViewModel's intent). The
+  /// ViewModel decides whether the tap reveals a hint or explains the lock.
+  final VoidCallback? onPedirPista;
 
   /// Formats the remaining time as `m:ss` for the HUD clock.
   String _formatear(Duration d) {
@@ -650,6 +790,27 @@ class _Hud extends StatelessWidget {
             Text(
               '$coleccionables',
               style: AppTypography.hudNumber.copyWith(color: game.cellCollectible),
+            ),
+          ],
+          // Ticket 35: the hint button is present only on medium/hard levels
+          // (Rule A). It stays tappable for the whole run (unless already spent)
+          // so an early tap can explain the lock; the icon reflects whether it is
+          // spent, unlocked, or still time-locked. All three booleans come from
+          // the ViewModel; the View never evaluates the rules.
+          if (pistaHabilitadaEnNivel) ...[
+            const SizedBox(width: AppSpacing.xl),
+            IconButton(
+              icon: Icon(
+                // A lit bulb once unlocked or spent; a padlock while time-locked.
+                pistaDisponible || pistaUsada
+                    ? Icons.lightbulb
+                    : Icons.lock_outline,
+              ),
+              tooltip: pistaUsada ? s.pistaUsada : s.pista,
+              color: pistaDisponible ? game.starActive : AppColors.textSecondary,
+              // Disabled only once spent; otherwise a tap either reveals the hint
+              // or triggers the "still locked for X s" notice.
+              onPressed: pistaUsada ? null : onPedirPista,
             ),
           ],
         ],
@@ -749,6 +910,8 @@ class _Tablero extends StatelessWidget {
     required this.estado,
     required this.game,
     required this.salidas,
+    required this.celdaPista,
+    required this.animacionPista,
     required this.onTap,
   });
 
@@ -758,6 +921,13 @@ class _Tablero extends StatelessWidget {
   /// The exit animations currently playing, drawn over the settled board so the
   /// arrow that already left the domain glides off visually.
   final List<_SalidaEnCurso> salidas;
+
+  /// The cell to spotlight as a hint, or `null` when no hint is showing.
+  final Posicion? celdaPista;
+
+  /// Drives the hint spotlight's blink.
+  final Animation<double> animacionPista;
+
   final void Function(Posicion posicion) onTap;
 
   @override
@@ -802,7 +972,68 @@ class _Tablero extends StatelessWidget {
                     ),
                   ),
                 ),
+              // The hint spotlight — a pulsing ring over the suggested arrow's
+              // head (ticket 35). Present only while a hint is showing.
+              if (celdaPista != null)
+                Positioned(
+                  key: const ValueKey('hint-spot'),
+                  left: celdaPista!.columna * anchoCelda,
+                  top: celdaPista!.fila * altoCelda,
+                  width: anchoCelda,
+                  height: altoCelda,
+                  child: IgnorePointer(
+                    child: _PistaSpot(
+                      animacion: animacionPista,
+                      color: game.starActive,
+                    ),
+                  ),
+                ),
             ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// A pulsing ring that spotlights the suggested arrow's head cell (ticket 35).
+///
+/// Purely presentational: it blinks a few times (via a sine on the driving
+/// [animacion]) and fades out, drawing the eye to the cell the ViewModel chose.
+class _PistaSpot extends StatelessWidget {
+  const _PistaSpot({required this.animacion, required this.color});
+
+  final Animation<double> animacion;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return AnimatedBuilder(
+      animation: animacion,
+      builder: (context, _) {
+        final t = animacion.value;
+        // Three blinks that ease out toward the end of the window.
+        final pulso = (math.sin(t * math.pi * 3).abs()) * (1 - t);
+        return Center(
+          child: FractionallySizedBox(
+            widthFactor: 0.72,
+            heightFactor: 0.72,
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                border: Border.all(
+                  color: color.withValues(alpha: 0.35 + 0.65 * pulso),
+                  width: 3,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: color.withValues(alpha: 0.5 * pulso),
+                    blurRadius: 16 * pulso,
+                    spreadRadius: 2 * pulso,
+                  ),
+                ],
+              ),
+            ),
           ),
         );
       },

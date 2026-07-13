@@ -135,6 +135,72 @@ void main() {
       expect(local.llamadasRegistro, 2); // both calls hit, but merge kept best
     });
 
+    // Ticket 32 (AC3) — the full completed history must reach local storage.
+    // A golden sparse payload (ids 1‑8) round-trips with none dropped, so the
+    // unlock rule never sees an artificial hole.
+    test('should_hydrate_every_completed_id_from_remote', () async {
+      // Arrange — remote reports all of levels 1‑8 cleared.
+      final local = _ProgresoLocalSpy();
+      final remote = _ProgresoRemotoFake(items: const [
+        ProgresoRemotoItem(nivelId: 'uuid-1', estrellas: 1, puntaje: 100),
+        ProgresoRemotoItem(nivelId: 'uuid-2', estrellas: 2, puntaje: 200),
+        ProgresoRemotoItem(nivelId: 'uuid-3', estrellas: 3, puntaje: 300),
+        ProgresoRemotoItem(nivelId: 'uuid-4', estrellas: 1, puntaje: 400),
+        ProgresoRemotoItem(nivelId: 'uuid-5', estrellas: 2, puntaje: 500),
+        ProgresoRemotoItem(nivelId: 'uuid-6', estrellas: 3, puntaje: 600),
+        ProgresoRemotoItem(nivelId: 'uuid-7', estrellas: 1, puntaje: 700),
+        ProgresoRemotoItem(nivelId: 'uuid-8', estrellas: 2, puntaje: 800),
+      ]);
+      final catalogo = _CatalogoFake([
+        for (var i = 1; i <= 8; i++)
+          ResumenNivel(
+            id: i,
+            nombre: 'L$i',
+            dificultad: Dificultad.facil,
+            idRemoto: 'uuid-$i',
+          ),
+      ]);
+      final useCase = RestaurarProgresoUseCase(
+        consultaRemoto: remote,
+        progresoLocal: local,
+        catalogo: catalogo,
+      );
+
+      // Act
+      await useCase.ejecutar();
+
+      // Assert — every id 1‑8 is present locally; none dropped.
+      expect(local.registros.keys.toSet(), {1, 2, 3, 4, 5, 6, 7, 8});
+    });
+
+    // Ticket 32 (AC4) — remote UUIDs map to the exact catalog ordinal the unlock
+    // rule reads; a UUID/ordinal mismatch is a lost record, not shipped.
+    test('should_map_remote_ids_to_catalog_ids_without_loss', () async {
+      // Arrange — catalog ordinals are not in UUID order, to catch any
+      // positional (index-based) shortcut instead of a true UUID lookup.
+      final local = _ProgresoLocalSpy();
+      final remote = _ProgresoRemotoFake(items: const [
+        ProgresoRemotoItem(nivelId: 'uuid-b', estrellas: 3, puntaje: 900),
+        ProgresoRemotoItem(nivelId: 'uuid-a', estrellas: 2, puntaje: 600),
+      ]);
+      final catalogo = _CatalogoFake(const [
+        ResumenNivel(id: 1, nombre: 'A', dificultad: Dificultad.facil, idRemoto: 'uuid-a'),
+        ResumenNivel(id: 2, nombre: 'B', dificultad: Dificultad.medio, idRemoto: 'uuid-b'),
+      ]);
+      final useCase = RestaurarProgresoUseCase(
+        consultaRemoto: remote,
+        progresoLocal: local,
+        catalogo: catalogo,
+      );
+
+      // Act
+      await useCase.ejecutar();
+
+      // Assert — each UUID lands on the ordinal that carries it, not its position.
+      expect(local.registros[1], 2); // uuid-a → id 1
+      expect(local.registros[2], 3); // uuid-b → id 2
+    });
+
     test('should_not_restore_when_remote_returns_empty_list', () async {
       // Arrange
       final local = _ProgresoLocalSpy(pre: {1: 2});

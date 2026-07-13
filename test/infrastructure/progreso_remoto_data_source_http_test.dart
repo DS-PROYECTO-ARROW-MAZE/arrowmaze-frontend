@@ -67,6 +67,34 @@ void main() {
       expect(items, isEmpty);
     });
 
+    // Ticket 32 (AC3/AC4) — the parser must return the **whole** history, one
+    // item per entry, so a returning player's full completed-set reaches the
+    // restore use case (no truncation, no silent drop of extra fields).
+    test('should_parse_full_progress_history_without_dropping_entries', () async {
+      // Arrange — a golden 8-entry array (sparse-ordinal ids 1‑8), each with the
+      // full backend per-run fields plus an unexpected extra the client ignores.
+      final buffer = StringBuffer('[');
+      for (var i = 1; i <= 8; i++) {
+        if (i > 1) buffer.write(',');
+        buffer.write('{"nivelId":"uuid-$i","puntaje":${i * 100},'
+            '"estrellas":${i % 3},"movimientos":$i,"segundosRestantes":${60 - i},'
+            '"completadoEn":"2026-06-2${i}T20:30:00.000Z","campoExtra":true}');
+      }
+      buffer.write(']');
+      final inner = MockClient((_) async => http.Response(buffer.toString(), 200));
+      final dataSource = ProgresoRemotoDataSourceHttp(client: inner);
+
+      // Act
+      final items = await dataSource.obtenerProgreso();
+
+      // Assert — all eight entries survive, in order, with the extra field ignored.
+      expect(items, hasLength(8));
+      expect(
+        items.map((e) => e.nivelId).toList(),
+        [for (var i = 1; i <= 8; i++) 'uuid-$i'],
+      );
+    });
+
     test('should_map_dto_fields_to_domain_value_object_when_parsing', () async {
       // Arrange
       final inner = MockClient(

@@ -44,5 +44,32 @@ void main() {
       // Assert
       expect(desbloqueado, isFalse);
     });
+
+    // Ticket 32 (AC2) — monotonic-unlock invariant: over a prefix-complete set
+    // {1..k} (the shape sequential play produces), an unlocked level always
+    // implies every earlier level is unlocked. This documents the rule contract
+    // that the restore path must preserve (no holes reach the rule).
+    test('should_keep_unlock_monotonic_over_a_prefix_completed_set', () {
+      // Arrange — levels 1‑5 completed; check the gate up to level 8.
+      final completados = {1, 2, 3, 4, 5};
+
+      // Act
+      final estados = [
+        for (var id = 1; id <= 8; id++) regla.estaDesbloqueado(id, completados),
+      ];
+
+      // Assert — a run of unlocked levels followed only by locked ones.
+      var vistoBloqueado = false;
+      for (final desbloqueado in estados) {
+        if (!desbloqueado) {
+          vistoBloqueado = true;
+        } else {
+          expect(vistoBloqueado, isFalse,
+              reason: 'An unlocked level followed a locked one — not monotonic.');
+        }
+      }
+      // Concretely: 1‑6 unlocked (5 completed → 6 open), 7‑8 locked.
+      expect(estados, [true, true, true, true, true, true, false, false]);
+    });
   });
 }
