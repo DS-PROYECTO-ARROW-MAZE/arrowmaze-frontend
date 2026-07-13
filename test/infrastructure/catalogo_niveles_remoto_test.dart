@@ -129,6 +129,50 @@ void main() {
       expect(niveles.map((n) => n.id), [1, 2, 3]);
     });
 
+    /// Ticket 36 — locally-authored levels the backend doesn't know about yet
+    /// (the 3D boards) must still surface even when the backend is reachable:
+    /// the remote response wins for every level it *does* know, but the
+    /// bundle is merged in as a supplement, not discarded wholesale.
+    test(
+        'should_merge_in_local_only_levels_when_remote_succeeds_but_is_missing_them',
+        () async {
+      // Arrange — the backend only knows levels 1-2; the bundle also has a
+      // local-only level 3 (e.g. a 3D board) the backend has never heard of.
+      (client as _HttpClientFake).respuesta = http.Response(
+        jsonEncode([
+          {'id': 'uuid-aaa', 'numero': 1, 'nombre': 'Remote One', 'dificultad': 'FACIL'},
+          {'id': 'uuid-bbb', 'numero': 2, 'nombre': 'Remote Two', 'dificultad': 'MEDIO'},
+        ]),
+        200,
+      );
+      final fallbackConExtra = _CatalogoFake(const [
+        ResumenNivel(id: 1, nombre: 'Bundled One', dificultad: Dificultad.facil),
+        ResumenNivel(id: 2, nombre: 'Bundled Two', dificultad: Dificultad.medio),
+        ResumenNivel(
+          id: 3,
+          nombre: 'Bundled 3D',
+          dificultad: Dificultad.facil,
+          es3D: true,
+        ),
+      ]);
+
+      final remoto =
+          CatalogoNivelesRemoto(client: client, fallback: fallbackConExtra);
+
+      // Act
+      final niveles = await remoto.listar();
+
+      // Assert — remote entries win for ids the backend knows (real UUID,
+      // remote name); the local-only id 3 is appended, still carrying es3D.
+      expect(niveles.map((n) => n.id), [1, 2, 3]);
+      expect(niveles[0].nombre, 'Remote One');
+      expect(niveles[0].idRemoto, 'uuid-aaa');
+      expect(niveles[1].nombre, 'Remote Two');
+      expect(niveles[2].nombre, 'Bundled 3D');
+      expect(niveles[2].idRemoto, isNull);
+      expect(niveles[2].es3D, isTrue);
+    });
+
     test('should_return_at_least_15_levels_from_assets_when_remote_fails', () async {
       // Arrange — full offline scenario.
       (client as _HttpClientFake).lanzarExcepcion = true;

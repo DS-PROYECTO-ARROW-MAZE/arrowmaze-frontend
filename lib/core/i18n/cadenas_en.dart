@@ -70,6 +70,9 @@ class CadenasEn extends Cadenas {
   @override
   String get dificil => 'Hard';
 
+  @override
+  String get etiqueta3D => '3D';
+
   // ── Game ──────────────────────────────────────────────────────────────────
   @override
   String get pantallaJuego => 'ArrowMaze';
@@ -149,6 +152,9 @@ class CadenasEn extends Cadenas {
   // ── HUD ───────────────────────────────────────────────────────────────────
   @override
   String get etiquetaMovimientos => 'Moves: ';
+
+  @override
+  String get arrastrarParaRotar => 'Drag to rotate';
 
   // ── Settings ──────────────────────────────────────────────────────────────
   @override

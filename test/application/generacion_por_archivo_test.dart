@@ -55,6 +55,65 @@ class _CargadorFalsoInsolvable implements CargadorNivel {
   }
 }
 
+/// A loader whose DTO carries `layers: 2` and per-cell `layer` fields — a
+/// cross-layer bending path (mirrors `level_3d_test_02`) that exits clear.
+class _CargadorFalso3DSolvable implements CargadorNivel {
+  @override
+  Future<DefinicionNivelDto> cargar(int id) async {
+    return DefinicionNivelDto(
+      id: id,
+      filas: 1,
+      columnas: 2,
+      layers: 2,
+      trayectorias: [
+        {
+          'id': 1,
+          'head': 'FORWARD',
+          'cells': [
+            {'row': 0, 'col': 0, 'layer': 0},
+            {'row': 0, 'col': 1, 'layer': 0},
+            {'row': 0, 'col': 1, 'layer': 1},
+          ],
+        },
+      ],
+      celdas: const <Map<String, dynamic>>[],
+    );
+  }
+}
+
+/// A loader whose DTO carries a 3-layer mutual cross-layer block (mirrors
+/// `level_3d_test_03`) — must be rejected by the solvability gate.
+class _CargadorFalso3DInsolvable implements CargadorNivel {
+  @override
+  Future<DefinicionNivelDto> cargar(int id) async {
+    return DefinicionNivelDto(
+      id: id,
+      filas: 1,
+      columnas: 2,
+      layers: 3,
+      trayectorias: [
+        {
+          'id': 1,
+          'head': 'FORWARD',
+          'cells': [
+            {'row': 0, 'col': 0, 'layer': 0},
+            {'row': 0, 'col': 0, 'layer': 1},
+          ],
+        },
+        {
+          'id': 2,
+          'head': 'BACKWARD',
+          'cells': [
+            {'row': 0, 'col': 1, 'layer': 2},
+            {'row': 0, 'col': 0, 'layer': 2},
+          ],
+        },
+      ],
+      celdas: const <Map<String, dynamic>>[],
+    );
+  }
+}
+
 void main() {
   group('GeneracionPorArchivoNivel', () {
     test('should_validate_solvability_before_render_when_loading_by_id', () async {
@@ -84,6 +143,32 @@ void main() {
       final config = ConfiguracionGeneracion(filas: 3, columnas: 3);
 
       final resultado = await generador.generarAsync(config, idNivel: 1);
+
+      expect(resultado, isNull);
+    });
+
+    test(
+        'should_validate_solvability_through_unmodified_template_when_loading_a_3d_level',
+        () async {
+      // AC1 — a level with layers > 1 runs validarSolvencia through the
+      // unmodified GeneradorNivelBase template before it reaches the ViewModel.
+      final cargador = _CargadorFalso3DSolvable();
+      final generador = GeneracionPorArchivoNivel(cargador: cargador);
+      final config = ConfiguracionGeneracion(filas: 0, columnas: 0);
+
+      final resultado = await generador.generarAsync(config, idNivel: 9002);
+
+      expect(resultado, isNotNull);
+      expect(resultado!.profundo, 2);
+    });
+
+    test('should_reject_the_intentionally_unsolvable_3d_level', () async {
+      // AC1/AC7 — an unsolvable 3D board is never handed to the ViewModel.
+      final cargador = _CargadorFalso3DInsolvable();
+      final generador = GeneracionPorArchivoNivel(cargador: cargador);
+      final config = ConfiguracionGeneracion(filas: 0, columnas: 0);
+
+      final resultado = await generador.generarAsync(config, idNivel: 9003);
 
       expect(resultado, isNull);
     });

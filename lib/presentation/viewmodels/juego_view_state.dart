@@ -70,13 +70,19 @@ class CeldaUI {
   bool get esJugable => tipo != TipoCeldaUI.ausente;
 }
 
-/// An immutable UI snapshot of the whole board.
+/// An immutable UI snapshot of the whole board — every cell of every depth
+/// layer (`filas × columnas × profundo`), not just one layer's slice: the
+/// rotatable 3D cube view renders and hit-tests the whole board at once.
+/// [profundo] is `1` for a flat 2D board, in which case this holds exactly
+/// `filas × columnas` cells and behaves exactly as a flat board always has.
 class TableroUI {
-  /// Creates a board snapshot of [filas] × [columnas] holding [celdas].
+  /// Creates a board snapshot of [filas] × [columnas] × [profundo] holding
+  /// [celdas].
   const TableroUI({
     required this.filas,
     required this.columnas,
     required this.celdas,
+    this.profundo = 1,
   });
 
   /// Row count.
@@ -85,27 +91,34 @@ class TableroUI {
   /// Column count.
   final int columnas;
 
-  /// All cells, row-major.
+  /// Depth layer count; `1` for a flat 2D board.
+  final int profundo;
+
+  /// All cells, one per `(fila, columna, capa)`.
   final List<CeldaUI> celdas;
 
-  /// The cell snapshot at [posicion].
+  /// The cell snapshot at the exact [posicion] (including `capa`).
   CeldaUI celdaEn(Posicion posicion) =>
       celdas.firstWhere((c) => c.posicion == posicion);
 
-  /// The board's **hit-test seam**: resolves a tapped grid [posicion] to the
+  /// The board's **hit-test seam**: resolves a tapped [posicion] to the
   /// playable cell there, or `null` when the tap lands off the board or on an
   /// absent (non-playable) position (ticket 26, AC4).
   ///
-  /// The View maps a touch point to a grid position and asks here whether it
-  /// owns a playable cell — a tap on the void outside a shaped board resolves to
-  /// nothing (no hit-test target), while a present [TipoCeldaUI.vacia] cell
-  /// resolves normally. Because "playable" is read straight from [CeldaUI.esJugable],
-  /// the View never re-derives which cells exist (AC5).
+  /// The View maps a touch point to a grid position (a flat 2D tap, or a
+  /// resolved cell from the 3D cube's projection hit-test — ticket 36) and
+  /// asks here whether it owns a playable cell — a tap on the void outside a
+  /// shaped board resolves to nothing (no hit-test target), while a present
+  /// [TipoCeldaUI.vacia] cell resolves normally. Because "playable" is read
+  /// straight from [CeldaUI.esJugable], the View never re-derives which cells
+  /// exist (AC5).
   CeldaUI? celdaJugableEn(Posicion posicion) {
     if (posicion.fila < 0 ||
         posicion.columna < 0 ||
+        posicion.capa < 0 ||
         posicion.fila >= filas ||
-        posicion.columna >= columnas) {
+        posicion.columna >= columnas ||
+        posicion.capa >= profundo) {
       return null;
     }
     final celda = celdaEn(posicion);
@@ -215,7 +228,8 @@ class JuegoViewState {
     this.animacionSalida,
   });
 
-  /// The board snapshot to render.
+  /// The board snapshot to render. [TableroUI.profundo] drives whether the
+  /// View renders the flat 2D board or the rotatable 3D cube (ticket 36).
   final TableroUI tablero;
 
   /// The move counter shown in the HUD (total registered taps).

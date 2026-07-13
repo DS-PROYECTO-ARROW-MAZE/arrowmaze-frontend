@@ -25,16 +25,19 @@ class Solver {
       progreso = false;
       for (var fila = 0; fila < tablero.filas; fila++) {
         for (var columna = 0; columna < tablero.columnas; columna++) {
-          final posicion = Posicion.en(fila: fila, columna: columna);
-          final celda = tablero.celdaEn(posicion);
-          if (celda is! CeldaFlecha) continue;
-          final trayectoria = tablero.trayectoriaEn(posicion);
-          if (trayectoria == null) continue;
-          final rayo =
-              tablero.raycast(trayectoria.cabeza, trayectoria.direccionCabeza);
-          if (rayo.despejadoHastaBorde) {
-            tablero.eliminarTrayectoria(trayectoria.id);
-            progreso = true;
+          for (var capa = 0; capa < tablero.profundo; capa++) {
+            final posicion =
+                Posicion.en(fila: fila, columna: columna, capa: capa);
+            final celda = tablero.celdaEn(posicion);
+            if (celda is! CeldaFlecha) continue;
+            final trayectoria = tablero.trayectoriaEn(posicion);
+            if (trayectoria == null) continue;
+            final rayo = tablero.raycast(
+                trayectoria.cabeza, trayectoria.direccionCabeza);
+            if (rayo.despejadoHastaBorde) {
+              tablero.eliminarTrayectoria(trayectoria.id);
+              progreso = true;
+            }
           }
         }
       }
@@ -42,9 +45,12 @@ class Solver {
 
     for (var fila = 0; fila < tablero.filas; fila++) {
       for (var columna = 0; columna < tablero.columnas; columna++) {
-        if (tablero.celdaEn(Posicion.en(fila: fila, columna: columna))
-            is CeldaFlecha) {
-          return false;
+        for (var capa = 0; capa < tablero.profundo; capa++) {
+          if (tablero.celdaEn(
+                Posicion.en(fila: fila, columna: columna, capa: capa),
+              ) is CeldaFlecha) {
+            return false;
+          }
         }
       }
     }

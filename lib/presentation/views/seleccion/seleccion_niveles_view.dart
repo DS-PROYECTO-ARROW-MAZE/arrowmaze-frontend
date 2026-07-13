@@ -198,10 +198,16 @@ class _NivelCard extends StatelessWidget {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  _etiquetaDificultad(nivel.dificultad, s),
+                  // A depth-aware board shows "3D" instead of a difficulty
+                  // label (ticket 36) — es3D is a rendering-dimension marker,
+                  // not a difficulty tier, so it overrides the label here
+                  // rather than being folded into Dificultad itself.
+                  nivel.es3D ? s.etiqueta3D : _etiquetaDificultad(nivel.dificultad, s),
                   style: AppTypography.bodyMedium.copyWith(
                     fontSize: 10,
-                    color: _colorDificultad(nivel.dificultad),
+                    color: nivel.es3D
+                        ? AppColors.purpleNeon
+                        : _colorDificultad(nivel.dificultad),
                   ),
                 ),
                 const Spacer(),

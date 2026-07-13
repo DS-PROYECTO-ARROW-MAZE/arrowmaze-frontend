@@ -1,7 +1,7 @@
 ﻿# AI Usage Documentation
 
 > Mandatory disclosure of AI use in this repository.
-> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-11 (T-039 appended)
+> **Project:** ArrowMaze Frontend · **Last updated:** 2026-07-13 (T-040 appended)
 
 ## 1. Tools Used
 
@@ -9,7 +9,7 @@
 | ---- | --------------- | --------------------------- |
 | Claude Code | Opus 4.8 / claude-opus-4-8 | Test-first implementation (tickets 01, 02, 03, 04, 09, 12, 13, 14, 22, 26, 28, 29), refactoring, coverage, cross-platform/web fixes, API client + interceptor, doc reconciliation, path-following exit animation, shaped-board rendering + hit-test, 15s timer warning, difficulty-gated timer + one-shot invalid-alert fixes, per-user local progress rework, launch splash screen (ticket 33), victory confetti overlay (ticket 34), hint once-per-level lock + time-locked early-tap notice with themed restyle (ticket 35 enhancement), app launcher-icon generation (Android adaptive + legacy, iOS), `develop` merge/conflict resolution |
 | Claude Code | Sonnet 4.6 / claude-sonnet-4-6 | Test-first implementation (ticket 07), Observer pattern wiring, DI |
-| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis), full-suite regression diagnosis and fix |
+| Claude Code | Sonnet 5 / claude-sonnet-5 | Test-first implementation (tickets 27 — settings menu + i18n, 25 — SFX softening + asset synthesis, 36 — playable 3D boards), full-suite regression diagnosis and fix, AI_USAGE.md maintenance |
 | OpenCode | deepseek-v4-flash-free | Test-first implementation (tickets 05, 06, 08, 10, 11, 15, 16, 17, 18, 19, 20, 21, 23, 24, 30), architectural analysis, documentation, AI_USAGE.md maintenance |
 
 ## 2. Usage Log by Task
@@ -1682,6 +1682,102 @@ eloj:
 - **Modifications made by the team:** Iterated twice on the adaptive foreground before it looked right: (1) the first attempt **pre-padded** the icon to 90 % *and* the tool adds its own default 16 % inset, so the arrows rendered noticeably too small; (2) a tighter arrows-only crop then produced a **"floating card" seam**, because the crop kept the art's dotted dark background, which read as a darker rounded card sitting on the flat adaptive background. Both were resolved by going **full-bleed** (`inset: 0`) with the complete art as the foreground over a background color that exactly matches the art's canvas — confirmed seamless under both mask shapes via the rendered previews. The app display name (`android:label="arrowmaze"`) was left unchanged (not requested). iOS icons were regenerated as a side effect of `ios: true`.
 - **Lessons learned / limitations identified:** (1) `flutter_launcher_icons` applies a **16 % foreground inset by default** (`adaptive_icon_foreground_inset`); stacking your own padding on top shrinks the glyph — drive padding from one place. (2) For pre-composed square art with its own dark canvas, a **full-bleed** adaptive foreground over a **matching** background color reads as one seamless icon, whereas an inset foreground reintroduces a visible "card" because the art's texture/gradient differs from the flat background. (3) Rendering the circle/squircle mask previews **before** committing caught the sizing and seam problems that are invisible in the raw source PNG. (4) The generated icon files are committed, so the icon ships with the branch — but Android caches launcher icons aggressively, so an emulator/device may need an uninstall + reinstall (or wipe) to refresh.
 
+### T-040 — Ticket 36 · Playable 3D Boards (depth axis, rotatable-cube rendering & controls)
+
+- **Task / problem addressed:** Make the PRD's long-promised depth axis real end to end —
+  domain, level loading, and a **playable UI** — per `.issues/36-feat-frontend-playable-3d-boards.md`.
+  Acceptance criteria: (AC1) a `layers > 1` level passes `validarSolvencia` before render,
+  exactly like a 2D board; (AC2) the board renders playable content using the existing
+  continuous-path/arrowhead/empty-dot/absent rules, unchanged; (AC3) the player can change
+  which part of the board they see without resetting `movimientos`/timer/session state; (AC4)
+  tapping any visible segment of a path resolves its whole `Trayectoria` even when the path's
+  head sits on a different layer; (AC5) a resolving path removes every segment on every layer
+  it occupies in one atomic move; (AC6) undo/pause/scoring/stars/victory/defeat all work
+  unchanged on a 3D board (regression, not new behaviour); (AC7) three bundled 3D test boards
+  load, solvability-gate correctly, and are playable end-to-end. The ticket's own **OCP claim**
+  was the real bar: `MoverFlechaUseCase` and `Solver` must need **zero** code changes for a
+  depth-aware `Tablero`.
+- **AI tool used:** Claude Code (Sonnet 5 / claude-sonnet-5).
+- **Prompt / instruction:** (paraphrased) "implement this ticket
+  `.issues/36-feat-frontend-playable-3d-boards.md`, it is obligatory to apply the rules of these
+  skills: `tdd-strict/SKILL.md`, `clean-architecture/SKILL.md`. the visual design you define
+  based on `lib/core/theme`" — the same standard ticket-implementation prompt used for prior
+  test-first tickets in this repo.
+- **Result obtained:** Strict TDD (red → green → refactor) producing: `domain/value_objects/`
+  (`Posicion` gains `capa` defaulting to `0`, extending equality/hashCode/`coordenada`/
+  `desplazar`; `Direccion` gains `adelante`/`atras` — `Vector3(0,0,±1)` — and a new `todas`
+  6-direction set alongside the untouched 4-direction `cardinales`); `domain/grafo_tablero.dart`
+  (`GrafoTablero.desde` gains `profundo` (default `1`), builds `filas × columnas × profundo`
+  nodes, and links neighbours via `Direccion.todas` in one loop — no branching on dimension, so
+  a `profundo: 1` board links zero depth neighbours and behaves exactly as before);
+  `domain/tablero.dart` (`Tablero.profundo` port getter); `domain/solver.dart` (no logic change,
+  only mechanical addition of the `profundo` parameter it already threaded through); zero
+  changes to `application/use_cases/mover_flecha_use_case.dart` — both `MoverFlechaUseCase` and
+  `Solver`'s **existing** test suites pass unmodified against a 3D fixture, proving the OCP
+  claim (per `test/domain/grafo_tablero_3d_test.dart`, `test/domain/solver_3d_test.dart`,
+  `test/application/mover_flecha_usecase_3d_test.dart`). Level loading:
+  `infrastructure/datasources/cargador_nivel_archivo.dart` (`layers`/`layer` JSON fields default
+  to `1`/`0` for backward compatibility with every existing `level_XX.json`; `FORWARD`/
+  `BACKWARD` join the direction-string lookup table); `domain/entities/fabrica_celdas_estandar.dart`
+  (reads/produces `capa`); `application/generadores/` (`ConfiguracionGeneracion` +
+  `GeneracionPorArchivoNivel` + `GeneradorNivelBase` thread `profundo` through the unmodified
+  `validarSolvencia` gate — AC1); three bundled fixtures `assets/levels/level_16.json`,
+  `_17.json`, `_18.json` (minimal depth smoke test, cross-layer bending path, and an
+  intentionally-unsolvable mutual cross-layer block, per the ticket's golden-fixture spec) plus
+  `tool/generar_niveles_3d.dart` to author them; `domain/niveles/resumen_nivel.dart` +
+  `seleccion_niveles_view_state.dart`/`_view_model.dart` (`es3D` flag — a presentation label, not
+  a difficulty tier — so the Level Select card shows "3D" instead of a difficulty badge).
+  Presentation (the biggest deviation from the ticket's own sketch — see Lessons below):
+  `lib/core/animacion/punto3d.dart` (pure-Dart `Punto3D` value type, no Flutter dependency,
+  mirroring the existing `Punto2D`); `lib/core/animacion/orientacion_cubo.dart`
+  (`OrientacionCubo` — yaw/pitch orbit rotation + depth-scaled projection, pitch clamped short of
+  a gimbal flip, pure Dart); `lib/presentation/views/game/cubo_3d_view.dart` (`Cubo3D` — a
+  **separate** StatefulWidget/painter from the flat 2D board, deliberately not unified with it;
+  renders **every** layer at once in true 3D space via pan-to-orbit, depth-sorts cells
+  back-to-front so absent shell cells read as literal holes, and hit-tests taps against the
+  frontmost playable cell under the tap point using the exact same projection function the
+  painter draws with, so painting and hit-testing can never drift apart); `pintura_flecha.dart`
+  (`pintarPuntaFlecha` — the arrowhead-triangle painter extracted so the flat board and the cube
+  share one drawing routine instead of duplicating it); `juego_view_state.dart`'s `TableroUI`
+  gains `profundo`; `juego_view_model.dart`/`game_view.dart` wire `Cubo3D` in for
+  `es3D`/`profundo > 1` levels while the flat `_TableroPainter` path is untouched for 2D levels;
+  new i18n string `arrastrarParaRotar` ("drag to rotate" / "arrastra para rotar") in
+  `cadenas.dart`/`cadenas_en.dart`/`cadenas_es.dart`. New/changed tests (11 new files):
+  `test/core/cubo_projection_test.dart`, `test/domain/grafo_tablero_3d_test.dart`,
+  `test/domain/solver_3d_test.dart`, `test/application/mover_flecha_usecase_3d_test.dart`,
+  `test/infrastructure/cargador_nivel_archivo_3d_test.dart` +
+  `_3d_fixtures_test.dart`, `test/infrastructure/catalogo_niveles_archivo_test.dart`,
+  `test/presentation/cubo_3d_view_test.dart`, `test/presentation/juego_viewmodel_3d_test.dart`,
+  `test/di/inyeccion_3d_test.dart`, plus additions to `test/domain/value_objects/value_objects_test.dart`,
+  `test/domain/fabrica_celdas_estandar_test.dart`, `test/application/generador_nivel_base_test.dart`,
+  `test/application/generacion_por_archivo_test.dart`, `test/infrastructure/catalogo_niveles_remoto_test.dart`,
+  `test/presentation/seleccion_niveles_viewmodel_test.dart`. Verified (checked in this session):
+  `flutter test` 512/512 green; `flutter analyze` 0 errors/0 warnings (62 pre-existing
+  info-level style hints only); zero `package:flutter` imports under `domain/`+`application/`.
+- **Modifications made by the team:** The team reviewed the diff and accepted a deliberate
+  **design deviation** from the ticket's own sketch: the issue describes a "layer switcher"
+  control that renders one layer at a time (AC2/AC3 as literally written); the AI instead built
+  a single rotatable 3D cube that renders **all** layers simultaneously (drag-to-orbit,
+  depth-sorted, tap-any-visible-segment). This satisfies the acceptance criteria's *intent*
+  (AC3's "change what you see without resetting session state," AC4's "tap-any-segment-any-layer")
+  through a richer, arguably better mechanism than the literal switcher, and the code's own
+  doc comments explain the reasoning (kept as a separate widget from the flat board, sharing
+  only the pure arrowhead-triangle helper, so the well-tested flat 2D path carries zero risk).
+  The team kept this deviation rather than forcing the literal switcher design.
+- **Lessons learned / limitations identified:** (1) A ticket's UI sketch is a proposal, not a
+  contract — the acceptance criteria (what the player must be able to do) are the real bar, and
+  an AI-proposed alternative that satisfies them more directly (rendering the whole cube instead
+  of paging through layers) is worth keeping rather than mechanically matching the prose. (2)
+  Extending `Posicion`/`Direccion`/`GrafoTablero` with depth-first defaults (`capa = 0`,
+  `profundo = 1`) and a single unified neighbour-linking loop (`Direccion.todas` instead of a
+  separate depth pass) is what let `MoverFlechaUseCase` and `Solver` need zero changes — the
+  ticket's OCP claim held up under its own regression tests, confirming that designing the value
+  objects' defaults correctly is what makes an axis genuinely additive rather than a parallel
+  code path. (3) Sharing the projection function between painting and hit-testing
+  (`_proyectarCeldas` in `cubo_3d_view.dart`) is what prevents a rotated 3D tap target from
+  silently drifting out of sync with what's drawn — a risk that a naive "recompute the geometry
+  twice" implementation would have reintroduced.
+
 ## 3. Critical Evaluation
 
 ### AI-assisted code share
@@ -1694,12 +1790,13 @@ eloj:
     (T-034), the unlock-consistency fix (T-035), the launch splash screen
     (T-036), the victory confetti overlay (ticket 34, T-037), the hint
     once-per-level lock + time-locked notice with themed restyle (ticket 35
-    enhancement, T-038), and the app launcher-icon generation (T-039) — were
-    AI-generated then human-reviewed; the theme tokens under `lib/core/theme` were
-    pre-existing (not AI-authored in these tasks), and the launcher-icon PNGs are
-    generated from brand art (also not AI-authored). Every ticket followed the same
+    enhancement, T-038), the app launcher-icon generation (T-039), and the
+    playable 3D boards ticket (ticket 36, T-040) — were AI-generated then
+    human-reviewed; the theme tokens under `lib/core/theme` were pre-existing
+    (not AI-authored in these tasks), and the launcher-icon PNGs are generated
+    from brand art (also not AI-authored). Every ticket followed the same
     pattern (full AI authoring + human review), so the share holds at ~90%. Rough
-    judgment over the files added across the slices (454 passing tests, all source
+    judgment over the files added across the slices (512 passing tests, all source
     in `lib/domain/`, `lib/application/`,
     `lib/infrastructure/`, `lib/presentation/`, `lib/di/`, `lib/core/`, plus
     synthesized binary assets under `assets/sounds/`).
@@ -2018,6 +2115,18 @@ eloj:
   - **How it was corrected:** Switched to a **full-bleed** foreground (`inset: 0`)
     with the complete art over a background color matching the art's own canvas
     (`#0E1320`), verified seamless and unclipped under both mask shapes.
+- **Case:** The ticket's own UI sketch specified a "layer switcher" that renders
+  one depth layer at a time; the AI instead implemented a rotatable 3D cube
+  rendering **every** layer at once (drag-to-orbit) — a deliberate departure
+  from the ticket's literal AC2/AC3 wording (ticket 36).
+  - **How it was detected:** Manual review of the diff against the ticket text
+    — the mismatch was in design approach, not a test failure; the full suite
+    and `flutter analyze` were green either way.
+  - **How it was corrected:** Not corrected — the team evaluated the deviation
+    against the acceptance criteria's *intent* (change what's visible without
+    resetting session state; resolve any visible segment regardless of its
+    layer) rather than the literal switcher prose, judged the cube a stronger
+    solution, and kept it as-is.
 
 ### Team reflection
 

@@ -166,14 +166,19 @@ abstract final class Inyeccion {
     };
   }
 
-  /// Counts unique arrow paths on [tablero].
+  /// Counts unique arrow paths on [tablero], across every depth layer
+  /// (ticket 36) — a 2D board's `profundo` is always `1`, so this is
+  /// unchanged for every flat catalog level.
   static int _contarFlechas(Tablero tablero) {
     final ids = <int>{};
     for (var f = 0; f < tablero.filas; f++) {
       for (var c = 0; c < tablero.columnas; c++) {
-        final celda = tablero.celdaEn(Posicion.en(fila: f, columna: c));
-        if (celda is CeldaFlecha) {
-          ids.add(celda.idFlecha);
+        for (var p = 0; p < tablero.profundo; p++) {
+          final celda =
+              tablero.celdaEn(Posicion.en(fila: f, columna: c, capa: p));
+          if (celda is CeldaFlecha) {
+            ids.add(celda.idFlecha);
+          }
         }
       }
     }

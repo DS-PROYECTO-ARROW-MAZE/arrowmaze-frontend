@@ -16,6 +16,7 @@ class NivelResumenUI {
     required this.completado,
     required this.estrellas,
     this.idRemoto,
+    this.es3D = false,
   });
 
   /// The level's sequential id (ordinal). Drives asset loading and unlocks.
@@ -30,6 +31,10 @@ class NivelResumenUI {
 
   /// The level's difficulty.
   final Dificultad dificultad;
+
+  /// Whether this is a depth-aware (3D) board — the card shows "3D" instead
+  /// of the difficulty label when this is `true` (ticket 36).
+  final bool es3D;
 
   /// Whether the level can be played now (otherwise it renders locked).
   final bool desbloqueado;

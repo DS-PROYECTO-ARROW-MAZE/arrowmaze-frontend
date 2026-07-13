@@ -34,6 +34,31 @@ void main() {
       expect(niveles[1].completado, isFalse);
     });
 
+    /// Ticket 36 — the card model must carry `es3D` through unchanged, so the
+    /// View can show "3D" instead of a difficulty label without re-deriving
+    /// it from anything (single source of truth: the catalog summary).
+    test('should_expose_es3D_when_a_level_is_a_depth_aware_board', () async {
+      final useCase = ObtenerNivelesUseCase(
+        catalogo: _CatalogoFake(const [
+          ResumenNivel(id: 1, nombre: 'One', dificultad: Dificultad.facil),
+          ResumenNivel(
+            id: 16,
+            nombre: '3D Cube',
+            dificultad: Dificultad.facil,
+            es3D: true,
+          ),
+        ]),
+        progreso: _ProgresoFake(completados: const {}),
+      );
+      final vm = SeleccionNivelesViewModel(obtenerNiveles: useCase);
+
+      await vm.cargar();
+
+      final niveles = vm.estado.niveles;
+      expect(niveles.firstWhere((n) => n.id == 1).es3D, isFalse);
+      expect(niveles.firstWhere((n) => n.id == 16).es3D, isTrue);
+    });
+
     test('should_expose_error_when_use_case_throws', () async {
       // Arrange — a catalog that fails.
       final useCase = ObtenerNivelesUseCase(

@@ -1,5 +1,6 @@
 import 'package:arrowmaze/application/generadores/generador_nivel_base.dart';
 import 'package:arrowmaze/application/generadores/configuracion_generacion.dart';
+import 'package:arrowmaze/domain/entities/celda.dart';
 import 'package:arrowmaze/domain/entities/trayectoria.dart';
 import 'package:arrowmaze/domain/grafo_tablero.dart';
 import 'package:arrowmaze/domain/tablero.dart';
@@ -72,6 +73,43 @@ class _GeneradorInsolvable extends GeneradorNivelBase {
   }
 }
 
+/// A generator whose only arrow sits entirely on a non-zero layer (layer 0 is
+/// empty throughout), blocked by a wall on that same deeper layer. A
+/// validarEstructural/validarSolvencia that enumerated only layer 0 would
+/// never see this arrow at all and would wrongly call the board solvable
+/// (Ticket 36).
+class _GeneradorInsolvable3D extends GeneradorNivelBase {
+  @override
+  void poblar(Tablero tablero, ConfiguracionGeneracion config) {
+    final g = tablero as GrafoTablero;
+    g.agregarCelda(const CeldaPared(Posicion.en(fila: 0, columna: 0, capa: 1)));
+    g.agregarTrayectoria(Trayectoria(
+      id: 1,
+      direccionCabeza: Direccion.arriba,
+      segmentos: const [
+        Posicion.en(fila: 2, columna: 0, capa: 1),
+        Posicion.en(fila: 1, columna: 0, capa: 1),
+      ],
+    ));
+  }
+}
+
+/// A generator whose arrow bends through depth and exits clear (Ticket 36).
+class _GeneradorSolvable3D extends GeneradorNivelBase {
+  @override
+  void poblar(Tablero tablero, ConfiguracionGeneracion config) {
+    final g = tablero as GrafoTablero;
+    g.agregarTrayectoria(Trayectoria(
+      id: 1,
+      direccionCabeza: Direccion.adelante,
+      segmentos: const [
+        Posicion.en(fila: 0, columna: 0, capa: 0),
+        Posicion.en(fila: 0, columna: 0, capa: 1),
+      ],
+    ));
+  }
+}
+
 /// A generator that emits a length-1 arrow (violates the ≥2 invariant).
 class _GeneradorFlechaCorta extends GeneradorNivelBase {
   @override
@@ -119,6 +157,26 @@ void main() {
       final resultado = generador.generar(config);
 
       expect(resultado, isNull);
+    });
+
+    test('should_fail_generation_when_a_deeper_layer_arrow_is_blocked', () {
+      final generador = _GeneradorInsolvable3D();
+      final config =
+          ConfiguracionGeneracion(filas: 3, columnas: 1, profundo: 2);
+
+      final resultado = generador.generar(config);
+
+      expect(resultado, isNull);
+    });
+
+    test('should_return_tablero_when_arrow_bends_through_depth_and_clears', () {
+      final generador = _GeneradorSolvable3D();
+      final config =
+          ConfiguracionGeneracion(filas: 1, columnas: 1, profundo: 2);
+
+      final resultado = generador.generar(config);
+
+      expect(resultado, isNotNull);
     });
   });
 }

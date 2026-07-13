@@ -132,3 +132,19 @@ Story→module→test traceability mirrors PRD §11 / §7.
   and 15 s thresholds as sibling named constants.
 - **Assets note (33):** `assets/images/` (splash + logo) is **not yet registered** in `pubspec.yaml`
   (only `assets/levels/` and `assets/sounds/` are); ticket 33 adds it.
+
+## Phase 8 — Enhancement batch 4 (ticket 36)
+
+> Added 2026-07-13. Delivers the 3D board the PRD (§1.1 Engineering force, §6.1 DM-F1, §8 NFR
+> Portability) has flagged since inception as the target OCP extension for `Tablero`.
+> Cross-repo twin: `arrowmaze-backend` ticket 19.
+
+| Ticket | Phase | Blocked by | Backend twin | Priority |
+|---|---|---|---|---|
+| 36 playable 3D boards (depth axis, layer rendering & controls) | 8 | 01, 16, 26 | backend 19 | — |
+
+- **Grab first:** 36 is independent of tickets 27–35; it only needs the move-mechanic spine
+  (01) and the mask/absent-cell rendering machinery (16, 26) it extends with a third axis.
+- **Regression guarantee:** DM-F2 (`MoverFlechaUseCase`) and DM-F4 (`Solver`) must need **zero**
+  code changes — ticket 36 adds a depth-aware `Tablero` implementation only; existing specs for
+  both must pass unmodified against a 3D fixture (see ticket 36's Definition of Done).

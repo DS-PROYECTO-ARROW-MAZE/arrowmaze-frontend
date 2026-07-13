@@ -50,6 +50,7 @@ class SeleccionNivelesViewModel extends ChangeNotifier {
       idRemoto: nivel.resumen.idRemoto,
       nombre: nivel.resumen.nombre,
       dificultad: nivel.resumen.dificultad,
+      es3D: nivel.resumen.es3D,
       desbloqueado: nivel.desbloqueado,
       completado: nivel.completado,
       estrellas: nivel.estrellas,

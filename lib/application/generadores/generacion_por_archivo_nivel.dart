@@ -19,13 +19,31 @@ class GeneracionPorArchivoNivel extends GeneradorNivelBase {
     ConfiguracionGeneracion config, {
     required int idNivel,
   }) async {
-    _definicion = await cargador.cargar(idNivel);
-    final ausentes = _definicion!.ausentes
-        .map((j) => Posicion.en(fila: j['row'] as int, columna: j['col'] as int))
+    return generarDesdeDefinicionAsync(await cargador.cargar(idNivel));
+  }
+
+  /// Generates a board straight from an already-resolved [definicion],
+  /// bypassing [cargador]/[CargadorNivel.cargar].
+  ///
+  /// This is the QA/debug entry point the bundled 3D test boards are loaded
+  /// through (Ticket 36): a caller resolves the definition itself — e.g. via
+  /// `CargadorNivelArchivo.cargarPorNombre` for a level outside the numbered
+  /// catalog range — and hands it here directly.
+  Future<Tablero?> generarDesdeDefinicionAsync(
+    DefinicionNivelDto definicion,
+  ) async {
+    _definicion = definicion;
+    final ausentes = definicion.ausentes
+        .map((j) => Posicion.en(
+              fila: j['row'] as int,
+              columna: j['col'] as int,
+              capa: j['layer'] as int? ?? 0,
+            ))
         .toSet();
     final configAjustada = ConfiguracionGeneracion(
-      filas: _definicion!.filas,
-      columnas: _definicion!.columnas,
+      filas: definicion.filas,
+      columnas: definicion.columnas,
+      profundo: definicion.layers,
       ausentes: ausentes,
     );
     return generar(configAjustada);
