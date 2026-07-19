@@ -183,18 +183,20 @@ class _NivelCard extends StatelessWidget {
                   desbloqueado: nivel.desbloqueado,
                 ),
                 const SizedBox(height: AppSpacing.xs),
-                Text(
-                  nivel.nombre,
-                  style: AppTypography.bodyMedium.copyWith(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                    color: bloqueado
-                        ? AppColors.textSecondary
-                        : AppColors.textPrimary,
+                Flexible(
+                  child: Text(
+                    nivel.nombre,
+                    style: AppTypography.bodyMedium.copyWith(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: bloqueado
+                          ? AppColors.textSecondary
+                          : AppColors.textPrimary,
+                    ),
+                    maxLines: 2,
+                    textAlign: TextAlign.center,
+                    overflow: TextOverflow.ellipsis,
                   ),
-                  maxLines: 2,
-                  textAlign: TextAlign.center,
-                  overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 2),
                 Text(
